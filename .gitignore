@@ -9,3 +9,7 @@ node_modules/
 __pycache__/
 *.log
 *.tmp
+
+# Documentos de trabajo (solo locales)
+design.md
+discurso.md

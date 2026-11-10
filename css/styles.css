@@ -1,12 +1,12 @@
 /* =========================================================================
    ICEWISE — Hoja de estilos
-   Sistema visual: Mercury (design.md). Tokens copiados literalmente.
+   Sistema visual: Mercury. Tokens de color, tipografía y espaciado.
    Cobalt (#5266eb) solo para la acción primaria, estados seleccionados
    y el foco de los datos. Sin sombras: la elevación es contraste de valor.
    ========================================================================= */
 
 :root {
-  /* Colores — design.md */
+  /* Colores — sistema Mercury */
   --color-onyx-canvas: #171721;
   --color-graphite-card: #1e1e2a;
   --color-obsidian-button: #272735;
