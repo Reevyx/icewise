@@ -1,0 +1,11 @@
+# Sistema / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+
+# Dependencias y temporales
+node_modules/
+__pycache__/
+*.log
+*.tmp
