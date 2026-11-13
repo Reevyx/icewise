@@ -6,7 +6,7 @@
   const { $, $$, fmt, toast, charts } = Ice;
 
   let sim, S, P, W;
-  let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, destMode = false;
+  let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, tracks, destMode = false;
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
   let trailGeo, trail, holesGroup, wpMarker, candMarker, locator, pickMarker;
@@ -99,7 +99,8 @@
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
     terrain = mesh(geo, IceEnv.terrainMaterial(W, SV, false)); terrain.castShadow = false;
     scene.add(terrain);
-    if (W.real && W.shackleton) IceEnv.buildFar(W, SV, scene, geo.attributes.normal);   // entorno lejano aproximado del cráter
+    if (W.real && W.shackleton) IceEnv.buildFar(W, SV, scene, geo.attributes.normal);
+    tracks = IceEnv.wheelTracks(W, scene);   // huellas de las ruedas sobre el regolito   // entorno lejano aproximado del cráter
 
     // Capas sobre el terreno
     const overlay = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -728,6 +729,7 @@
     const dt = Math.min(0.25, (now - last) / 1000); last = now;
     applyKeys();
     if (S.running) sim.step(dt * warp);
+    if (tracks) tracks.update(S.rover, S.t);
     if (!visible) return;
     const t = now / 1000;
     updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); updateColony(t); updateCamera();
