@@ -170,3 +170,11 @@ input[type="checkbox"]:checked::before { transform: scale(1); }
 .pstep.is-on { border-color: var(--color-cobalt); background: rgba(82,102,235,.14); color: #fff; }
 .pstep.is-on .pn { color: #a9b6ff; }
 @media (max-width: 900px) { .sim-process { grid-template-columns: repeat(4, minmax(0, 1fr)); } .pstep:nth-child(4)::after { display: none; } }
+
+/* Modo destino (tecla E) y ayuda de cámara */
+.sim-dest { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); z-index: 5; background: var(--color-cobalt); color: #fff; padding: 8px 16px; border-radius: 40px; font-size: 13px; white-space: nowrap; box-shadow: 0 6px 24px rgba(0,0,0,.35); animation: fadeIn .2s ease; }
+.sim-dest[hidden] { display: none; }
+.sim-help { position: absolute; left: 12px; top: 52px; z-index: 2; font-size: 11px; color: var(--color-ash-text); background: rgba(23,23,33,.6); padding: 4px 10px; border-radius: 20px; pointer-events: none; }
+.sim-view kbd, .lead kbd, .sim-dest kbd, .sim-help kbd { font: 600 11px/1 Inter, system-ui, sans-serif; padding: 2px 6px; border-radius: 5px; border: 1px solid rgba(237,237,243,.35); background: rgba(237,237,243,.08); color: inherit; }
+.sim-dest-btn[aria-pressed="true"] { background: var(--color-cobalt) !important; color: #fff !important; }
+@media (max-width: 760px) { .sim-help { display: none; } .sim-dest { font-size: 11px; white-space: normal; width: 86%; text-align: center; } }

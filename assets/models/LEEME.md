@@ -35,3 +35,13 @@ La simulación mueve el rover según lo que está haciendo. Para eso usa estos o
 | `cartucho_0_tapa` … `cartucho_7_tapa` | color de la tapa | azul hielo = cartucho lleno |
 
 Si mueves una articulación del brazo en Blender, hay que recalcular los ángulos de `ARM` en `js/sim-view.js`.
+
+## Abrir la web con doble clic (sin servidor)
+
+Al abrir `index.html` directamente (`file://`), el navegador no deja leer los `.glb`. Por eso existe
+`assets/models/modelos-locales.js`, que lleva los modelos y el decodificador Draco empaquetados; la web solo lo
+descarga en ese caso. **Cada vez que exportes un `.glb` nuevo desde Blender**, vuelve a generarlo:
+
+```
+python tools/empaquetar-modelos.py
+```

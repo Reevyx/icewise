@@ -142,12 +142,13 @@
     <div class="section-head reveal" style="margin-bottom:28px">
       <div class="eyebrow"><span class="idx">03</span><span class="bar"></span>Simulación en tiempo real</div>
       <h2>Toma el control de la misión.</h2>
-      <p class="lead">Estás en el borde real del cráter Shackleton. Los cristales azules marcan dónde hay hielo bajo el suelo. El rover no los ve: tiene que descubrirlos con su sensor. Pasa el ratón por el terreno para ver qué hay en cada punto, o haz clic para enviar el rover. En la estación, un biofiltro con microorganismos limpia el agua obtenida.</p>
+      <p class="lead">Estás en el borde real del cráter Shackleton. Los cristales azules marcan dónde hay hielo bajo el suelo. El rover no los ve: tiene que descubrirlos con su sensor. Arrastra para girar la cámara y usa la rueda para acercarte; pulsa <kbd>E</kbd> para elegir en el terreno a dónde enviar el rover. En la estación, un biofiltro con microorganismos limpia el agua obtenida.</p>
+      <p class="muted" style="font-size:13px;margin-top:8px">Relieve y sombras reales (LOLA, 3,2 km alrededor de la estación). El resto del cráter que se ve a lo lejos es un modelo aproximado, solo para dar contexto.</p>
     </div>
 
     <div class="sim-wrap">
       <div class="sim-stage">
-        <div id="sim-view" class="sim-view" tabindex="0" aria-label="Vista 3D de la simulación. Arrastra para girar la cámara, usa la rueda para acercarte y haz clic en el terreno para enviar el rover.">
+        <div id="sim-view" class="sim-view" tabindex="0" aria-label="Vista 3D de la simulación. Arrastra para girar la cámara, usa la rueda para acercarte y pulsa E para elegir a dónde enviar el rover.">
           <div id="sim-labels" class="sim-labels" aria-hidden="true"></div>
           <div class="sim-hud" aria-live="polite">
             <span class="chip" id="hud-clock">Día 1 · 00:00</span>
@@ -157,6 +158,8 @@
             <span class="chip" id="hud-water">—</span>
           </div>
           <div class="sim-banner" id="sim-banner" hidden></div>
+          <div class="sim-dest" id="sim-dest" hidden>Modo destino: haz clic en el terreno para enviar el rover · <kbd>Esc</kbd> para salir</div>
+          <div class="sim-help" aria-hidden="true">Arrastrar: girar · Clic derecho: desplazar · Rueda: acercar · <kbd>E</kbd>: enviar rover</div>
 
           <div class="sim-legend" id="sim-legend">
             <div data-l="ice"><span class="lg-ice"></span><span>Hielo bajo el suelo</span><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></div>
@@ -173,6 +176,7 @@
             <button data-c="station" aria-pressed="false">Estación</button>
             <button data-c="colony" aria-pressed="false">Colonia</button>
             <button data-c="overview" aria-pressed="false">Vista general</button>
+            <button id="sim-dest-btn" class="sim-dest-btn" aria-pressed="false" title="Elegir destino del rover (tecla E)">Enviar rover <kbd>E</kbd></button>
           </div>
           <div class="sim-pad" id="sim-pad" hidden>
             <button data-k="up" aria-label="Avanzar">▲</button>
@@ -475,6 +479,7 @@
 <script src="assets/vendor/OrbitControls.js"></script>
 <script src="assets/vendor/GLTFLoader.js"></script>
 <script src="assets/vendor/DRACOLoader.js"></script>
+<script src="js/sim-env.js"></script>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>
 <script src="js/model.js"></script>

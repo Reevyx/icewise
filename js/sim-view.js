@@ -6,7 +6,7 @@
   const { $, $$, fmt, toast, charts } = Ice;
 
   let sim, S, P, W;
-  let renderer, scene, camera, controls, sun, terrain, fill;
+  let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, destMode = false;
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
   let trailGeo, trail, holesGroup, wpMarker, candMarker, locator, pickMarker;
@@ -27,12 +27,6 @@
     if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); }
     t.anisotropy = 4; return t;
   }
-  const texRegolith = () => canvasTex(256, 256, (g, w, h) => {
-    const img = g.createImageData(w, h);
-    for (let i = 0; i < w * h; i++) { const v = 150 + (Math.random() - 0.5) * 70; img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v + 3; img.data[i * 4 + 3] = 255; }
-    g.putImageData(img, 0, 0);
-    for (let i = 0; i < 260; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(40,40,46,.35)' : 'rgba(235,235,240,.25)'; const r = Math.random() * 2.2 + 0.4; g.beginPath(); g.arc(Math.random() * w, Math.random() * h, r, 0, 7); g.fill(); }
-  }, 300);
   const texFoil = () => canvasTex(128, 128, (g, w, h) => {
     g.fillStyle = '#b9b9c4'; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,255' : '70,70,85'},${0.08 + Math.random() * 0.18})`; g.beginPath(); const x = Math.random() * w, y = Math.random() * h; g.moveTo(x, y); for (let k = 0; k < 4; k++) g.lineTo(x + (Math.random() - 0.5) * 40, y + (Math.random() - 0.5) * 40); g.fill(); }
@@ -75,34 +69,37 @@
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
     host.appendChild(renderer.domElement);
-    scene = new THREE.Scene(); scene.background = new THREE.Color(0x05050a);
-    camera = new THREE.PerspectiveCamera(46, 1, 0.3, 20000);
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
+    camera = new THREE.PerspectiveCamera(46, 1, 0.25, 100000);
     controls = new THREE.OrbitControls(camera, renderer.domElement);
-    Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.49, minDistance: 3.5, maxDistance: W.SIZE * 2 });
+    Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.495, minDistance: 2.2, maxDistance: W.SIZE * 2.5, rotateSpeed: 0.8, zoomSpeed: 1.1 });
 
+    // Luz: Sol rasante real (1,2° sobre el horizonte) con sombras que siguen a la cámara; luz cenicienta de la Tierra;
+    // reflejo del terreno iluminado (mapa de entorno). La "luz de apoyo" es opcional y no es realista.
     const sd = W.sunDir;
-    sun = new THREE.DirectionalLight(0xfff6ec, 2.8);
-    sun.position.set(sd.x * W.SIZE, sd.y * W.SIZE, sd.z * W.SIZE);
-    sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
-    const SC = W.HALF * 1.5; Object.assign(sun.shadow.camera, { left: -SC, right: SC, top: SC, bottom: -SC, near: 10, far: W.SIZE * 3 });
-    sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
-    scene.add(sun, sun.target, new THREE.AmbientLight(0x8a90b8, 0.26));
-    fill = new THREE.DirectionalLight(0xdfe3f0, 0.55); fill.position.set(-W.SIZE * 0.3, W.SIZE, W.SIZE * 0.2); scene.add(fill);   // luz de apoyo (no realista)
+    sun = new THREE.DirectionalLight(0xfff4e6, 3.6); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+    scene.add(sun, sun.target); IceEnv.updateSun(sun, W, new THREE.Vector3(), 400);
+    scene.add(new THREE.AmbientLight(0x8a90b8, 0.05));
+    fill = new THREE.DirectionalLight(0xdfe3f0, 0.16); fill.position.set(-sd.x * W.SIZE * 0.6, W.SIZE, -sd.z * W.SIZE * 0.6); scene.add(fill);
+    SV = IceEnv.sunVisTexture(W);
+    sky = IceEnv.buildSky(W, scene);
+    const earthshine = new THREE.DirectionalLight(0x9db5ff, 0.11); earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE); scene.add(earthshine);
+    scene.environment = IceEnv.envMap(renderer, W);
 
-    // Terreno con textura de regolito
+    // Terreno: relieve real LOLA + microcráteres, guijarros y variación de albedo
     const geo = new THREE.PlaneGeometry(W.SIZE, W.SIZE, W.N - 1, W.N - 1); geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
     for (let k = 0; k < pos.count; k++) {
       pos.setY(k, W.H[k]);
-      const x = pos.getX(k), z = pos.getZ(k);
-      const g = 0.6 + (Math.random() - 0.5) * 0.06;
+      const x = pos.getX(k), z = pos.getZ(k), g = IceEnv.albedoAt(x, z, W.slopeAt(x, z));
       col[k * 3] = g; col[k * 3 + 1] = g; col[k * 3 + 2] = g * 1.02;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-    terrain = mesh(geo, new THREE.MeshStandardMaterial({ map: texRegolith(), vertexColors: true, roughness: 0.98, metalness: 0 }));
+    terrain = mesh(geo, IceEnv.terrainMaterial(W, SV, false)); terrain.castShadow = false;
     scene.add(terrain);
+    if (W.real && W.shackleton) IceEnv.buildFar(W, SV, scene, geo.attributes.normal);   // entorno lejano aproximado del cráter
 
     // Capas sobre el terreno
     const overlay = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -117,8 +114,9 @@
     detTex = new THREE.CanvasTexture(detCanvas); detTex.anisotropy = 4;
     detMesh = new THREE.Mesh(geo, overlay(detTex)); detMesh.renderOrder = 2; scene.add(detMesh);
 
-    buildCrystals(); buildBoulders(); buildSky();
+    buildCrystals(); buildBoulders(); updNearRocks = IceEnv.nearRocks(W, scene);
     buildRover(); buildStation(); buildColony(); buildMarkers(); loadCustomModels();
+    IceEnv.patchTree(scene, SV);
     addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
     addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
     addLabel('Colonia ICEWISE', () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'mid');
@@ -136,7 +134,10 @@
       const v = fn(-W.HALF + (i + 0.5) * W.SIZE / res, -W.HALF + (j + 0.5) * W.SIZE / res); if (!v) continue;
       const k = (j * res + i) * 4; img.data[k] = v[0]; img.data[k + 1] = v[1]; img.data[k + 2] = v[2]; img.data[k + 3] = v[3] * 255;
     }
-    g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
+    g.putImageData(img, 0, 0);
+    const c2 = document.createElement('canvas'); c2.width = c2.height = res * 2; const g2 = c2.getContext('2d');   // bordes suaves
+    g2.filter = 'blur(2px)'; g2.imageSmoothingEnabled = true; g2.drawImage(c, 0, 0, res * 2, res * 2);
+    const t = new THREE.CanvasTexture(c2); t.anisotropy = 4; return t;
   }
 
   // Cristales de hielo: visualización de dónde hay hielo bajo el suelo (densidad ∝ concentración)
@@ -157,10 +158,7 @@
   }
 
   function buildBoulders() {
-    const geo = new THREE.IcosahedronGeometry(1, 1), pa = geo.attributes.position;
-    for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), f = 1 + 0.28 * Math.sin(3.1 * x) * Math.cos(2.7 * y) * Math.sin(3.3 * z) + 0.12 * Math.sin(7 * x + 5 * z); pa.setXYZ(i, x * f, y * f, z * f); }
-    geo.computeVertexNormals();
-    const rocks = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0x8c8c94, roughness: 0.95, flatShading: true }), 2600);
+    const rocks = new THREE.InstancedMesh(IceEnv.rockGeometry(11, 2), IceEnv.rockMaterial(), 2600);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
     let n = 0;
     for (let i = 0; i < 12000 && n < 2600; i++) {
@@ -171,15 +169,6 @@
       p.set(x, W.hAt(x, z) + k * 0.15, z); m4.compose(p, q, s); rocks.setMatrixAt(n++, m4);
     }
     rocks.count = n; rocks.castShadow = true; rocks.receiveShadow = true; scene.add(rocks);
-  }
-
-  function buildSky() {
-    const sg = new THREE.BufferGeometry(), sp = new Float32Array(2600 * 3);
-    for (let i = 0; i < 2600; i++) { const u = Math.random(), a = Math.random() * Math.PI * 2, rr = 14000, el = Math.asin(u); sp.set([rr * Math.cos(el) * Math.cos(a), rr * Math.sin(el) + 40, rr * Math.cos(el) * Math.sin(a)], i * 3); }
-    sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfd0dc, size: 1.3, sizeAttenuation: false })));
-    const earth = mesh(new THREE.SphereGeometry(260, 48, 32), new THREE.MeshStandardMaterial({ color: 0x5f78c4, roughness: 0.65 }), 9000, 900, -6000); earth.castShadow = false;
-    scene.add(earth);
   }
 
   // ---------- Rover ----------
@@ -356,11 +345,22 @@
   //  · rover: objetos llamados "wheel…" giran como ruedas y "drill…"/"auger…" baja al perforar.
   //  · station / colony / biofilter: se mantienen el brillo del horno, la escarcha, el agua y las bacterias.
   // Convención: metros, origen en el suelo en el centro del objeto, frente del rover hacia +X.
+  // Con doble clic (file://) el navegador no deja leer .glb ni el decodificador: se usa assets/models/modelos-locales.js,
+  // que los trae empaquetados (lo genera tools/empaquetar-modelos.py) y solo se descarga en ese caso.
+  const b64ToBuf = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  const loadScript = src => new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
   function loadCustomModels() {
-    if (!THREE.GLTFLoader || location.protocol === 'file:') return;   // fetch no funciona con file://
-    fetch('assets/models/models.json').then(r => r.ok ? r.json() : []).then(list => {
+    if (!THREE.GLTFLoader) return;
+    const local = location.protocol === 'file:';
+    const listP = local ? loadScript('assets/models/modelos-locales.js').then(() => Object.keys(window.ICE_EMBED || {}))
+      : fetch('assets/models/models.json').then(r => r.ok ? r.json() : []);
+    listP.then(list => {
       const loader = new THREE.GLTFLoader();
-      if (THREE.DRACOLoader) { const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco/'); draco.setDecoderConfig({ type: 'wasm' }); loader.setDRACOLoader(draco); }
+      if (THREE.DRACOLoader) {
+        const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco/'); draco.setDecoderConfig({ type: 'wasm' });
+        if (local && window.ICE_DRACO) draco._loadLibrary = (url, type) => Promise.resolve(type === 'arraybuffer' ? b64ToBuf(window.ICE_DRACO.wasm) : window.ICE_DRACO.wrapper);
+        loader.setDRACOLoader(draco);
+      }
       const within = (o, roots) => roots.some(k => { for (let p = o; p; p = p.parent) if (p === k) return true; return false; });
       const hide = (group, keep) => group.traverse(o => { if (o.isMesh && !within(o, keep)) o.visible = false; });
       const prep = (scn) => scn.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -379,10 +379,12 @@
       };
       (Array.isArray(list) ? list : []).forEach(name => {
         if (!targets[name]) return;
-        loader.load(`assets/models/${name}.glb`, g => { prep(g.scene); targets[name](g.scene); console.info(`Modelo de Blender cargado: ${name}.glb`); },
-          undefined, () => console.warn(`No se pudo cargar assets/models/${name}.glb; se usa el modelo procedural.`));
+        const onLoad = g => { prep(g.scene); targets[name](g.scene); IceEnv.patchTree(g.scene, SV); console.info(`Modelo de Blender cargado: ${name}.glb`); };
+        const onErr = e => console.warn(`No se pudo cargar el modelo ${name}; se usa el modelo procedural.`, e || '');
+        if (local) { try { loader.parse(b64ToBuf(window.ICE_EMBED[name]), '', onLoad, onErr); } catch (e) { onErr(e); } }
+        else loader.load(`assets/models/${name}.glb`, onLoad, undefined, onErr);
       });
-    }).catch(() => {});
+    }).catch(() => console.warn('Modelos de Blender no disponibles; se usan los modelos procedurales.'));
   }
 
   // ---------- Animación del rover de Blender ----------
@@ -596,7 +598,10 @@
     else if (camMode === 'colony') target = COL.g.position.clone().add(new THREE.Vector3(0, 3, 0));
     if (target) { const delta = target.clone().sub(controls.target).multiplyScalar(camMode === 'rover' ? 1 : 0.12); controls.target.add(delta); camera.position.add(delta); }
     controls.update();
-    const gh = W.hAt(camera.position.x, camera.position.z) + 2.5; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
+    const gh = W.hAt(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
+    IceEnv.updateSun(sun, W, controls.target, camera.position.distanceTo(controls.target));
+    updNearRocks(controls.target.x, controls.target.z);
+    sky.update(camera);
   }
 
   function updateLabels() {
@@ -654,29 +659,45 @@
     const alt = W.real ? ` · altura ${fmt(W.hAt(x, z) + W.meta.base, 0)} m` : '';
     return `${head}<br><span class="muted">${fmt(T, 0)} K (${fmt(T - 273.15, 0)} °C) · ${psr ? 'sombra permanente' : 'iluminado'} · pendiente ${fmt(slope, 0)}°${slope > 24 ? ' (demasiado inclinada)' : ''}${alt}</span><br><span class="muted">${est != null ? `El rover midió aquí ${fmt(est, 1)} %` : 'El rover aún no ha medido aquí'}</span>`;
   }
+  // Cámara: arrastrar = girar, clic derecho = desplazar, rueda = acercar.
+  // Enviar el rover solo en "modo destino": se activa con la tecla E (o el botón) y se sale con Esc.
+  function setDestMode(on) {
+    destMode = on;
+    renderer.domElement.style.cursor = on ? 'crosshair' : '';
+    $('#sim-dest').hidden = !on; $('#sim-dest-btn').setAttribute('aria-pressed', String(on));
+    if (!on) { $('#sim-tip').hidden = true; $('#sim-pop').hidden = true; pickMarker.visible = false; }
+  }
   function bindPointer() {
     const el = renderer.domElement, tip = $('#sim-tip'), pop = $('#sim-pop');
     let down = null;
     el.addEventListener('pointermove', ev => {
+      if (!destMode || !pop.hidden) { tip.hidden = true; return; }
       const now = performance.now(); if (now - lastHover < 60) return; lastHover = now;
       if (ev.buttons) { tip.hidden = true; return; }
-      const p = pickTerrain(ev); if (!p) { tip.hidden = true; return; }
+      const p = pickTerrain(ev); if (!p) { tip.hidden = true; pickMarker.visible = false; return; }
       const r = el.getBoundingClientRect();
+      pickMarker.visible = true; pickMarker.position.set(p.x, p.y + 0.4, p.z);
       tip.innerHTML = describe(p.x, p.z); tip.hidden = false;
       tip.style.left = Math.min(r.width - 250, ev.clientX - r.left + 14) + 'px'; tip.style.top = Math.max(50, ev.clientY - r.top - 10) + 'px';
     });
     el.addEventListener('pointerleave', () => { tip.hidden = true; });
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY }; });
     el.addEventListener('pointerup', ev => {
-      if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
+      if (!destMode || ev.button !== 0 || !down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
       const p = pickTerrain(ev); if (!p) return;
       const r = el.getBoundingClientRect();
       pickMarker.visible = true; pickMarker.position.set(p.x, p.y + 0.4, p.z);
       tip.hidden = true;
-      pop.innerHTML = `${describe(p.x, p.z)}<div class="row" style="margin-top:12px;gap:8px"><button class="btn btn--primary btn--sm" data-go>Enviar el rover aquí</button><button class="btn btn--sm btn--quiet" data-close>Cerrar</button></div>`;
+      pop.innerHTML = `${describe(p.x, p.z)}<div class="row" style="margin-top:12px;gap:8px"><button class="btn btn--primary btn--sm" data-go>Enviar el rover aquí</button><button class="btn btn--sm btn--quiet" data-close>Cancelar</button></div>`;
       pop.hidden = false; pop.style.left = Math.min(r.width - 290, ev.clientX - r.left + 10) + 'px'; pop.style.top = Math.min(r.height - 190, Math.max(50, ev.clientY - r.top - 20)) + 'px';
-      pop.querySelector('[data-go]').onclick = () => { sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); pop.hidden = true; hideIntro(); toast('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.'); };
+      pop.querySelector('[data-go]').onclick = () => { sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); setDestMode(false); hideIntro(); toast('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.'); };
       pop.querySelector('[data-close]').onclick = () => { pop.hidden = true; pickMarker.visible = false; };
+    });
+    $('#sim-dest-btn').addEventListener('click', () => setDestMode(!destMode));
+    window.addEventListener('keydown', e => {
+      if (!visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === 'KeyE' && !e.repeat) { setDestMode(!destMode); e.preventDefault(); }
+      else if (e.code === 'Escape' && destMode) setDestMode(false);
     });
   }
 
@@ -955,7 +976,7 @@
     new ResizeObserver(resize).observe(host);
     new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0.01 }).observe(host);
     requestAnimationFrame(frame);
-    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; } };
+    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; } };
   }
   window.IceSimViewInit = init;
 })();
