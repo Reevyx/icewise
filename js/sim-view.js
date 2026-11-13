@@ -371,6 +371,7 @@
           hide(R3.g, drills.length ? [] : [R3.auger]); R3.g.add(scn);
           if (wheels.length) R3.wheels = wheels;
           if (drills.length) { R3.auger = drills[0]; R3.augerBase = drills[0].position.y; }
+          setupRoverAnim(scn);
         },
         station: (scn) => { hide(ST.g, [ST.glow, ST.frost, ST.water, ...ST.flowDots, BIO.bio]); ST.g.add(scn); },
         colony: (scn) => { hide(COL.g, [COL.water]); COL.g.add(scn); },
@@ -382,6 +383,109 @@
           undefined, () => console.warn(`No se pudo cargar assets/models/${name}.glb; se usa el modelo procedural.`));
       });
     }).catch(() => {});
+  }
+
+  // ---------- Animación del rover de Blender ----------
+  // El modelo trae pivotes (piv_*) en cada articulación. Aquí se mueven según lo que hace la simulación:
+  // dirección de las ruedas al girar, mástil que busca/mide/mira el taladro, carro del taladro que baja,
+  // brazo que lleva cada muestra del taladro al carrusel y carrusel que entrega los cartuchos en la estación.
+  // Ángulos del brazo [base, hombro, codo, muñeca] en radianes, calculados por cinemática inversa en Blender.
+  const ARM = {
+    recogido: [0.2971, -1.9101, 0.671, 1.6111], sobre_taladro: [-0.7412, -0.4007, 0.5402, 0.2325], agarre: [-0.7412, 0.3021, 0.2686, -0.1987],
+    transporte: [-2.5783, -1.1352, -0.0979, 1.6051], sobre_carrusel: [-2.5783, -1.159, 0.12, 1.4111], soltar: [-2.5783, -1.0987, 0.415, 1.0556]
+  };
+  const ARM_SEQ = [['sobre_taladro', 0.8], ['agarre', 0.6], ['agarrar', 0.3], ['sobre_taladro', 0.5], ['transporte', 1.4],
+    ['sobre_carrusel', 0.5], ['soltar', 0.5], ['soltar_cartucho', 0.3], ['sobre_carrusel', 0.4], ['recogido', 1.0]];
+  const AX_Y = new THREE.Vector3(0, 0, -1), AX_Z = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion();   // ejes Y y Z de Blender en glTF
+  const RA = { on: false };
+  function setupRoverAnim(scn) {
+    const get = n => scn.getObjectByName(n);
+    const piv = n => { const o = get(n); if (o) { o.userData.q0 = o.quaternion.clone(); o.userData.p0 = o.position.clone(); } return o; };
+    Object.assign(RA, {
+      az: piv('piv_brazo_azimut'), sh: piv('piv_brazo_hombro'), el: piv('piv_brazo_codo'), wr: piv('piv_brazo_muneca'),
+      pan: piv('piv_mastil_giro'), tilt: piv('piv_mastil_cabeceo'), car: piv('piv_carrusel'), head: piv('piv_taladro_carro'),
+      steerF: ['FL', 'FR'].map(w => piv('piv_direccion_' + w)).filter(Boolean), steerR: ['RL', 'RR'].map(w => piv('piv_direccion_' + w)).filter(Boolean),
+      held: [get('brazo_cartucho'), get('brazo_cartucho_tapa')].filter(Boolean), caps: [], leds: [], beacon: [],
+      cur: ARM.recogido.slice(), seq: null, pending: 0, holes: S.totals.holes, placed: 0, carA: Math.PI * 1.25, spin: 0,
+      steer: 0, panA: 0, tiltA: 0, prevH: S.rover.heading, prevT: S.t, cargo: 0
+    });
+    for (let k = 0; k < 8; k++) { const c = get(`cartucho_${k}_tapa`); if (c) { c.material = c.material.clone(); RA.caps[k] = c; } }
+    scn.traverse(o => { if (!o.isMesh) return; const n = o.material && o.material.name;
+      if (n === 'ICW_LED') RA.leds.push(o.material); if (n === 'ICW_baliza') RA.beacon.push(o.material); });
+    RA.held.forEach(o => { o.visible = false; });
+    RA.on = !!(RA.az && RA.sh && RA.el && RA.wr);
+  }
+  const rotTo = (o, axis, a) => { if (o) o.quaternion.copy(o.userData.q0).multiply(_q.setFromAxisAngle(axis, a)); };
+  const ease = x => x * x * (3 - 2 * x);
+  const approach = (v, target, rate, dt) => v + Math.max(-rate * dt, Math.min(rate * dt, target - v));
+  function updateRoverAnim(t, dt) {
+    const R = S.rover, task = R.task, alive = task !== 'dead';
+    // --- muestras nuevas y descargas (detectadas en el estado de la simulación)
+    if (S.totals.holes < RA.holes) { RA.holes = S.totals.holes; RA.placed = 0; RA.seq = null; RA.pending = 0; }
+    if (S.totals.holes > RA.holes) { RA.pending = Math.min(2, RA.pending + S.totals.holes - RA.holes); RA.holes = S.totals.holes; }
+    const cargo = R.cargoReg + R.cargoIce;
+    if (cargo < RA.cargo - 1e-6 && cargo < 0.01) RA.unload = true;   // descarga en la estación
+    RA.cargo = cargo;
+    if (RA.unload && !RA.seq && !RA.pending) { RA.unload = false; RA.spin = 3; RA.placed = 0; }
+    const fill = Math.min(8, Math.round(Math.min(1, cargo / P.cargoCap) * 8));
+    // --- brazo: secuencia taladro → carrusel, o postura de espera
+    if (!RA.seq && RA.pending > 0 && alive) { RA.pending--; RA.seq = { i: 0, k: 0, from: RA.cur.slice() }; }
+    if (RA.seq) {
+      const st = ARM_SEQ[RA.seq.i], target = ARM[st[0]] || RA.seq.from;
+      RA.seq.k = Math.min(1, RA.seq.k + dt / st[1]);
+      const e = ease(RA.seq.k);
+      RA.cur = RA.seq.from.map((a, j) => a + (target[j] - a) * e);
+      if (RA.seq.k >= 1) {
+        if (st[0] === 'agarrar') RA.held.forEach(o => { o.visible = true; });
+        if (st[0] === 'soltar_cartucho') { RA.held.forEach(o => { o.visible = false; }); RA.placed = Math.min(8, RA.placed + 1); }
+        RA.seq.i++; RA.seq.k = 0; RA.seq.from = RA.cur.slice();
+        if (RA.seq.i >= ARM_SEQ.length) RA.seq = null;
+      }
+    } else {
+      const target = task === 'drill' ? ARM.sobre_taladro : ARM.recogido;
+      RA.cur = RA.cur.map((a, j) => approach(a, target[j], 1.0, dt));
+      if (!RA.pending && !RA.unload && RA.spin <= 0) RA.placed = fill;
+    }
+    rotTo(RA.az, AX_Z, RA.cur[0]); rotTo(RA.sh, AX_Y, RA.cur[1]); rotTo(RA.el, AX_Y, RA.cur[2]); rotTo(RA.wr, AX_Y, RA.cur[3]);
+    // --- carrusel: deja el hueco libre frente al brazo; en la descarga da una vuelta entregando cartuchos
+    let carT = Math.PI * 1.25 - RA.placed * Math.PI / 4;
+    if (RA.spin > 0) {
+      RA.spin -= dt; RA.carA += dt * 2.1;
+      if (RA.spin <= 0) { let d = RA.carA - carT; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI; RA.carA = carT + d; }
+      else carT = RA.carA;
+    }
+    RA.carA = approach(RA.carA, carT, 1.5, dt); rotTo(RA.car, AX_Z, RA.carA);
+    RA.caps.forEach((c, k) => { if (!c) return; const full = k < RA.placed;
+      c.material.color.setHex(full ? 0xbfd4ff : 0x2a2a31); c.material.emissive.setHex(full ? 0x1d2a55 : 0x000000); });
+    // --- carro del taladro: baja con la broca
+    if (RA.head) { const off = task === 'drill' || R.drillDepth > 0 ? -0.28 - R.drillDepth : 0; RA.head.position.y = RA.head.userData.p0.y + Math.max(-1.1, off); }
+    // --- dirección: ángulo de las ruedas de esquina según el giro real del rover
+    const sdt = S.t - RA.prevT;
+    if (sdt > 1e-3) {
+      let dh = R.heading - RA.prevH; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
+      const rate = dh / sdt, v = Math.abs(R.speed);
+      const want = Math.abs(rate) < 1e-4 ? 0 : -Math.max(-0.6, Math.min(0.6, Math.atan(rate / Math.max(v, 0.02) * 0.95)));
+      if (Math.abs(want) > 0.02) { RA.steerT = want; RA.steerHold = 0.8; }   // a alta velocidad un giro dura un fotograma: se mantiene visible
+      RA.prevH = R.heading; RA.prevT = S.t;
+    } else if (sdt < 0) { RA.prevT = S.t; RA.prevH = R.heading; }
+    if ((RA.steerHold = (RA.steerHold || 0) - dt) <= 0) RA.steerT = 0;
+    RA.steer = approach(RA.steer, alive ? (RA.steerT || 0) : RA.steer, 1.2, dt);
+    RA.steerF.forEach(o => rotTo(o, AX_Z, RA.steer)); RA.steerR.forEach(o => rotTo(o, AX_Z, -RA.steer));
+    // --- mástil: busca al explorar, mira al suelo al medir, vigila el taladro al perforar
+    let pan = 0, tilt = 0;
+    if (task === 'explore') { pan = 0.8 * Math.sin(t * 0.6); tilt = 0.12; }
+    else if (task === 'characterize') { pan = 0.35 * Math.sin(t * 0.4); tilt = 0.45; }
+    else if (task === 'decide') { tilt = 0.3; }
+    else if (task === 'drill') { pan = 0.5; tilt = 0.6; }
+    else if (task === 'idle') { pan = 0.5 * Math.sin(t * 0.2); }
+    else if (alive) { pan = RA.steer * 0.8; tilt = 0.05; }
+    if (alive) { RA.panA = approach(RA.panA, pan, 0.9, dt); RA.tiltA = approach(RA.tiltA, tilt, 0.6, dt); }
+    rotTo(RA.pan, AX_Z, RA.panA); rotTo(RA.tilt, AX_Y, RA.tiltA);
+    // --- luces: faros según la oscuridad; baliza parpadea al moverse o perforar
+    const dark = R3.head && R3.head.intensity > 1;
+    RA.leds.forEach(m => { m.emissiveIntensity = alive ? (dark ? 1 : 0.4) : 0.05; });
+    const busy = Math.abs(R.speed) > 0.005 || task === 'drill' || RA.seq;
+    RA.beacon.forEach(m => { m.emissiveIntensity = !alive ? 0 : busy ? (Math.sin(t * 6) > 0 ? 1.2 : 0.15) : 0.6; });
   }
 
   function buildMarkers() {
@@ -605,7 +709,7 @@
     if (S.running) sim.step(dt * warp);
     if (!visible) return;
     const t = now / 1000;
-    updateRover(t); updateStation(t); updateColony(t); updateCamera();
+    updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
     renderer.render(scene, camera);
     updateLabels();
@@ -851,7 +955,7 @@
     new ResizeObserver(resize).observe(host);
     new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0.01 }).observe(host);
     requestAnimationFrame(frame);
-    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; } };
+    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; } };
   }
   window.IceSimViewInit = init;
 })();

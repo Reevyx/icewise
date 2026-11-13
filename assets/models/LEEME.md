@@ -19,3 +19,19 @@ Convenciones:
 - `rover.blend` es el archivo editable del rover (texturas incluidas). Para ver los materiales en Blender usa la vista *Material Preview*.
 
 La carga funciona en GitHub Pages o con un servidor local (`python -m http.server`). Si el archivo no existe, la web usa el modelo actual.
+
+## Animación del rover
+
+La simulación mueve el rover según lo que está haciendo. Para eso usa estos objetos de `rover.blend`; **no cambies sus nombres**:
+
+| Objeto (vacío) | Qué mueve | Cuándo |
+|---|---|---|
+| `wheel_FL` … `wheel_RR` | giro de cada rueda | al avanzar |
+| `piv_direccion_FL/FR/RL/RR` | dirección de las ruedas de esquina | al girar |
+| `piv_mastil_giro`, `piv_mastil_cabeceo` | cabezal de cámaras | busca al explorar, mira al suelo al medir, vigila el taladro |
+| `piv_taladro_carro` y `drill` | carro con motor y broca | bajan al perforar |
+| `piv_brazo_azimut/hombro/codo/muneca` | brazo robótico | lleva cada muestra del taladro al carrusel |
+| `piv_carrusel` | carrusel de 8 cartuchos | gira al guardar y al descargar en la estación |
+| `cartucho_0_tapa` … `cartucho_7_tapa` | color de la tapa | azul hielo = cartucho lleno |
+
+Si mueves una articulación del brazo en Blender, hay que recalcular los ángulos de `ARM` en `js/sim-view.js`.
