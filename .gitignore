@@ -13,3 +13,7 @@ __pycache__/
 # Documentos de trabajo (solo locales)
 design.md
 discurso.md
+
+# Copias de seguridad de Blender
+*.blend1
+*.blend2

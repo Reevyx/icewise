@@ -118,7 +118,7 @@
     detMesh = new THREE.Mesh(geo, overlay(detTex)); detMesh.renderOrder = 2; scene.add(detMesh);
 
     buildCrystals(); buildBoulders(); buildSky();
-    buildRover(); buildStation(); buildColony(); buildMarkers();
+    buildRover(); buildStation(); buildColony(); buildMarkers(); loadCustomModels();
     addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
     addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
     addLabel('Colonia ICEWISE', () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'mid');
@@ -350,6 +350,40 @@
     Object.assign(COL, { g, water, curve, dots });
   }
 
+  // ---------- Modelos hechos en Blender (opcionales) ----------
+  // Si assets/models/models.json lista un modelo (p. ej. ["rover", "station"]), se carga assets/models/<nombre>.glb
+  // y sustituye la parte visual del modelo procedural. Las piezas animadas se conservan:
+  //  · rover: objetos llamados "wheel…" giran como ruedas y "drill…"/"auger…" baja al perforar.
+  //  · station / colony / biofilter: se mantienen el brillo del horno, la escarcha, el agua y las bacterias.
+  // Convención: metros, origen en el suelo en el centro del objeto, frente del rover hacia +X.
+  function loadCustomModels() {
+    if (!THREE.GLTFLoader || location.protocol === 'file:') return;   // fetch no funciona con file://
+    fetch('assets/models/models.json').then(r => r.ok ? r.json() : []).then(list => {
+      const loader = new THREE.GLTFLoader();
+      if (THREE.DRACOLoader) { const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco/'); draco.setDecoderConfig({ type: 'wasm' }); loader.setDRACOLoader(draco); }
+      const within = (o, roots) => roots.some(k => { for (let p = o; p; p = p.parent) if (p === k) return true; return false; });
+      const hide = (group, keep) => group.traverse(o => { if (o.isMesh && !within(o, keep)) o.visible = false; });
+      const prep = (scn) => scn.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const targets = {
+        rover: (scn) => {
+          const wheels = [], drills = [];
+          scn.traverse(o => { if (/^wheel/i.test(o.name)) wheels.push(o); if (/^(drill|auger)/i.test(o.name)) drills.push(o); });
+          hide(R3.g, drills.length ? [] : [R3.auger]); R3.g.add(scn);
+          if (wheels.length) R3.wheels = wheels;
+          if (drills.length) { R3.auger = drills[0]; R3.augerBase = drills[0].position.y; }
+        },
+        station: (scn) => { hide(ST.g, [ST.glow, ST.frost, ST.water, ...ST.flowDots, BIO.bio]); ST.g.add(scn); },
+        colony: (scn) => { hide(COL.g, [COL.water]); COL.g.add(scn); },
+        biofilter: (scn) => { hide(BIO.bio, [BIO.lichen]); BIO.bio.add(scn); }
+      };
+      (Array.isArray(list) ? list : []).forEach(name => {
+        if (!targets[name]) return;
+        loader.load(`assets/models/${name}.glb`, g => { prep(g.scene); targets[name](g.scene); console.info(`Modelo de Blender cargado: ${name}.glb`); },
+          undefined, () => console.warn(`No se pudo cargar assets/models/${name}.glb; se usa el modelo procedural.`));
+      });
+    }).catch(() => {});
+  }
+
   function buildMarkers() {
     trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(4000 * 3), 3)); trailGeo.setDrawRange(0, 0);
     trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: IVORY, transparent: true, opacity: 0.5 })); scene.add(trail);
@@ -374,7 +408,7 @@
     R3.g.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(UP, n).multiply(new THREE.Quaternion().setFromAxisAngle(UP, -R.heading)));
     R3.wheels.forEach(w => { w.rotation.z = -R.wheel; });
     const drilling = R.task === 'drill';
-    R3.auger.position.y = drilling || R.drillDepth > 0 ? 0.02 - R.drillDepth : 0.3;
+    R3.auger.position.y = (R3.augerBase ?? 0.3) + (drilling || R.drillDepth > 0 ? -0.28 - R.drillDepth : 0);
     R3.carriage.position.y = drilling ? 1.6 - Math.min(0.9, R.drillDepth * 0.9) : 1.6;
     if (drilling) R3.auger.rotation.y = t * 9;
     R3.head.intensity = W.envT(R.x, R.z) < 120 ? 5 : 0.8;
