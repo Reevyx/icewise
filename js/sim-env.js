@@ -49,31 +49,35 @@
       d[k] = (nx / L * 0.5 + 0.5) * 255; d[k + 1] = (ny / L * 0.5 + 0.5) * 255; d[k + 2] = (1 / L * 0.5 + 0.5) * 255; d[k + 3] = 255;
     }
   }
-  // Albedo del regolito: gris ligeramente cálido, manchas suaves y granos claros/oscuros
-  function regolithAlbedo(n = 512) {
-    return canvasTex(n, (d) => {
-      const r = rng(7);
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        let v = 0.52 + 0.20 * (fbm(x / n * 8, y / n * 8, 5, 3, 8) - 0.5) + 0.05 * (r() - 0.5);
-        const p = r(); if (p < 0.012) v += 0.18; else if (p < 0.03) v -= 0.12;
-        const k = (y * n + x) * 4; v = clamp(v, 0, 1) * 255; d[k] = v; d[k + 1] = v * 0.985; d[k + 2] = v * 0.955; d[k + 3] = 255;
-      }
-    }, true);
-  }
-  // Relieve de microcráteres (una baldosa = 64 m): ley de potencias de tamaños, bordes elevados, cráteres degradados
-  function craterNormal(n = 1024) {
-    const h = new Float32Array(n * n), r = rng(42);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) h[y * n + x] = 6 * fbm(x / n * 16, y / n * 16, 3, 9, 16);
-    for (let c = 0; c < 320; c++) {
+  // Suelo: el color (albedo) y el relieve de microcráteres salen del MISMO campo de alturas (una baldosa = 64 m),
+  // así coinciden: fondo de cráter algo más oscuro, borde más claro y halo de material expulsado en los cráteres jóvenes.
+  function groundTextures(n = 1024) {
+    const h = new Float32Array(n * n), a = new Float32Array(n * n), r = rng(42), rg = rng(7);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const k = y * n + x;
+      h[k] = 6 * fbm(x / n * 16, y / n * 16, 3, 9, 16);
+      a[k] = 0.5 + 0.16 * (fbm(x / n * 8, y / n * 8, 5, 3, 8) - 0.5) + 0.07 * (fbm(x / n * 48, y / n * 48, 3, 17, 48) - 0.5);
+    }
+    for (let c = 0; c < 340; c++) {
       const cx = r() * n, cy = r() * n, rad = Math.min(120, 2.2 / Math.pow(r() + 0.004, 0.62)), fresh = 0.25 + 0.75 * r() * r(), dep = 0.24 * rad * fresh;
-      const R2 = Math.ceil(rad * 1.7);
+      const young = fresh > 0.72, R2 = Math.ceil(rad * (young ? 3.2 : 1.7)), ray0 = r() * 6.28;
       for (let oy = -R2; oy <= R2; oy++) for (let ox = -R2; ox <= R2; ox++) {
-        const rho = Math.hypot(ox + (cx % 1), oy + (cy % 1)) / rad; if (rho > 1.7) continue;
-        const px = (Math.floor(cx) + ox + n) % n, py = (Math.floor(cy) + oy + n) % n;
-        h[py * n + px] += dep * (rho < 1 ? rho * rho - 1 + 0.25 : 0.25 * Math.exp(-(((rho - 1) / 0.25) ** 2)));
+        const dx = ox + (cx % 1), dy = oy + (cy % 1), rho = Math.hypot(dx, dy) / rad;
+        if (rho > (young ? 3.2 : 1.7)) continue;
+        const px = (Math.floor(cx) + ox + n) % n, py = (Math.floor(cy) + oy + n) % n, k = py * n + px;
+        if (rho <= 1.7) h[k] += dep * (rho < 1 ? rho * rho - 1 + 0.25 : 0.25 * Math.exp(-(((rho - 1) / 0.25) ** 2)));
+        if (rho < 1) a[k] -= 0.05 * fresh * (1 - rho * rho);                                  // interior: sombra y polvo fino
+        a[k] += 0.07 * fresh * Math.exp(-(((rho - 1) / 0.18) ** 2));                           // borde: material fresco
+        if (young && rho > 0.9) {                                                               // halo y rayos de eyecta
+          const ang = Math.atan2(dy, dx), rays = 0.5 + 0.5 * Math.cos(ang * 7 + ray0) * Math.cos(ang * 3 - ray0);
+          a[k] += 0.09 * Math.exp(-(rho - 1) / 0.7) * (0.45 + 0.55 * rays);
+        }
       }
     }
-    return canvasTex(n, d => writeNormals(d, h, n, 0.9), false);
+    for (let k = 0; k < n * n; k++) { const p = rg(); if (p < 0.01) a[k] += 0.16; else if (p < 0.025) a[k] -= 0.1; }
+    const alb = canvasTex(n, d => { for (let k = 0; k < n * n; k++) { const v = clamp(a[k], 0, 1) * 255; d[k * 4] = v; d[k * 4 + 1] = v * 0.985; d[k * 4 + 2] = v * 0.955; d[k * 4 + 3] = 255; } }, true);
+    const crat = canvasTex(n, d => writeNormals(d, h, n, 0.9), false);
+    return { alb, crat };
   }
   // Guijarros y grano fino (una baldosa = 4 m)
   function fineNormal(n = 512) {
@@ -87,6 +91,67 @@
       }
     }
     return canvasTex(n, d => writeNormals(d, h, n, 0.7), false);
+  }
+  const groundTex = () => groundTex.t || (groundTex.t = Object.assign(groundTextures(), { fine: fineNormal() }));
+
+  // ---------- depósitos de hielo ----------
+  // Escarcha azul blanquecina con bordes ramificados, más densa donde hay más hielo, y destellos de cristales que cambian
+  // según desde dónde se mire. Es una VISUALIZACIÓN: el hielo real está unos centímetros bajo el suelo (capa seca).
+  function iceLayer(W, geo) {
+    const res = 640, d = new Uint8Array(res * res * 4), raw = new Float32Array(res * res);
+    for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
+      const x = -W.HALF + (i + 0.5) * W.SIZE / res, z = -W.HALF + (j + 0.5) * W.SIZE / res;
+      raw[j * res + i] = clamp(W.iceWt(x, z) / 10, 0, 1);
+    }
+    for (let pass = 0; pass < 2; pass++) for (const horiz of [true, false]) {          // desenfoque gaussiano separable (~12 m)
+      const tmp = new Float32Array(res * res), K = [0.06, 0.12, 0.18, 0.28, 0.18, 0.12, 0.06];
+      for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
+        let sum = 0; for (let t = -3; t <= 3; t++) { const ii = horiz ? clamp(i + t, 0, res - 1) : i, jj = horiz ? j : clamp(j + t, 0, res - 1); sum += K[t + 3] * raw[jj * res + ii]; }
+        tmp[j * res + i] = sum;
+      }
+      raw.set(tmp);
+    }
+    for (let k = 0; k < res * res; k++) { const v = Math.round(255 * raw[k]); d[k * 4] = d[k * 4 + 1] = d[k * 4 + 2] = v; d[k * 4 + 3] = 255; }
+    const tex = new THREE.DataTexture(d, res, res, THREE.RGBAFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { iceMap: { value: tex }, halfSize: { value: W.HALF }, size: { value: W.SIZE }, time: { value: 0 }, camPos: { value: new THREE.Vector3() } },
+      vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: `uniform sampler2D iceMap; uniform float halfSize; uniform float size; uniform float time; uniform vec3 camPos; varying vec3 vW;
+        float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          return mix(mix(h2(i), h2(i+vec2(1.0,0.0)), f.x), mix(h2(i+vec2(0.0,1.0)), h2(i+vec2(1.0,1.0)), f.x), f.y); }
+        float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a * vn(p); p *= 2.03; a *= 0.5; } return s; }
+        void main(){
+          float d = texture2D(iceMap, (vW.xz + halfSize) / size).r;
+          if (d < 0.015) discard;
+          vec2 p = vW.xz;
+          float n1 = fbm(p * 0.07), n2 = fbm(p * 0.55);
+          float veins = 1.0 - abs(2.0 * fbm(p * 1.4 + n1 * 3.0) - 1.0);              // dendritas de escarcha
+          float th = 0.78 - 0.42 * clamp(d * 1.6, 0.0, 1.0);
+          float cover = smoothstep(th, th + 0.14, n1 * 0.5 + n2 * 0.32 + veins * 0.32);
+          float a = cover * (0.08 + 0.2 * clamp(d * 1.6, 0.0, 1.0)) + 0.05 * smoothstep(0.03, 0.3, d);   // velo azulado + parches tenues
+          vec3 col = mix(vec3(0.3, 0.4, 0.72), vec3(0.62, 0.72, 0.95), clamp(veins * 0.7 + n2 * 0.4, 0.0, 1.0)) * 0.75;   // en sombra permanente: apagado
+          // destellos: cristales que brillan según el punto de vista
+          float dist = distance(camPos, vW);
+          vec2 g = floor(p * 14.0), f = fract(p * 14.0) - 0.5; float hh = h2(g);
+          vec3 vdir = normalize(camPos - vW);
+          float tw = 0.5 + 0.5 * sin(hh * 80.0 + dot(vdir, vec3(19.0, 7.0, 11.0)) * 6.0 + time * 0.6);
+          float spark = step(0.982 - 0.02 * d, hh) * smoothstep(0.16, 0.0, length(f)) * tw * smoothstep(140.0, 25.0, dist) * cover;
+          col += vec3(1.6) * spark; a = max(a, spark);
+          gl_FragColor = vec4(col, a);
+        }`,
+      transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 1; mesh.userData.skipSunVis = true;
+    return { mesh, update(t, camera) { mat.uniforms.time.value = t; mat.uniforms.camPos.value.copy(camera.position); } };
+  }
+  // Cristales de hielo: grupos de 3 agujas transparentes que reflejan el entorno (visualización de dónde hay hielo)
+  function crystalGeometry() {
+    const parts = [[0, 0, 0, 1, 0], [0.06, 0.02, 0.5, 0.75, 0.6], [-0.05, -0.03, -0.6, 0.6, -0.5]].map(([x, z, tx, s, tz]) => {
+      const g = new THREE.OctahedronGeometry(0.1, 0); g.scale(0.6, 2.2, 0.6); g.rotateX(tz * 0.6); g.rotateZ(tx * 0.6); g.scale(s, s, s); g.translate(x, 0.12 * s, z); return g.index ? g.toNonIndexed() : g;
+    });
+    const pos = [], nor = [];
+    parts.forEach(g => { pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); return g;
   }
 
   // ---------- visibilidad del Sol (máscara real del DEM) ----------
@@ -164,7 +229,7 @@
   // ---------- material del terreno ----------
   function terrainMaterial(W, SV, attr) {
     const TILE = 64;
-    const T = terrainMaterial.tex || (terrainMaterial.tex = { alb: regolithAlbedo(), crat: craterNormal(), fine: fineNormal() });
+    const T = groundTex();
     T.alb.repeat.set(W.SIZE / TILE, W.SIZE / TILE);
     const m = new THREE.MeshStandardMaterial({ map: T.alb, normalMap: T.crat, normalScale: new THREE.Vector2(1.15, 1.15), vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
     patchMaterial(m, SV, { terrain: true, attr, detail: T.fine, detailScale: TILE / 4 });
@@ -179,15 +244,32 @@
     return -900 * (1 - Math.exp(-(r - R) / 7000)) + crest;
   }
   function makeHeight(W) {
-    const HALF = W.HALF, A = (x, z) => shackletonA(W, x, z);
+    const HALF = W.HALF, A = (x, z) => shackletonA(W, x, z), N = W.N, STEP = W.STEP;
     const curv = (x, z) => (x * x + z * z) / (2 * R_MOON);
+    // Borde del DEM suavizado (media móvil de ~1 km): lejos del borde no se arrastran sus irregularidades en línea recta
+    const P = 4 * (N - 1), raw = new Float32Array(P), smE = new Float32Array(P), Wn = 50;
+    for (let m = 0; m < P; m++) {
+      const s = Math.floor(m / (N - 1)), o = m % (N - 1);
+      const [i, j] = s === 0 ? [o, 0] : s === 1 ? [N - 1, o] : s === 2 ? [N - 1 - o, N - 1] : [0, N - 1 - o];
+      raw[m] = W.H[j * N + i];
+    }
+    for (let m = 0; m < P; m++) { let a = 0; for (let t = -Wn; t <= Wn; t++) a += raw[(m + t + P) % P]; smE[m] = a / (2 * Wn + 1); }
+    const edgeSm = (px, pz) => {
+      let f; const e = 1e-3;
+      if (Math.abs(pz + HALF) < e) f = (px + HALF) / STEP;
+      else if (Math.abs(px - HALF) < e) f = (N - 1) + (pz + HALF) / STEP;
+      else if (Math.abs(pz - HALF) < e) f = 2 * (N - 1) + (HALF - px) / STEP;
+      else f = 3 * (N - 1) + (HALF - pz) / STEP;
+      const i0 = Math.floor(f) % P, i1 = (i0 + 1) % P, u = f - Math.floor(f); return smE[i0] * (1 - u) + smE[i1] * u;
+    };
     return function (x, z) {
       const s = Math.max(Math.abs(x), Math.abs(z)) / HALF;
       if (s <= 1) return W.hAt(x, z) - curv(x, z);
       const px = x / s, pz = z / s, d = (s - 1) * HALF;
       const inCrater = Math.hypot(x - W.shackleton.x, z - W.shackleton.z) < SHACK.R ? 0.45 : 1;
       const hills = (fbm(x / 2600 + 50, z / 2600 + 50, 4, 77) - 0.5) * 2 * (260 * sm(clamp(d / 5000, 0, 1)) + 50 * sm(clamp(d / 700, 0, 1))) * inCrater;
-      return W.hAt(px, pz) + A(x, z) - A(px, pz) + hills - curv(x, z);
+      const ph = W.hAt(px, pz), base = ph + (edgeSm(px, pz) - ph) * sm(clamp(d / 1200, 0, 1));
+      return base + A(x, z) - A(px, pz) + hills - curv(x, z);
     };
   }
   function buildFar(W, SV, scene, demNormals) {
@@ -198,7 +280,7 @@
     for (let i = N - 1; i > 0; i--) P(i, N - 1);
     for (let j = N - 1; j > 0; j--) P(0, j);
     const M = per.length, offs = [0]; let st = 10;
-    while (offs[offs.length - 1] < 40000) { offs.push(offs[offs.length - 1] + st); st *= 1.12; }
+    while (offs[offs.length - 1] < 40000) { offs.push(offs[offs.length - 1] + st); st = Math.min(650, st * 1.085); }   // anillos más juntos: sin dientes de sierra
     const K = offs.length, nV = M * K;
     const pos = new Float32Array(nV * 3), uv = new Float32Array(nV * 2), col = new Float32Array(nV * 3), vis = new Float32Array(nV);
     for (let k = 0; k < K; k++) {
@@ -245,17 +327,25 @@
     (function chunk() {
       const t0 = performance.now();
       while (v < nV && performance.now() - t0 < 12) {
-        const x0 = pos[v * 3], y0 = pos[v * 3 + 1] + 2, z0 = pos[v * 3 + 2]; let lit = 1, t = 15;
+        const x0 = pos[v * 3], y0 = pos[v * 3 + 1] + 2, z0 = pos[v * 3 + 2]; let m = 1e9, t = 15;
         while (t < 42000) {
           const x = x0 + sx * t, z = z0 + sz * t;
           if (Math.max(Math.abs(x), Math.abs(z)) > HALF * (1 + 40000 / HALF)) break;
-          if (Hf(x, z) > y0 + t * tanE) { lit = 0; break; }
+          m = Math.min(m, (y0 + t * tanE - Hf(x, z)) / (8 + t * 0.012));   // margen sobre el horizonte (penumbra del disco solar)
+          if (m < -1) break;
           t *= 1.09; t += 5;
         }
-        vis[v] = lit; v++;
+        vis[v] = clamp(0.5 + 0.5 * m, 0, 1); v++;
       }
       attr.needsUpdate = true; IceEnv.farProgress = v / nV;
-      if (v < nV) setTimeout(chunk, 0); else IceEnv.farTime = performance.now() - tStart;
+      if (v < nV) setTimeout(chunk, 0);
+      else {                                                                     // suavizado final entre vértices vecinos
+        const out = new Float32Array(vis);
+        for (let k = 1; k < K - 1; k++) for (let mm = 0; mm < M; mm++) {
+          const i = k * M + mm; out[i] = (vis[i] * 2 + vis[k * M + (mm + 1) % M] + vis[k * M + (mm + M - 1) % M] + vis[i - M] + vis[i + M]) / 6;
+        }
+        vis.set(out); attr.needsUpdate = true; IceEnv.farTime = performance.now() - tStart;
+      }
     })();
     return mesh;
   }
@@ -272,7 +362,7 @@
     g.computeVertexNormals(); return g;
   }
   function rockMaterial() {
-    const T = terrainMaterial.tex || (terrainMaterial.tex = { alb: regolithAlbedo(), crat: craterNormal(), fine: fineNormal() });
+    const T = groundTex();
     return new THREE.MeshStandardMaterial({ color: 0x7a7a80, roughness: 0.96, metalness: 0, normalMap: T.fine, normalScale: new THREE.Vector2(1.6, 1.6), envMapIntensity: 0.4 });
   }
   // Rocas y guijarros densos alrededor de la cámara: se generan por celdas (siempre iguales en el mismo sitio)
@@ -301,65 +391,149 @@
     };
   }
 
-  // ---------- cielo: estrellas, Sol, Tierra ----------
+  // ---------- cielo: Vía Láctea, estrellas, Sol, Tierra ----------
+  // Sin atmósfera las estrellas no titilan; brillan fijas. La Vía Láctea, los destellos de lente y el halo del Sol
+  // son efectos de cámara para que la escena se aprecie (como en una foto de larga exposición).
   function radialTex(stops, n = 256) {
     const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
     stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, n, n);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
   }
-  function earthTexture() {
-    const w = 1024, h = 512, c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), img = g.createImageData(w, h), d = img.data;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const lat = (0.5 - y / h) * Math.PI, X = x / w * 12, Y = y / h * 6;
-      const land = fbm(X, Y, 6, 31, 12) + 0.1 * Math.cos(lat * 2) - 0.08;
-      const cloud = fbm(X * 2.1 + 5, Y * 2.1, 5, 61, 25) ;
-      let r = 14, gg = 42, b = 92;                                      // océano
-      if (land > 0.52) { const t = clamp((land - 0.52) * 6, 0, 1); r = 92 + 40 * t; gg = 96 + 20 * t; b = 60 + 10 * t; if (Math.abs(lat) < 0.45 && fbm(X * 3, Y * 3, 3, 8, 36) > 0.5) { r = 70; gg = 92; b = 52; } }
-      if (Math.abs(lat) > 1.2) { r = gg = b = 238; }
-      const cl = clamp((cloud - 0.5) * 3.2, 0, 0.85); r = r + (245 - r) * cl; gg = gg + (247 - gg) * cl; b = b + (250 - b) * cl;
-      const k = (y * w + x) * 4; d[k] = r; d[k + 1] = gg; d[k + 2] = b; d[k + 3] = 255;
+  function raysTex(n = 512) {                                                   // corona con rayos para el Sol
+    const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), r = rng(3);
+    g.translate(n / 2, n / 2); g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 90; i++) {
+      const a = r() * Math.PI * 2, L = n * (0.12 + 0.38 * Math.pow(r(), 2)), w = 0.6 + r() * 1.8;
+      const gr = g.createLinearGradient(0, 0, Math.cos(a) * L, Math.sin(a) * L); gr.addColorStop(0, 'rgba(255,245,225,0.35)'); gr.addColorStop(1, 'rgba(255,235,200,0)');
+      g.strokeStyle = gr; g.lineWidth = w; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * L, Math.sin(a) * L); g.stroke();
     }
-    g.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; return t;
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
   }
-  function buildSky(W, scene) {
-    const grp = new THREE.Group(), RS = 85000; grp.userData.skipSunVis = true;
-    // estrellas: brillo y color variables, banda de la Vía Láctea
-    const n = 9000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), r = rng(99);
-    const band = new THREE.Vector3(0.3, 0.55, 0.78).normalize();
-    for (let i = 0; i < n; i++) {
-      let v; const inBand = i > 5200;
-      do { v = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); } while (v.lengthSq() > 1 || v.lengthSq() < 0.01);
-      v.normalize(); if (inBand) { v.addScaledVector(band, -v.dot(band) * (0.85 + 0.1 * r())).normalize(); }
-      pos.set([v.x * RS, v.y * RS, v.z * RS], i * 3);
-      const mag = Math.pow(r(), inBand ? 5 : 3.2), temp = r();
-      const c = temp < 0.15 ? [1, 0.82, 0.68] : temp < 0.4 ? [0.78, 0.86, 1] : [1, 1, 1];
-      const L = (inBand ? 0.25 : 0.35) + 1.6 * mag;
-      col.set([c[0] * L, c[1] * L, c[2] * L], i * 3); size[i] = (inBand ? 1.2 : 1.4) + 2.6 * mag;
+  function earthTextures() {
+    const w = 1024, h = 512, mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+    const cd = mk(), cn = mk(), cc = mk(), gd = cd.getContext('2d'), gn = cn.getContext('2d'), gc = cc.getContext('2d');
+    const day = gd.createImageData(w, h), night = gn.createImageData(w, h), cloud = gc.createImageData(w, h), r = rng(21);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const lat = (0.5 - y / h) * Math.PI, X = x / w * 12, Y = y / h * 6, k = (y * w + x) * 4;
+      const landF = fbm(X, Y, 6, 31, 12) + 0.1 * Math.cos(lat * 2) - 0.08, land = landF > 0.52, ice = Math.abs(lat) > 1.18;
+      let R = 10, G = 38, B = 86;
+      if (land) { const t = clamp((landF - 0.52) * 6, 0, 1), dry = fbm(X * 2, Y * 2, 3, 77, 24); R = 70 + 90 * dry * t + 20 * t; G = 88 + 30 * (1 - dry); B = 48 + 14 * t; if (Math.abs(lat) < 0.35 && dry < 0.45) { R = 46; G = 82; B = 44; } }
+      if (ice) { R = G = B = 236; }
+      day.data.set([R, G, B, land || ice ? 0 : 255], k);                       // alfa = océano (para el reflejo del Sol)
+      const city = land && !ice && Math.abs(lat) < 1.0 && fbm(X * 6, Y * 6, 3, 99, 72) > 0.6 && r() < 0.35;
+      const li = city ? 160 + 95 * r() : 0; night.data.set([li, li * 0.78, li * 0.45, 255], k);
+      const cl = clamp((fbm(X * 2.1 + 5, Y * 2.1, 5, 61, 25) - 0.48) * 3.0, 0, 1) * (Math.abs(lat) > 1.25 ? 0.4 : 1);
+      cloud.data.set([255, 255, 255, cl * 235], k);
     }
-    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3)); sg.setAttribute('size', new THREE.BufferAttribute(size, 1));
-    const sm2 = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
-      vertexShader: 'attribute float size; varying vec3 vC; void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv; gl_PointSize = size; }',
-      fragmentShader: 'varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5); float a = smoothstep(0.5, 0.0, d); gl_FragColor = vec4(vC * a * a, 1.0); }' });
-    const stars = new THREE.Points(sg, sm2); stars.frustumCulled = false; grp.add(stars);
-    // Sol: disco + resplandor (lo tapa el relieve cuando queda bajo el horizonte)
+    gd.putImageData(day, 0, 0); gn.putImageData(night, 0, 0); gc.putImageData(cloud, 0, 0);
+    const T = c => { const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; };
+    return { day: T(cd), night: T(cn), cloud: T(cc) };
+  }
+  const NOISE3 = `float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+    float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
+      return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
+                 mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z); }
+    float f3(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * n3(p); p *= 2.02; a *= 0.5; } return s; }`;
+  function buildSky(W, scene) {
+    const grp = new THREE.Group(), RS = 85000;
     const sd = new THREE.Vector3(W.sunDir.x, W.sunDir.y, W.sunDir.z).normalize();
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex([[0, 'rgba(255,250,240,1)'], [0.06, 'rgba(255,244,225,.85)'], [0.2, 'rgba(255,225,190,.22)'], [1, 'rgba(255,210,170,0)']]), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    glow.scale.setScalar(16000); glow.position.copy(sd).multiplyScalar(RS * 0.95); grp.add(glow);
-    const disc = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex([[0, '#ffffff'], [0.45, '#fffaf0'], [0.5, 'rgba(255,250,240,0)']]), depthWrite: false, transparent: true }));
-    disc.scale.setScalar(820); disc.position.copy(sd).multiplyScalar(RS * 0.94); grp.add(disc);
-    // Tierra: cerca del horizonte, como se ve desde el polo sur lunar (posición ilustrativa)
+    const band = new THREE.Vector3(0.3, 0.55, 0.78).normalize();               // normal del plano galáctico (ilustrativa)
+    const gcen = new THREE.Vector3(1, 0, 0).sub(band.clone().multiplyScalar(band.x)).normalize().applyAxisAngle(band, 2.2);
+    // 1) Bóveda: Vía Láctea con nubes, núcleo cálido, franjas de polvo y nebulosas; luz zodiacal cerca del Sol
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(RS * 1.03, 64, 32), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+      uniforms: { band: { value: band }, gcen: { value: gcen }, sun: { value: sd } },
+      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `uniform vec3 band; uniform vec3 gcen; uniform vec3 sun; varying vec3 vD; ${NOISE3}
+        void main(){
+          vec3 d = normalize(vD); float b = dot(d, band);
+          float plane = exp(-b * b / 0.018), wide = exp(-b * b / 0.09);
+          float core = exp(-pow(acos(clamp(dot(d, gcen), -1.0, 1.0)), 2.0) / 0.35);
+          float cl = f3(d * 5.0), fine = f3(d * 22.0);
+          float dust = smoothstep(0.45, 0.75, f3(d * 9.0 + 3.1)) * exp(-b * b / 0.004);   // franjas oscuras de polvo
+          vec3 warm = vec3(1.0, 0.82, 0.62), cool = vec3(0.62, 0.7, 0.95);
+          vec3 col = mix(cool, warm, core) * (plane * (0.5 + 0.9 * cl) * (0.6 + 0.6 * fine) + 0.25 * wide * cl) * (1.0 - 0.85 * dust);
+          col *= 0.17 + 0.22 * core;
+          float neb = smoothstep(0.66, 0.82, f3(d * 7.0 + 9.0)) * plane;            // nebulosas rojizas y azuladas
+          col += neb * mix(vec3(0.5, 0.12, 0.2), vec3(0.15, 0.25, 0.55), step(0.5, n3(d * 3.0))) * 0.06;
+          float sa = acos(clamp(dot(d, sun), -1.0, 1.0));                          // luz zodiacal
+          col += vec3(1.0, 0.9, 0.75) * 0.05 * exp(-sa * sa / 0.08) * smoothstep(-0.05, 0.25, d.y + 0.05);
+          gl_FragColor = vec4(col, 1.0);
+        }` }));
+    dome.renderOrder = -10; dome.frustumCulled = false; grp.add(dome);
+    // 2) Estrellas: color según temperatura, las brillantes con halo y destellos en cruz
+    const n = 11000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), brt = new Float32Array(n), r = rng(99);
+    for (let i = 0; i < n; i++) {
+      let v; const inBand = i > 6000;
+      do { v = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); } while (v.lengthSq() > 1 || v.lengthSq() < 0.01);
+      v.normalize(); if (inBand) v.addScaledVector(band, -v.dot(band) * (0.8 + 0.18 * r())).normalize();
+      pos.set([v.x * RS, v.y * RS, v.z * RS], i * 3);
+      const mag = Math.pow(r(), inBand ? 6 : 3.4), t = r();
+      const c = t < 0.12 ? [1, 0.72, 0.52] : t < 0.3 ? [1, 0.9, 0.78] : t < 0.55 ? [0.75, 0.84, 1] : [1, 1, 1];
+      const L = (inBand ? 0.22 : 0.3) + 1.9 * mag; col.set([c[0] * L, c[1] * L, c[2] * L], i * 3);
+      const big = mag > 0.82 && !inBand; size[i] = big ? 16 + 14 * mag : (inBand ? 1.4 : 1.6) + 2.8 * mag; brt[i] = big ? 1 : 0;
+    }
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    sg.setAttribute('size', new THREE.BufferAttribute(size, 1)); sg.setAttribute('bright', new THREE.BufferAttribute(brt, 1));
+    const stars = new THREE.Points(sg, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
+      vertexShader: 'attribute float size; attribute float bright; varying vec3 vC; varying float vB; void main(){ vC = color; vB = bright; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv; gl_PointSize = size; }',
+      fragmentShader: `varying vec3 vC; varying float vB;
+        void main(){ vec2 p = gl_PointCoord - 0.5; float d = length(p);
+          float core = vB > 0.5 ? exp(-d * d * 260.0) + 0.25 * exp(-d * d * 30.0) : smoothstep(0.5, 0.0, d);
+          float spikes = vB * (exp(-abs(p.x) * 70.0) * exp(-abs(p.y) * 5.5) + exp(-abs(p.y) * 70.0) * exp(-abs(p.x) * 5.5)) * 0.8;
+          float a = vB > 0.5 ? core + spikes : core * core;
+          gl_FragColor = vec4(vC * a, 1.0); }` }));
+    stars.frustumCulled = false; grp.add(stars);
+    // 3) Sol: disco, resplandor y corona de rayos (los tapa el relieve cuando queda bajo el horizonte)
+    const spr = (map, s, d, add = true) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, transparent: true })); o.scale.setScalar(s); o.position.copy(sd).multiplyScalar(RS * d); grp.add(o); return o; };
+    spr(radialTex([[0, 'rgba(255,250,240,1)'], [0.05, 'rgba(255,244,225,.85)'], [0.2, 'rgba(255,225,190,.2)'], [1, 'rgba(255,210,170,0)']]), 17000, 0.95);
+    spr(raysTex(), 26000, 0.955);
+    spr(radialTex([[0, '#ffffff'], [0.45, '#fffaf0'], [0.5, 'rgba(255,250,240,0)']]), 820, 0.94, false);
+    // 4) Tierra: día, luces de ciudades en el lado nocturno, reflejo del Sol en el océano, nubes y atmósfera
     const az = Math.atan2(sd.z, sd.x) + 1.9, el = 0.11, ed = new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
-    const ER = RS * 0.8 * Math.tan(0.95 * Math.PI / 180) * 1.0;
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(ER, 64, 40), new THREE.MeshStandardMaterial({ map: earthTexture(), roughness: 0.85, metalness: 0, envMapIntensity: 0 }));
-    earth.position.copy(ed).multiplyScalar(RS * 0.8); earth.rotation.set(0.4, 1.2, 0.2); earth.userData.skipSunVis = true; grp.add(earth);
-    const atm = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.035, 64, 40), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { sun: { value: sd } },
-      vertexShader: 'varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }',
-      fragmentShader: 'uniform vec3 sun; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - max(dot(vN, vV), 0.0), 3.0); float l = smoothstep(-0.25, 0.4, dot(vN, sun)); gl_FragColor = vec4(vec3(0.35,0.6,1.0) * f * l * 1.4, 1.0); }' }));
+    const ER = RS * 0.8 * Math.tan(0.95 * Math.PI / 180), ET = earthTextures();
+    const earthMat = new THREE.ShaderMaterial({ uniforms: { day: { value: ET.day }, night: { value: ET.night }, sun: { value: sd } },
+      vertexShader: 'varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: `uniform sampler2D day; uniform sampler2D night; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+        void main(){ vec4 dt = texture2D(day, vUv); vec3 n = normalize(vN); float ndl = dot(n, sun);
+          float lit = smoothstep(-0.08, 0.25, ndl);
+          vec3 c = pow(dt.rgb, vec3(2.2)) * (0.05 + 1.25 * max(ndl, 0.0));
+          c *= mix(vec3(1.0, 0.55, 0.35), vec3(1.0), smoothstep(0.0, 0.3, ndl)) ;                       // terminador anaranjado
+          float spec = pow(max(dot(reflect(-sun, n), normalize(vV)), 0.0), 60.0) * dt.a * lit;
+          c += vec3(1.0, 0.95, 0.85) * spec * 1.2;
+          c += pow(texture2D(night, vUv).rgb, vec3(2.2)) * (1.0 - lit) * 1.4;                              // ciudades
+          gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0); }` });
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(ER, 64, 40), earthMat);
+    earth.position.copy(ed).multiplyScalar(RS * 0.8); earth.rotation.set(0.41, 1.2, 0.2); grp.add(earth);
+    const clouds = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.012, 64, 40), new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
+      uniforms: { map: { value: ET.cloud }, sun: { value: sd } },
+      vertexShader: 'varying vec2 vUv; varying vec3 vN; void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'uniform sampler2D map; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; void main(){ float a = texture2D(map, vUv).a; float l = smoothstep(-0.1, 0.3, dot(normalize(vN), sun)); gl_FragColor = vec4(vec3(0.95) * (0.04 + l), a * (0.25 + 0.75 * l)); }' }));
+    clouds.position.copy(earth.position); clouds.rotation.copy(earth.rotation); grp.add(clouds);
+    const atm = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.05, 64, 40), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
+      uniforms: { sun: { value: sd }, c: { value: earth.position } },
+      vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: 'uniform vec3 sun; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 2.5); float l = smoothstep(-0.35, 0.45, dot(vN, sun)); vec3 c = mix(vec3(1.0, 0.45, 0.25), vec3(0.35, 0.62, 1.0), smoothstep(-0.1, 0.4, dot(vN, sun))); gl_FragColor = vec4(c * f * l * 1.6, 1.0); }' }));
     atm.position.copy(earth.position); grp.add(atm);
     grp.traverse(o => { o.userData.skipSunVis = true; });
     scene.add(grp);
-    return { group: grp, earthDir: ed, update(camera) { grp.position.copy(camera.position); } };
+    // 5) Destellos de lente: fantasmas a lo largo de la línea Sol–centro de la imagen, solo si el Sol se ve
+    const ghostTex = radialTex([[0, 'rgba(255,255,255,0.0)'], [0.55, 'rgba(255,255,255,0.12)'], [0.75, 'rgba(255,255,255,0.35)'], [0.85, 'rgba(255,255,255,0.08)'], [1, 'rgba(255,255,255,0)']]);
+    const ghostDef = [[-0.35, 0.05, 0x8fd0ff], [-0.7, 0.09, 0xffc890], [0.25, 0.03, 0xb8a8ff], [-1.15, 0.15, 0x9fffd8], [-1.5, 0.06, 0xffe0b0]];
+    const ghosts = ghostDef.map(([f, s, c]) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map: ghostTex, color: c, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0.0 })); o.userData = { f, s }; o.renderOrder = 20; o.frustumCulled = false; scene.add(o); return o; });
+    const tmp = new THREE.Vector3(), shl = Math.hypot(sd.x, sd.z), tanE = sd.y / shl;
+    let flare = 0, spin = 0;
+    return { group: grp, earthDir: ed, update(camera, dt = 0.016) {
+      grp.position.copy(camera.position);
+      spin += dt * 0.004; earth.rotation.y = 1.2 + spin; clouds.rotation.y = 1.2 + spin * 1.6;
+      // ¿se ve el Sol? (delante, en pantalla y por encima del relieve hacia el Sol)
+      tmp.copy(camera.position).addScaledVector(sd, 1000).project(camera);
+      let vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
+      if (vis) for (const t of [15, 40, 90, 200, 450, 1000, 2200]) { const x = camera.position.x + sd.x / shl * t, z = camera.position.z + sd.z / shl * t; if (W.hAt(x, z) > camera.position.y + tanE * t) { vis = false; break; } }
+      flare += ((vis ? 1 : 0) - flare) * Math.min(1, dt * 6);
+      const sx = tmp.x, sy = tmp.y, fov = Math.tan(camera.fov * Math.PI / 360) * 2 * 10;
+      ghosts.forEach(o => { const p = new THREE.Vector3(sx * o.userData.f, sy * o.userData.f, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
+        o.position.copy(p); o.scale.setScalar(o.userData.s * fov); o.material.opacity = 0.55 * flare; o.visible = flare > 0.02; });
+    } };
   }
 
   // ---------- mapa de entorno (reflejos de los metales y luz rebotada) ----------
@@ -515,5 +689,5 @@
     return { update, clear, mesh, setLife(s) { mat.uniforms.vida.value = s; } };
   }
 
-  window.IceEnv = { sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
+  window.IceEnv = { iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
 })();

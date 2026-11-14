@@ -533,7 +533,7 @@
     const cmd = {
       start() { S.running = true; if (S.rover.task === 'dead') return; log('Simulación en marcha.'); },
       pause() { S.running = false; },
-      setMode(m) { S.rover.mode = m; S.manual.throttle = 0; S.manual.steer = 0; if (m === 'auto') { S.rover.task = distSt() < 16 ? 'idle' : 'return'; } else { if (S.rover.task !== 'dead') S.rover.task = 'manual'; } log(m === 'auto' ? 'Modo autónomo.' : 'Modo manual: W/S avanzar, A/D girar, Espacio perforar.'); },
+      setMode(m) { S.rover.mode = m; S.manual.throttle = 0; S.manual.steer = 0; if (m === 'auto') { S.rover.task = distSt() < 16 ? 'idle' : 'return'; } else { if (S.rover.task !== 'dead') S.rover.task = 'manual'; } log(m === 'auto' ? 'Modo autónomo.' : 'Modo manual: flechas ↑ ↓ avanzar, ← → girar, Espacio perforar. W A S D mueve la cámara.'); },
       drillHere() { const R = S.rover; if (R.task === 'dead' || R.task === 'drill') return; R.speed = 0; R.cand = ki(R.x, R.z); R.task = 'drill'; R.drillDepth = 0; log('Perforación manual iniciada.', 'key'); },
       goTo(x, z) {
         const R = S.rover; if (R.task === 'dead') return;

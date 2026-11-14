@@ -81,7 +81,7 @@ input[type="checkbox"]:checked::before { transform: scale(1); }
 .lg-scale { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--color-ash-text); }
 .lg-scale i { font-style: normal; font-size: 10px; }
 .lg-scale b { width: 54px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(110,130,255,.35), #f0f4ff); }
-.lg-det { width: 14px; height: 14px; border: 1px solid #fff; background: rgba(237,237,243,.42); flex: none; }
+.lg-det { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #ededf3; background: var(--color-cobalt); box-shadow: 0 0 0 4px rgba(237,237,243,.18); flex: none; }
 .lg-psr { width: 14px; height: 14px; background: #282c46; border: 1px solid #70707d; flex: none; }
 .lg-hole { width: 14px; height: 14px; border-radius: 50%; background: #050508; box-shadow: 0 0 0 3px #dfe6ff; flex: none; margin: 0 1px; }
 .sim-pad { left: 50%; transform: translateX(-50%); bottom: 64px; }

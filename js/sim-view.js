@@ -6,12 +6,12 @@
   const { $, $$, fmt, toast, charts } = Ice;
 
   let sim, S, P, W;
-  let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, tracks, destMode = false;
+  let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, tracks, iceL, destMode = false;
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
   let trailGeo, trail, holesGroup, wpMarker, candMarker, locator, pickMarker;
   let warp = 120, camMode = 'rover', visible = true, lastUI = 0, lastTex = 0, lastChart = 0, lastHover = 0, holesDrawn = 0;
-  const keys = {}, labels = [];
+  const keys = {}, camKeys = {}, labels = [];
   const COBALT = 0x5266eb, IVORY = 0xededf3;
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 
@@ -93,7 +93,9 @@
     const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
     for (let k = 0; k < pos.count; k++) {
       pos.setY(k, W.H[k]);
-      const x = pos.getX(k), z = pos.getZ(k), g = IceEnv.albedoAt(x, z, W.slopeAt(x, z));
+      const x = pos.getX(k), z = pos.getZ(k), i = k % W.N, j = Math.floor(k / W.N), Hh = (a, b) => W.H[Math.min(W.N - 1, Math.max(0, b)) * W.N + Math.min(W.N - 1, Math.max(0, a))];
+      const lap = (Hh(i + 1, j) + Hh(i - 1, j) + Hh(i, j + 1) + Hh(i, j - 1) - 4 * W.H[k]) / 4;   // <0 cresta, >0 hondonada
+      const g = IceEnv.albedoAt(x, z, W.slopeAt(x, z)) * (1 - Math.max(-0.1, Math.min(0.1, lap * 0.08)));
       col[k * 3] = g; col[k * 3 + 1] = g; col[k * 3 + 2] = g * 1.02;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
@@ -104,12 +106,7 @@
 
     // Capas sobre el terreno
     const overlay = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    const iceTex = gridTex(320, (x, z) => {
-      const w = W.iceWt(x, z); if (w < 0.3) return null;
-      const a = Math.min(1, w / 9);
-      return [Math.round(80 + 70 * a), Math.round(105 + 70 * a), 255, 0.28 + 0.55 * a];
-    });
-    iceMesh = new THREE.Mesh(geo, overlay(iceTex)); scene.add(iceMesh);
+    iceL = IceEnv.iceLayer(W, geo); iceMesh = iceL.mesh; scene.add(iceMesh);   // escarcha con destellos (visualización del hielo)
     psrMesh = new THREE.Mesh(geo, overlay(gridTex(320, (x, z) => W.fracAt(W.psr, x, z) > 0.5 ? [40, 44, 70, 0.45] : null))); psrMesh.visible = false; scene.add(psrMesh);
     detCanvas = document.createElement('canvas'); detCanvas.width = W.KG * 8; detCanvas.height = W.KG * 8; detCtx = detCanvas.getContext('2d');
     detTex = new THREE.CanvasTexture(detCanvas); detTex.anisotropy = 4;
@@ -143,15 +140,15 @@
 
   // Cristales de hielo: visualización de dónde hay hielo bajo el suelo (densidad ∝ concentración)
   function buildCrystals() {
-    const geo = new THREE.OctahedronGeometry(0.13, 0); geo.scale(1, 1.7, 1);
-    const m = new THREE.MeshStandardMaterial({ color: 0xe4eaff, emissive: COBALT, emissiveIntensity: 0.7, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.92 });
-    crystals = new THREE.InstancedMesh(geo, m, 24000);
+    const geo = IceEnv.crystalGeometry();
+    const m = new THREE.MeshStandardMaterial({ color: 0xd8e4ff, emissive: 0x2c4aa8, emissiveIntensity: 0.35, roughness: 0.06, metalness: 0.0, envMapIntensity: 1.8, transparent: true, opacity: 0.82 });
+    crystals = new THREE.InstancedMesh(geo, m, 14000);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
     let n = 0;
-    for (let i = 0; i < 600000 && n < 24000; i++) {
+    for (let i = 0; i < 600000 && n < 14000; i++) {
       const x = (Math.random() - 0.5) * W.SIZE * 0.98, z = (Math.random() - 0.5) * W.SIZE * 0.98, w = W.iceWt(x, z);
-      if (w < 0.8 || Math.random() > w / 11) continue;
-      const k = 0.7 + Math.random() * 1.1 + w / 8;
+      if (w < 0.8 || Math.random() > w / 16) continue;
+      const k = 0.55 + Math.random() * 0.9 + w / 10;
       p.set(x, W.hAt(x, z) + 0.05 * k, z); e.set(Math.random() * 0.6, Math.random() * 6.3, Math.random() * 0.6); q.setFromEuler(e); s.setScalar(k);
       m4.compose(p, q, s); crystals.setMatrixAt(n++, m4);
     }
@@ -696,11 +693,13 @@
     for (let k = 0; k < W.KG * W.KG; k++) {
       if (!K.n[k]) continue;
       const v = K.sum[k] / K.n[k], x = (k % W.KG) * c, y = Math.floor(k / W.KG) * c;
-      if (K.drilled[k]) { g.fillStyle = 'rgba(237,237,243,.75)'; g.fillRect(x, y, c, c); continue; }
-      if (K.rejected[k]) { g.fillStyle = 'rgba(112,112,125,.45)'; g.fillRect(x + 1, y + 1, c - 2, c - 2); continue; }
-      const hit = v >= P.iceThreshold;
-      g.fillStyle = hit ? 'rgba(237,237,243,.42)' : `rgba(237,237,243,${0.04 + Math.min(0.2, v / 30)})`; g.fillRect(x, y, c, c);
-      g.strokeStyle = hit ? 'rgba(255,255,255,.9)' : 'rgba(237,237,243,.28)'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, c - 1, c - 1);
+      const cx = x + c / 2, cy = y + c / 2, hit = v >= P.iceThreshold;
+      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, c * 0.75);                       // huella del sensor de neutrones
+      gr.addColorStop(0, `rgba(237,237,243,${0.10 + Math.min(0.16, v / 40)})`); gr.addColorStop(1, 'rgba(237,237,243,0)');
+      g.fillStyle = gr; g.fillRect(x - c, y - c, c * 3, c * 3);
+      if (K.drilled[k]) { g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.2; g.beginPath(); g.arc(cx, cy, c * 0.32, 0, 7); g.stroke(); continue; }
+      if (K.rejected[k]) { g.fillStyle = 'rgba(112,112,125,.7)'; g.beginPath(); g.arc(cx, cy, c * 0.14, 0, 7); g.fill(); continue; }
+      if (hit) { g.fillStyle = 'rgba(82,102,235,.95)'; g.beginPath(); g.arc(cx, cy, c * 0.2, 0, 7); g.fill(); g.strokeStyle = 'rgba(237,237,243,.9)'; g.lineWidth = 0.8; g.stroke(); }
     }
     detTex.needsUpdate = true;
   }
@@ -737,10 +736,29 @@
     BIO.lichen.count = Math.min(140, Math.round(B.N[2] / 100 * 140 * 4));
     BIO.lamp.intensity = P.light && P.chamber === 'inside' ? 1.0 : 0;
     BIO.ring.material.color.setHex(B.T < 0 ? 0x9fb4ff : B.T > 35 ? 0xffe2cc : 0xf5f6ff);
-    crystals.material.emissiveIntensity = 0.55 + 0.25 * Math.sin(t * 2.2);
+    crystals.material.emissiveIntensity = 0.3 + 0.08 * Math.sin(t * 1.6);
   }
 
+  // W A S D: desplaza cámara y objetivo sobre el terreno, en la dirección en que se mira. La velocidad crece con la
+  // distancia (cerca = preciso, vista general = rápido). Al moverse se deja de seguir al rover/estación.
+  let lastCamT = performance.now();
+  function moveCameraWASD() {
+    const now = performance.now(), dt = Math.min(0.1, (now - lastCamT) / 1000); lastCamT = now;
+    const f = (camKeys.w ? 1 : 0) - (camKeys.s ? 1 : 0), r = (camKeys.d ? 1 : 0) - (camKeys.a ? 1 : 0);
+    if (!f && !r) return;
+    if (camMode !== 'free') { camMode = 'free'; $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true; }
+    const fwd = new THREE.Vector3().subVectors(controls.target, camera.position); fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+    const dist = camera.position.distanceTo(controls.target), speed = Math.min(700, Math.max(6, dist * 0.9)) * (camKeys.shift ? 3 : 1);
+    const d = fwd.multiplyScalar(f).add(right.multiplyScalar(r)).normalize().multiplyScalar(speed * dt);
+    const lim = W.HALF * 1.25, old = controls.target.clone();
+    controls.target.x = Math.max(-lim, Math.min(lim, controls.target.x + d.x)); controls.target.z = Math.max(-lim, Math.min(lim, controls.target.z + d.z));
+    const dy = W.hAt(controls.target.x, controls.target.z) - W.hAt(old.x, old.z);   // sigue el relieve
+    controls.target.y += dy; camera.position.add(new THREE.Vector3(controls.target.x - old.x, dy, controls.target.z - old.z));
+  }
   function updateCamera() {
+    moveCameraWASD();
     const R = S.rover; let target = null;
     if (camMode === 'rover') target = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 1.2, R.z);
     else if (camMode === 'station') target = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0));
@@ -852,7 +870,7 @@
 
   function setCam(mode) {
     camMode = mode;
-    $$('#sim-cam button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === mode)));
+    $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === mode)));
     const R = S.rover;
     if (mode === 'rover') {
       const t = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 1.2, R.z); controls.target.copy(t);
@@ -880,6 +898,7 @@
     if (tracks) tracks.update(S.rover, S.t);
     if (!visible) return;
     const t = now / 1000;
+    if (iceL) iceL.update(t, camera);
     updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
     renderer.render(scene, camera);
@@ -955,7 +974,7 @@
     { t: '¿Y si sacamos los microbios al exterior?', d: 'Vacío, −40 °C, radiación lunar', apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
     { t: '¿Y si los irradiamos fuerte?', d: 'Fuente de 100 Gy/h en la cámara', apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
     { t: '¿Y si apagamos el biofiltro?', d: 'Solo filtros químicos traídos de la Tierra', apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
-    { t: '¿Y si lo conduzco yo?', d: 'W A S D o flechas · Espacio perfora', apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
+    { t: '¿Y si lo conduzco yo?', d: 'Flechas para conducir · Espacio perfora · WASD mueve la cámara', apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
   ];
 
   function bindUI() {
@@ -965,7 +984,7 @@
     $('#sim-intro-skip').addEventListener('click', () => { hideIntro(); setCam('overview'); });
     $('#sim-reset').addEventListener('click', () => { sim.cmd.resetAll(); Object.assign(P, IceSim.DEFAULT_P); syncSliders(); setModeUI('auto'); setCam(camMode); lastChart = 0; updateUI(); toggleRunLabel(); toast('Simulación y valores restablecidos.'); });
     $$('#sim-warp button').forEach(b => b.addEventListener('click', () => { warp = +b.dataset.w; $$('#sim-warp button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
-    $$('#sim-cam button').forEach(b => b.addEventListener('click', () => setCam(b.dataset.c)));
+    $$('#sim-cam button[data-c]').forEach(b => b.addEventListener('click', () => setCam(b.dataset.c)));
     $$('#sim-mode button').forEach(b => b.addEventListener('click', () => {
       sim.cmd.setMode(b.dataset.m); setModeUI(b.dataset.m); hideIntro();
       if (b.dataset.m === 'manual') { if (!S.running) toggleRun(); setCam('rover'); $('#sim-view').focus(); }
@@ -992,15 +1011,20 @@
     $('#bio-purif').addEventListener('change', e => { const b = P.bioPurif; P.bioPurif = e.target.checked; showEffect('bioPurif', b, P.bioPurif); });
     $('#bio-inoc').addEventListener('click', () => { sim.cmd.inoculate(); toast('Cámara re-inoculada con las tres especies.'); });
     $('#bio-spe').addEventListener('click', () => { sim.cmd.solarEvent(); toast('Evento solar: +0,05 Gy/h durante 10 h.'); });
-    // Teclado (modo manual)
+    // Teclado: flechas = conducir el rover (modo manual); W A S D = mover la cámara por el mapa (Shift = rápido)
     const host = $('#sim-view');
-    const kmap = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
+    const kmap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+    const cmap = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ShiftLeft: 'shift', ShiftRight: 'shift' };
+    const typing = () => /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     window.addEventListener('keydown', e => {
-      if (S.rover.mode !== 'manual' || !visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+      if (!visible || typing() || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (cmap[e.code]) { camKeys[cmap[e.code]] = true; if (cmap[e.code] !== 'shift') e.preventDefault(); }
+      if (S.rover.mode !== 'manual') return;
       if (kmap[e.code]) { keys[kmap[e.code]] = true; e.preventDefault(); }
       if (e.code === 'Space' && document.activeElement === host) { sim.cmd.drillHere(); e.preventDefault(); }
     });
-    window.addEventListener('keyup', e => { if (kmap[e.code]) keys[kmap[e.code]] = false; });
+    window.addEventListener('keyup', e => { if (kmap[e.code]) keys[kmap[e.code]] = false; if (cmap[e.code]) camKeys[cmap[e.code]] = false; });
+    window.addEventListener('blur', () => { Object.keys(camKeys).forEach(k => { camKeys[k] = false; }); });
     document.addEventListener('icewise:startMission', () => { hideIntro(); if (!S.running) toggleRun(); });
   }
   function applyKeys() {
