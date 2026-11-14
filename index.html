@@ -158,8 +158,16 @@
             <span class="chip" id="hud-water">—</span>
           </div>
           <div class="sim-banner" id="sim-banner" hidden></div>
+          <div class="sim-rcam" id="sim-rcam" hidden aria-hidden="true">
+            <div class="rc-top"><span>NAVCAM · MÁSTIL</span><span id="rc-rumbo">RUMBO —</span><span class="rc-rec">● REC</span></div>
+            <div class="rc-cross"></div><div class="rc-ladder rc-l"></div><div class="rc-ladder rc-r"></div>
+            <div class="rc-bottom"><span id="rc-incl">INCL. —</span><span id="rc-bat">BAT —</span><span id="rc-tarea">—</span></div>
+            <div class="rc-zoom"><span class="rc-zt">60×</span><div class="rc-zbar"><i id="rc-zfill"></i></div><span class="rc-zt">1×</span><b id="rc-zv">1.0×</b></div>
+            <div class="rc-distbox" id="rc-dist">DIST —</div>
+            <div class="rc-hint">Arrastra para mirar · Rueda: zoom · Doble clic: centrar</div>
+          </div>
           <div class="sim-dest" id="sim-dest" hidden>Modo destino: haz clic en el terreno para enviar el rover · <kbd>Esc</kbd> para salir</div>
-          <div class="sim-help" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>: moverse · Arrastrar: girar · Clic derecho: desplazar · Rueda: acercar · <kbd>E</kbd>: enviar rover</div>
+          <div class="sim-help" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>: moverse · Arrastrar: girar/mirar · Rueda: acercar · <kbd>E</kbd>: enviar rover · Cámaras: 3ª persona y cámara del rover</div>
 
           <div class="sim-legend" id="sim-legend">
             <div data-l="ice"><span class="lg-ice"></span><span>Hielo bajo el suelo</span><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></div>
@@ -172,7 +180,8 @@
           <div class="sim-pop" id="sim-pop" hidden></div>
 
           <div class="sim-cam seg" id="sim-cam" role="group" aria-label="Cámara">
-            <button data-c="rover" aria-pressed="true">Seguir rover</button>
+            <button data-c="rover" aria-pressed="true">3ª persona</button>
+            <button data-c="rovercam" aria-pressed="false">Cámara del rover</button>
             <button data-c="station" aria-pressed="false">Estación</button>
             <button data-c="colony" aria-pressed="false">Colonia</button>
             <button data-c="overview" aria-pressed="false">Vista general</button>
@@ -479,6 +488,12 @@
 <script src="assets/vendor/OrbitControls.js"></script>
 <script src="assets/vendor/GLTFLoader.js"></script>
 <script src="assets/vendor/DRACOLoader.js"></script>
+<script src="assets/vendor/post/CopyShader.js"></script>
+<script src="assets/vendor/post/LuminosityHighPassShader.js"></script>
+<script src="assets/vendor/post/EffectComposer.js"></script>
+<script src="assets/vendor/post/RenderPass.js"></script>
+<script src="assets/vendor/post/ShaderPass.js"></script>
+<script src="assets/vendor/post/UnrealBloomPass.js"></script>
 <script src="js/sim-env.js"></script>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>

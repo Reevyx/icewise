@@ -197,22 +197,53 @@
         'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n#if ( UNROLLED_LOOP_INDEX == 0 )\ndirectLight.color *= iceSunVis();\n#endif'));
       if (opt.terrain) {
         sh.uniforms.detailNormalMap = { value: opt.detail }; sh.uniforms.detailScale = { value: opt.detailScale }; sh.uniforms.detailStrength = { value: 1.1 };
-        sh.fragmentShader = 'uniform sampler2D detailNormalMap;\nuniform float detailScale;\nuniform float detailStrength;\n' + sh.fragmentShader
+        // Coordenadas relativas a un origen cercano a la cámara (terOrigin): con zoom extremo, las coordenadas absolutas
+        // y las derivadas entre píxeles se quedan sin decimales y producen ruido. El relieve se orienta con los ejes del mundo.
+        sh.uniforms.terOrigin = DETAIL.oU;
+        sh.vertexShader = 'uniform vec2 terOrigin;\nvarying vec2 vTerXZ;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvTerXZ = (modelMatrix * vec4(transformed, 1.0)).xz - terOrigin;');
+        sh.fragmentShader = 'uniform vec2 terOrigin;\nvarying vec2 vTerXZ;\nuniform sampler2D detailNormalMap;\nuniform float detailScale;\nuniform float detailStrength;\n' +
+          'vec2 terUV(float tile, vec2 off) { return vTerXZ / tile + fract(terOrigin / tile) + off; }\n' + sh.fragmentShader
           .replace('#include <map_fragment>', `#ifdef USE_MAP
             vec4 texelColor = texture2D( map, vUv ) * 0.55 + texture2D( map, vUv * 3.71 + vec2( 0.37, 0.11 ) ) * 0.45;
             texelColor = mapTexelToLinear( texelColor );
             texelColor.rgb *= 0.62 + 0.75 * texture2D( map, vUv * 0.043 + vec2( 0.5 ) ).r;
+            float dV = length( vViewPosition );
+            float microA = texture2D( map, terUV( 0.27, vec2( 0.13, 0.71 ) ) ).r, microB = texture2D( map, terUV( 1.05, vec2( 0.5, 0.2 ) ) ).r;
+            texelColor.rgb *= mix( 1.0, 0.7 + 0.6 * microA, clamp( 1.0 - dV / 7.0, 0.0, 1.0 ) ) * mix( 1.0, 0.7 + 0.6 * microB, clamp( 1.0 - dV / 25.0, 0.0, 1.0 ) );
             diffuseColor *= texelColor;
           #endif`)
-          .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace(
-            'vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;',
-            `vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0;
+          .replace('#include <normal_fragment_maps>', `{
+             vec3 Nv = normal;
+             vec3 Tv = ( viewMatrix * vec4( 1.0, 0.0, 0.0, 0.0 ) ).xyz; Tv = normalize( Tv - Nv * dot( Nv, Tv ) );
+             vec3 Bv = ( viewMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz; Bv = normalize( Bv - Nv * dot( Nv, Bv ) - Tv * dot( Tv, Bv ) );
+             vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0; mapN.xy *= normalScale;
              vec3 mapD = texture2D( detailNormalMap, vUv * detailScale ).xyz * 2.0 - 1.0;
              float fadeD = clamp( 1.0 - length( vViewPosition ) / 70.0, 0.0, 1.0 );
-             mapN = normalize( vec3( mapN.xy + mapD.xy * detailStrength * fadeD, mapN.z * mapD.z ) );`));
+             vec3 mapE = texture2D( detailNormalMap, terUV( 0.36, vec2( 0.31, 0.77 ) ) ).xyz * 2.0 - 1.0;
+             float fadeE = clamp( 1.0 - length( vViewPosition ) / 6.0, 0.0, 1.0 );
+             vec3 nT = vec3( mapN.xy + mapD.xy * detailStrength * fadeD + mapE.xy * 1.4 * fadeE, mapN.z * mapD.z );
+             normal = normalize( Tv * nT.x + Bv * nT.y + Nv * nT.z );
+           }`)
+          // Bordes de cráteres en sombra con un tenue tono azulado (reflejo frío del cielo y del hielo): solo en las
+          // caras rasantes y en la penumbra, así las sombras siguen siendo negras.
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+             { float shK = 1.0 - iceSunVis(); float vD = clamp( dot( normalize( normal ), normalize( vViewPosition ) ), 0.0, 1.0 );
+               vec3 upV = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+               float wall = smoothstep( 0.12, 0.45, 1.0 - dot( normalize( normal ), upV ) );          // solo paredes y bordes de cráter
+               float far = smoothstep( 40.0, 250.0, length( vViewPosition ) );                        // y a distancia
+               float rim = pow( 1.0 - vD, 3.0 ) * shK * wall * far, pen = shK * ( 1.0 - shK ) * 4.0 * wall * far;
+               totalEmissiveRadiance += vec3( 0.06, 0.16, 0.5 ) * ( rim * 0.22 + pen * 0.035 ); }`);
       }
     };
-    const key = 'icesun' + (opt.attr ? 'A' : 'T') + (opt.terrain ? 'G' : '');
+    if (opt.holes) {                                                            // hueco donde está el terreno de detalle
+      const prev2 = m.onBeforeCompile;
+      m.onBeforeCompile = (sh, r) => { prev2(sh, r);
+        sh.uniforms.detailC = { value: DETAIL.c }; sh.uniforms.detailH = DETAIL.h;
+        sh.fragmentShader = 'uniform vec2 detailC;\nuniform float detailH;\n' + sh.fragmentShader.replace('void main() {',
+          'void main() {\n  if (detailH > 0.0 && abs(vSunXZ.x - detailC.x) < detailH && abs(vSunXZ.y - detailC.y) < detailH) discard;');
+      };
+    }
+    const key = 'icesun' + (opt.attr ? 'A' : 'T') + (opt.terrain ? 'G' : '') + (opt.holes ? 'H' : '');
     m.customProgramCacheKey = () => key;
     m.needsUpdate = true;
   }
@@ -227,12 +258,12 @@
   const albedoAt = (x, z, slope) => 0.6 * (0.88 + 0.24 * fbm(x / 380 + 11, z / 380 + 3, 3, 5)) * (1 + 0.07 * clamp(slope / 30, 0, 1));
 
   // ---------- material del terreno ----------
-  function terrainMaterial(W, SV, attr) {
+  function terrainMaterial(W, SV, attr, holes) {
     const TILE = 64;
     const T = groundTex();
     T.alb.repeat.set(W.SIZE / TILE, W.SIZE / TILE);
     const m = new THREE.MeshStandardMaterial({ map: T.alb, normalMap: T.crat, normalScale: new THREE.Vector2(1.15, 1.15), vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
-    patchMaterial(m, SV, { terrain: true, attr, detail: T.fine, detailScale: TILE / 4 });
+    patchMaterial(m, SV, { terrain: true, attr, holes, detail: T.fine, detailScale: TILE / 4 });
     return m;
   }
 
@@ -359,16 +390,24 @@
       const yy = y < -0.15 ? y * 0.45 : y;                    // base aplanada, apoyada en el suelo
       pa.setXYZ(i, x * f, yy * f * 0.85, z * f);
     }
-    g.computeVertexNormals(); return g;
+    // unir vértices repetidos para que las normales se promedien (superficie suave, sin facetas)
+    const map = new Map(), idx = [], pos = [];
+    for (let i = 0; i < pa.count; i++) {
+      const key = Math.round(pa.getX(i) * 1e4) + ',' + Math.round(pa.getY(i) * 1e4) + ',' + Math.round(pa.getZ(i) * 1e4);
+      let k = map.get(key); if (k === undefined) { k = pos.length / 3; map.set(key, k); pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)); }
+      idx.push(k);
+    }
+    const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setIndex(idx);
+    out.computeVertexNormals(); return out;
   }
   function rockMaterial() {
     const T = groundTex();
-    return new THREE.MeshStandardMaterial({ color: 0x7a7a80, roughness: 0.96, metalness: 0, normalMap: T.fine, normalScale: new THREE.Vector2(1.6, 1.6), envMapIntensity: 0.4 });
+    return new THREE.MeshStandardMaterial({ color: 0x343438, roughness: 0.97, metalness: 0, normalMap: T.fine, normalScale: new THREE.Vector2(1.6, 1.6), envMapIntensity: 0.4 });
   }
   // Rocas y guijarros densos alrededor de la cámara: se generan por celdas (siempre iguales en el mismo sitio)
   function nearRocks(W, scene) {
     const CELL = 12, RAD = 7, PER = 18, cap = (2 * RAD + 1) ** 2 * PER;
-    const mesh = new THREE.InstancedMesh(rockGeometry(3, 1), rockMaterial(), cap);
+    const mesh = new THREE.InstancedMesh(rockGeometry(3, 2), rockMaterial(), cap);
     mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
     let cur = null;
@@ -450,9 +489,9 @@
           float core = exp(-pow(acos(clamp(dot(d, gcen), -1.0, 1.0)), 2.0) / 0.35);
           float cl = f3(d * 5.0), fine = f3(d * 22.0);
           float dust = smoothstep(0.45, 0.75, f3(d * 9.0 + 3.1)) * exp(-b * b / 0.004);   // franjas oscuras de polvo
-          vec3 warm = vec3(1.0, 0.82, 0.62), cool = vec3(0.62, 0.7, 0.95);
+          vec3 warm = vec3(1.0, 0.86, 0.7), cool = vec3(0.82, 0.84, 0.9);
           vec3 col = mix(cool, warm, core) * (plane * (0.5 + 0.9 * cl) * (0.6 + 0.6 * fine) + 0.25 * wide * cl) * (1.0 - 0.85 * dust);
-          col *= 0.17 + 0.22 * core;
+          col *= 0.085 + 0.12 * core;
           float neb = smoothstep(0.66, 0.82, f3(d * 7.0 + 9.0)) * plane;            // nebulosas rojizas y azuladas
           col += neb * mix(vec3(0.5, 0.12, 0.2), vec3(0.15, 0.25, 0.55), step(0.5, n3(d * 3.0))) * 0.06;
           float sa = acos(clamp(dot(d, sun), -1.0, 1.0));                          // luz zodiacal
@@ -563,13 +602,13 @@
 
   // ---------- sombra del Sol que sigue a la cámara (alta resolución donde se mira) ----------
   const _f = new THREE.Vector3();
-  function updateSun(sun, W, focus, camDist) {
-    const half = clamp(camDist * 1.1, 16, W.HALF * 1.6), D = half * 3 + 400, sd = W.sunDir;
+  function updateSun(sun, W, focus, camDist, minHalf = 16) {
+    const half = clamp(camDist * 1.1, minHalf, W.HALF * 1.6), D = half * 3 + 400, sd = W.sunDir;
     sun.position.set(focus.x + sd.x * D, focus.y + sd.y * D, focus.z + sd.z * D); sun.target.position.copy(focus); sun.target.updateMatrixWorld();
     const c = sun.shadow.camera, vh = Math.max(half, 30);
     if (Math.abs(c.right - half) > half * 0.06 || c.far !== D * 2) {
       Object.assign(c, { left: -half, right: half, top: vh, bottom: -vh, near: 1, far: D * 2 }); c.updateProjectionMatrix();
-      sun.shadow.normalBias = 0.004 + half * 0.0012; sun.shadow.bias = -0.00015;
+      sun.shadow.normalBias = 0.03 + half * 0.002; sun.shadow.bias = -0.0004;   // Sol rasante (1,2°): más margen contra el autosombreado
     }
   }
 
@@ -639,6 +678,7 @@
       polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 1; mesh.userData.skipSunVis = true; scene.add(mesh);
     let q = 0, filled = 0, last = null, lastT = -1, dist = [0, 0], prev = [null, null], dirtyFrom = -1, now = 0;
+    const baseY = new Float32Array(MAXQ * 6); let region = null, moved = [];
     // Altura exacta de la malla del terreno (dos triángulos por celda, como PlaneGeometry), no la bilineal:
     // así la huella queda pegada al suelo y no se esconde bajo él.
     const N = W.N, H = W.H, STP = W.STEP, HF = W.HALF;
@@ -653,7 +693,9 @@
       const nx = -dz / L * HALF, nz = dx / L * HALF, v0 = dist[s] / TRK.TILE, v1 = (dist[s] + L) / TRK.TILE; dist[s] += L;
       const P = [[a.x - nx, a.z - nz, 0, v0], [a.x + nx, a.z + nz, 1, v0], [b.x + nx, b.z + nz, 1, v1], [b.x - nx, b.z - nz, 0, v1]];
       const o = q * 6;
-      [0, 1, 2, 0, 2, 3].forEach((i, k) => { const p = P[i]; pos.set([p[0], y(p[0], p[1]), p[1]], (o + k) * 3); uv.set([p[2], p[3]], (o + k) * 2); born[o + k] = now; });
+      [0, 1, 2, 0, 2, 3].forEach((i, k) => { const p = P[i], yb = y(p[0], p[1]); baseY[o + k] = yb; let yy = yb;
+        if (region && Math.abs(p[0] - region.cx) < region.hp && Math.abs(p[1] - region.cz) < region.hp) { yy = region.fn(p[0], p[1]) + 0.035; moved.push(o + k); }
+        pos.set([p[0], yy, p[1]], (o + k) * 3); uv.set([p[2], p[3]], (o + k) * 2); born[o + k] = now; });
       if (dirtyFrom < 0) dirtyFrom = q;
       q++; filled = Math.max(filled, q);
       if (q >= MAXQ) { flush(); q = 0; dirtyFrom = -1; }
@@ -686,8 +728,155 @@
       }
       last = p; flush();
     }
-    return { update, clear, mesh, setLife(s) { mat.uniforms.vida.value = s; } };
+    // Pegar las huellas al terreno de detalle (microcráteres) mientras está activo alrededor de la cámara
+    function reproject(fn, cx, cz, hp) {
+      moved.forEach(v => { pos[v * 3 + 1] = baseY[v]; }); moved = [];
+      region = fn && hp > 0 ? { fn, cx, cz, hp } : null;
+      if (region) for (let v = 0, n = filled * 6; v < n; v++) {
+        const x = pos[v * 3], z = pos[v * 3 + 2];
+        if (Math.abs(x - cx) < hp && Math.abs(z - cz) < hp) { pos[v * 3 + 1] = fn(x, z) + 0.035; moved.push(v); }
+      }
+      pa.updateRange.offset = 0; pa.updateRange.count = filled * 18; pa.needsUpdate = true;
+    }
+    return { update, clear, reproject, mesh, setLife(s) { mat.uniforms.vida.value = s; } };
   }
 
-  window.IceEnv = { iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
+  // ---------- acabado de cámara (último pase del postprocesado) ----------
+  // Aberración cromática suave, gradación (sombras hacia azul frío), viñeta, visor de la cámara del rover,
+  // conversión lineal → sRGB y grano fino. El brillo (bloom) va en el pase anterior.
+  const GradeShader = {
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, roverCam: { value: 0 }, res: { value: new THREE.Vector2(1, 1) } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform float roverCam; uniform vec2 res; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main(){
+        vec2 c = vUv - 0.5; float r2 = dot(c, c);
+        float ab = (0.004 + 0.006 * roverCam) * r2;
+        vec3 col = vec3(texture2D(tDiffuse, vUv + c * ab).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - c * ab).b);
+        float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col += vec3(0.012, 0.006, -0.008) * smoothstep(0.5, 1.0, l);                 // luces apenas cálidas
+        col = mix(vec3(l), col, 1.06);
+        col = max(col - 0.004, 0.0) * 1.004;                                          // negros profundos
+        col *= 1.0 - (0.32 + 0.28 * roverCam) * smoothstep(0.12, 0.7, r2 * 1.6);     // viñeta
+        if (roverCam > 0.5) {                                                         // visor de la cámara del mástil
+          col *= 0.985 + 0.015 * sin(vUv.y * res.y * 1.0 + time * 4.0);
+          col = mix(col, col * vec3(0.95, 0.99, 1.04), 0.4);
+        }
+        col = max(col, vec3(0.0));
+        vec3 s = mix(pow(col, vec3(0.41666)) * 1.055 - 0.055, col * 12.92, vec3(lessThanEqual(col, vec3(0.0031308))));
+        s += (h(vUv * res + fract(time) * 91.7) - 0.5) * (0.016 + 0.02 * roverCam);   // grano
+        gl_FragColor = vec4(s, 1.0);
+      }`
+  };
+
+  // ---------- terreno de detalle que sigue a la cámara ----------
+  // Alrededor de donde se mira se genera una malla de 120 × 120 m con celdas de 0,5 m: la base es el relieve real (misma
+  // altura que la malla del DEM, así no hay costura) y encima microcráteres y ondulaciones en 3D que proyectan sombras.
+  // El terreno base se oculta en ese cuadrado. Se regenera al avanzar la cámara (como el "streaming" de un videojuego).
+  // Los microcráteres son ilustrativos: el DEM real tiene 10 m de resolución.
+  const DETAIL = { c: new THREE.Vector2(1e9, 1e9), h: { value: 0 }, oU: { value: new THREE.Vector2() } };
+  function detailTerrain(W, baseGeo, SV, scene) {
+    const SZ = 120, SEG = 240, HP = SZ / 2, N = W.N, H = W.H, STP = W.STEP, HF = W.HALF, BC = baseGeo.attributes.color.array;
+    const tri = (arr, stride, ch, x, z) => {                                         // interpolación igual que la malla base
+      const fx = clamp((x + HF) / STP, 0, N - 1.001), fz = clamp((z + HF) / STP, 0, N - 1.001), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+      const A = arr[(j * N + i) * stride + ch], D = arr[(j * N + i + 1) * stride + ch], B = arr[((j + 1) * N + i) * stride + ch], C = arr[((j + 1) * N + i + 1) * stride + ch];
+      return u + v <= 1 ? A + (D - A) * u + (B - A) * v : C + (B - C) * (1 - u) + (D - C) * (1 - v);
+    };
+    const micro = (x, z) => {                                                         // microcráteres por celdas de 4 m
+      let h = -Math.abs(fbm(x / 6 + 30, z / 6 + 30, 3, 51) - 0.5) * 0.09 - Math.abs(vnoise(x * 0.9, z * 0.9, 52) - 0.5) * 0.02, dark = 0;
+      const ci = Math.floor(x / 4), cj = Math.floor(z / 4);
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+        const I = ci + a, J = cj + b; if (hash(I, J, 3, 7) > 0.22) continue;
+        const cx = (I + hash(I, J, 1, 7)) * 4, cz = (J + hash(I, J, 2, 7)) * 4, rad = 0.35 + 1.5 * Math.pow(hash(I, J, 4, 7), 2.2);
+        const rho = Math.hypot(x - cx, z - cz) / rad; if (rho > 1.6) continue;
+        const dep = 0.2 * rad * (0.5 + 0.5 * hash(I, J, 5, 7));
+        h += rho < 1 ? dep * (rho * rho - 1) : 0.05 * rad * Math.exp(-(((rho - 1) / 0.25) ** 2)) - 0.0;
+        if (rho < 1) dark = Math.max(dark, 0.12 * (1 - rho * rho));
+      }
+      return [Math.min(h, 0.012), dark];
+    };
+    const g = new THREE.PlaneGeometry(SZ, SZ, SEG, SEG); g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position, nV = pos.count, local = Float32Array.from(pos.array);
+    const col = new Float32Array(nV * 3), uv = g.attributes.uv; g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const mesh = new THREE.Mesh(g, terrainMaterial(W, SV, false)); mesh.receiveShadow = true; mesh.castShadow = false; mesh.visible = false; mesh.userData.skipSunVis = true;
+    mesh.frustumCulled = false; scene.add(mesh);
+    let cur = null, lastRegen = 0;
+    function regen(cx, cz) {
+      for (let k = 0; k < nV; k++) {
+        const x = cx + local[k * 3], z = cz + local[k * 3 + 2], e = Math.max(Math.abs(local[k * 3]), Math.abs(local[k * 3 + 2]));
+        const fade = sm(clamp((HP - e) / 14, 0, 1)), [m, dark] = micro(x, z);
+        pos.setXYZ(k, x, tri(H, 1, 0, x, z) + m * fade, z);
+        const dk = 1 - dark * fade;
+        col[k * 3] = tri(BC, 3, 0, x, z) * dk; col[k * 3 + 1] = tri(BC, 3, 1, x, z) * dk; col[k * 3 + 2] = tri(BC, 3, 2, x, z) * dk;
+        uv.setXY(k, (x + HF) / W.SIZE, (HF - z) / W.SIZE);
+      }
+      pos.needsUpdate = true; uv.needsUpdate = true; g.attributes.color.needsUpdate = true; g.computeVertexNormals();
+      fn.cx = cx; fn.cz = cz; if (fn.onRegen) fn.onRegen(cx, cz, HP);
+    }
+    const fn = function update(target, camDist) {
+      if (camDist > 170 || Math.abs(target.x) > HF - HP - 5 || Math.abs(target.z) > HF - HP - 5) { if (cur && fn.onRegen) fn.onRegen(0, 0, 0); mesh.visible = false; DETAIL.h.value = 0; cur = null; return; }
+      const cx = Math.round(target.x / 10) * 10, cz = Math.round(target.z / 10) * 10, key = cx + ',' + cz, now = performance.now();
+      if (key !== cur && now - lastRegen > 120) { regen(cx, cz); cur = key; lastRegen = now; DETAIL.c.set(cx, cz); }
+      if (cur) { mesh.visible = true; DETAIL.h.value = HP - 0.02; }
+    };
+    fn.heightAt = (x, z) => tri(H, 1, 0, x, z) + (mesh.visible ? micro(x, z)[0] : 0);
+    fn.heightFaded = (x, z) => { const e = Math.max(Math.abs(x - fn.cx), Math.abs(z - fn.cz)); return tri(H, 1, 0, x, z) + micro(x, z)[0] * sm(clamp((HP - e) / 14, 0, 1)); };
+    return fn;
+  }
+
+  // ---------- granos y guijarros milimétricos alrededor del punto que se mira (para el zoom) ----------
+  function nearGrains(W, scene, heightAt) {
+    const CELL = 0.6, RAD = 4, PER = 70, cap = (2 * RAD + 1) ** 2 * PER;
+    const mesh = new THREE.InstancedMesh(rockGeometry(9, 2), new THREE.MeshStandardMaterial({ color: 0x2c2c2f, roughness: 1, metalness: 0, envMapIntensity: 0.1 }), cap);
+    mesh.castShadow = false; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.visible = false; scene.add(mesh);   // demasiado pequeños para el mapa de sombras
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    let cur = null;
+    return function update(cx, cz, show) {
+      mesh.visible = show; if (!show) return;
+      const ci = Math.floor(cx / CELL), cj = Math.floor(cz / CELL), key = ci + ',' + cj; if (key === cur) return; cur = key;
+      let n = 0;
+      for (let dj = -RAD; dj <= RAD; dj++) for (let di = -RAD; di <= RAD; di++) {
+        const I = ci + di, J = cj + dj, r = rng((Math.imul(I, 2654435761) ^ Math.imul(J, 40503)) >>> 0);
+        for (let k = 0; k < PER; k++) {
+          const x = (I + r()) * CELL, z = (J + r()) * CELL, sz = 0.002 + 0.03 * Math.pow(r(), 3.5), a1 = r(), a2 = r(), a3 = r(), sx = 0.7 + 0.6 * r(), sy = 0.45 + 0.4 * r();
+          e.set(a1 * 6.3, a2 * 6.3, a3 * 6.3); q.setFromEuler(e); sc.set(sz * sx, sz * sy, sz);
+          p.set(x, heightAt(x, z) + sz * 0.25, z); m4.compose(p, q, sc); mesh.setMatrixAt(n++, m4);
+        }
+      }
+      mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
+    };
+  }
+
+  // ---------- polvo que levantan las ruedas ----------
+  // Sin aire, el regolito no forma nubes: cada grano sigue una parábola limpia con la gravedad lunar (1,62 m/s²) y cae.
+  function wheelDust(W, scene) {
+    const N = 500, pos = new Float32Array(N * 3), vel = new Float32Array(N * 3), life = new Float32Array(N);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setDrawRange(0, N);
+    const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9a9890, size: 0.035, sizeAttenuation: true, transparent: true, opacity: 0.85, depthWrite: false }));
+    pts.frustumCulled = false; scene.add(pts);
+    for (let i = 0; i < N; i++) pos[i * 3 + 1] = -1e5;
+    let head = 0, acc = 0;
+    return function update(R, dt, moving) {
+      if (moving) acc += dt * 160;
+      while (acc >= 1) {
+        acc--; const i = head; head = (head + 1) % N;
+        const side = Math.random() < 0.5 ? -1 : 1, back = -0.95 + (Math.random() - 0.5) * 1.9 * 0.9;
+        const ch = Math.cos(R.heading), shh = Math.sin(R.heading);
+        const x = R.x + ch * back - shh * side * 1.0, z = R.z + shh * back + ch * side * 1.0;
+        pos[i * 3] = x; pos[i * 3 + 1] = W.hAt(x, z) + 0.05; pos[i * 3 + 2] = z;
+        const sp = 0.4 + Math.random() * 0.9, up = 0.4 + Math.random() * 1.1;
+        vel[i * 3] = -ch * sp + (Math.random() - 0.5) * 0.5; vel[i * 3 + 1] = up; vel[i * 3 + 2] = -shh * sp + (Math.random() - 0.5) * 0.5;
+        life[i] = 1;
+      }
+      for (let i = 0; i < N; i++) {
+        if (life[i] <= 0) continue;
+        vel[i * 3 + 1] -= 1.62 * dt;
+        pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+        if (pos[i * 3 + 1] < W.hAt(pos[i * 3], pos[i * 3 + 2])) { life[i] = 0; pos[i * 3 + 1] = -1e5; }
+      }
+      g.attributes.position.needsUpdate = true;
+    };
+  }
+
+  window.IceEnv = { DETAIL, nearGrains, wheelDust, GradeShader, detailTerrain, iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
 })();

@@ -7,6 +7,10 @@
 
   let sim, S, P, W;
   let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, tracks, iceL, destMode = false;
+  let composer = null, bloom = null, grade = null, detailUpd = () => {};
+  const chase = { yaw: 0, pitch: 0.3, dist: 9, drag: false, lastDrag: 0 };   // cámara en 3ª persona
+  const rcam = { yaw: 0, pitch: 0, zoom: 1, drag: false, dist: 0, aim: new THREE.Vector3() };   // cámara del mástil
+  let grainsUpd = () => {}, dustUpd = () => {};
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
   let trailGeo, trail, holesGroup, wpMarker, candMarker, locator, pickMarker;
@@ -75,17 +79,26 @@
     camera = new THREE.PerspectiveCamera(46, 1, 0.25, 100000);
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.495, minDistance: 2.2, maxDistance: W.SIZE * 2.5, rotateSpeed: 0.8, zoomSpeed: 1.1 });
+    // Postprocesado: escena (con antialiasing multimuestra si hay WebGL2) → brillo de las luces (bloom) → acabado de cámara
+    if (THREE.EffectComposer && THREE.UnrealBloomPass) {
+      let rt;
+      if (renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget) { rt = new THREE.WebGLMultisampleRenderTarget(2, 2, { format: THREE.RGBAFormat }); rt.samples = 4; }
+      composer = new THREE.EffectComposer(renderer, rt);
+      composer.addPass(new THREE.RenderPass(scene, camera));
+      bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.65, 0.45, 0.92); composer.addPass(bloom);
+      grade = new THREE.ShaderPass(IceEnv.GradeShader); composer.addPass(grade);
+    }
 
     // Luz: Sol rasante real (1,2° sobre el horizonte) con sombras que siguen a la cámara; luz cenicienta de la Tierra;
     // reflejo del terreno iluminado (mapa de entorno). La "luz de apoyo" es opcional y no es realista.
     const sd = W.sunDir;
     sun = new THREE.DirectionalLight(0xfff4e6, 3.6); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
     scene.add(sun, sun.target); IceEnv.updateSun(sun, W, new THREE.Vector3(), 400);
-    scene.add(new THREE.AmbientLight(0x8a90b8, 0.05));
-    fill = new THREE.DirectionalLight(0xdfe3f0, 0.16); fill.position.set(-sd.x * W.SIZE * 0.6, W.SIZE, -sd.z * W.SIZE * 0.6); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.02));   // casi nada: en la Luna las sombras son negras
+    fill = new THREE.DirectionalLight(0xf2f2f2, 0.13); fill.position.set(-sd.x * W.SIZE * 0.6, W.SIZE, -sd.z * W.SIZE * 0.6); scene.add(fill);
     SV = IceEnv.sunVisTexture(W);
     sky = IceEnv.buildSky(W, scene);
-    const earthshine = new THREE.DirectionalLight(0x9db5ff, 0.11); earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE); scene.add(earthshine);
+    const earthshine = new THREE.DirectionalLight(0xc9d6ff, 0.045); earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE); scene.add(earthshine);
     scene.environment = IceEnv.envMap(renderer, W);
 
     // Terreno: relieve real LOLA + microcráteres, guijarros y variación de albedo
@@ -99,10 +112,13 @@
       col[k * 3] = g; col[k * 3 + 1] = g; col[k * 3 + 2] = g * 1.02;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-    terrain = mesh(geo, IceEnv.terrainMaterial(W, SV, false)); terrain.castShadow = false;
+    terrain = mesh(geo, IceEnv.terrainMaterial(W, SV, false, true)); terrain.castShadow = false;
     scene.add(terrain);
     if (W.real && W.shackleton) IceEnv.buildFar(W, SV, scene, geo.attributes.normal);
-    tracks = IceEnv.wheelTracks(W, scene);   // huellas de las ruedas sobre el regolito   // entorno lejano aproximado del cráter
+    detailUpd = IceEnv.detailTerrain(W, geo, SV, scene);   // terreno detallado alrededor de la cámara
+    grainsUpd = IceEnv.nearGrains(W, scene, detailUpd.heightAt); dustUpd = IceEnv.wheelDust(W, scene);
+    tracks = IceEnv.wheelTracks(W, scene);
+    detailUpd.onRegen = (cx, cz, hp) => tracks.reproject(hp > 0 ? detailUpd.heightFaded : null, cx, cz, hp);   // huellas de las ruedas sobre el regolito   // entorno lejano aproximado del cráter
 
     // Capas sobre el terreno
     const overlay = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -413,6 +429,15 @@
     scn.traverse(o => { if (!o.isMesh) return; const n = o.material && o.material.name;
       if (n === 'ICW_LED') RA.leds.push(o.material); if (n === 'ICW_baliza') RA.beacon.push(o.material); });
     RA.held.forEach(o => { o.visible = false; });
+    // Luces azules: tiras de estado en el chasis, luces junto a los faros y resplandor sobre el suelo (el bloom las hace brillar)
+    const blue = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 0.95, 3.2), toneMapped: false });   // sin mapeo de tonos: azul saturado con halo
+    const strip = (x, y, z, w, h, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), blue); m.position.set(x, z, -y); R3.g.add(m); return m; };
+    RA.blue = [strip(0, 0.622, 0.95, 1.25, 0.028, 0.012), strip(0, -0.622, 0.95, 1.25, 0.028, 0.012), strip(1.08, 0.6, 0.9, 0.014, 0.075, 0.04), strip(1.08, -0.6, 0.9, 0.014, 0.075, 0.04),
+      strip(-1.3, 0.42, 1.0, 0.014, 0.025, 0.32), strip(-1.3, -0.42, 1.0, 0.014, 0.025, 0.32), strip(0.75, -0.32, 2.66, 0.16, 0.012, 0.16)];
+    RA.glow = [new THREE.PointLight(0x5266eb, 0.9, 5, 2), new THREE.PointLight(0x5266eb, 0.9, 5, 2)];
+    RA.glow[0].position.set(0, 0.35, -0.85); RA.glow[1].position.set(0, 0.35, 0.85); RA.glow.forEach(l => R3.g.add(l));
+    RA.leds.forEach(m => { m.emissive = new THREE.Color(0xdfe8ff); });
+    RA.beacon.forEach(m => { m.emissive = new THREE.Color(0x5266eb); });
     RA.on = !!(RA.az && RA.sh && RA.el && RA.wr);
   }
   const rotTo = (o, axis, a) => { if (o) o.quaternion.copy(o.userData.q0).multiply(_q.setFromAxisAngle(axis, a)); };
@@ -483,9 +508,10 @@
     rotTo(RA.pan, AX_Z, RA.panA); rotTo(RA.tilt, AX_Y, RA.tiltA);
     // --- luces: faros según la oscuridad; baliza parpadea al moverse o perforar
     const dark = R3.head && R3.head.intensity > 1;
-    RA.leds.forEach(m => { m.emissiveIntensity = alive ? (dark ? 1 : 0.4) : 0.05; });
+    RA.leds.forEach(m => { m.emissiveIntensity = alive ? (dark ? 3.2 : 1.6) : 0.05; });
+    if (RA.blue) { const k = alive ? 0.8 + 0.2 * Math.sin(t * 2.4) : 0.05; RA.blue[0].material.color.setRGB(0.4 * k, 0.95 * k, 3.2 * k); RA.glow.forEach(l => { l.intensity = alive ? 0.9 * k : 0; }); }
     const busy = Math.abs(R.speed) > 0.005 || task === 'drill' || RA.seq;
-    RA.beacon.forEach(m => { m.emissiveIntensity = !alive ? 0 : busy ? (Math.sin(t * 6) > 0 ? 1.2 : 0.15) : 0.6; });
+    RA.beacon.forEach(m => { m.emissiveIntensity = !alive ? 0 : busy ? (Math.sin(t * 6) > 0 ? 4 : 0.3) : 1.6; });
   }
 
   // ---------- Animación de la estación de Blender ----------
@@ -528,6 +554,11 @@
       const e = sky.earthDir; STA.ant.quaternion.copy(STA.ant.userData.q0).multiply(_q.setFromAxisAngle(AX_Z, Math.atan2(-e.z, e.x)))
         .multiply(new THREE.Quaternion().setFromAxisAngle(AX_Y, -Math.asin(e.y)));
     }
+    // Luces azules de la base: balizas de la plataforma, poste de carga y baliza del módulo
+    STA.mLedSt = mats.ICW_LED; STA.mBeacon = mats.ICW_baliza;
+    if (STA.mLedSt) STA.mLedSt.emissive = new THREE.Color(0x5266eb);
+    if (STA.mBeacon) STA.mBeacon.emissive = new THREE.Color(0x5266eb);
+    STA.padLight = new THREE.PointLight(0x5266eb, 1.0, 10, 2); STA.padLight.position.copy(scn.localToWorld(new THREE.Vector3(10, 0.6, 8))); scene.add(STA.padLight);
     // --- Ventanas al interior del proceso ---
     const B2T = (x, y, z) => scn.localToWorld(new THREE.Vector3(x, z, -y));      // coordenadas de Blender → mundo
     Object.assign(STA, {
@@ -588,6 +619,8 @@
     if (S.t - S.colony.flowT < 600) STA.pumpA += dt * 7; rotTo(STA.pump, AX_Y, STA.pumpA);
     // 8) Válvulas: el volante gira al abrirse
     STA.valves.forEach(v => { v.a = approach(v.a, (v.k === 'vapor' ? sub : flowing) ? 2.6 : 0, 2.0, dt); rotTo(v.o, AX_Z, v.a); });
+    if (STA.mLedSt) STA.mLedSt.emissiveIntensity = 2.6 + 0.8 * Math.sin(t * 1.8);
+    if (STA.mBeacon) STA.mBeacon.emissiveIntensity = Math.sin(t * 3.1) > 0.6 ? 4.5 : 0.6;
     // ===== Ventanas =====
     const up = STA.ovenC.clone().sub(STA.trapC).set(0, 1, 0);
     // Horno: el regolito se voltea con el tambor y, al sublimarse el hielo, suben hilos de vapor
@@ -663,7 +696,7 @@
     R3.auger.position.y = (R3.augerBase ?? 0.3) + (drilling || R.drillDepth > 0 ? -0.28 - R.drillDepth : 0);
     R3.carriage.position.y = drilling ? 1.6 - Math.min(0.9, R.drillDepth * 0.9) : 1.6;
     if (drilling) R3.auger.rotation.y = t * 9;
-    R3.head.intensity = W.envT(R.x, R.z) < 120 ? 5 : 0.8;
+    R3.head.intensity = W.envT(R.x, R.z) < 120 ? 2.2 : 0.5;
     R3.beacon.material.color.setHex(R.task === 'dead' ? 0x444455 : COBALT);
     const fill = Math.round(Math.min(1, (R.cargoReg + R.cargoIce) / P.cargoCap) * 6);
     R3.cart.forEach((c, k) => c.material.color.setHex(k < fill ? 0xdfe6ff : 0x50505c));
@@ -746,7 +779,7 @@
     const now = performance.now(), dt = Math.min(0.1, (now - lastCamT) / 1000); lastCamT = now;
     const f = (camKeys.w ? 1 : 0) - (camKeys.s ? 1 : 0), r = (camKeys.d ? 1 : 0) - (camKeys.a ? 1 : 0);
     if (!f && !r) return;
-    if (camMode !== 'free') { camMode = 'free'; $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true; }
+    if (camMode !== 'free') { camMode = 'free'; setCamLens('free'); $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true; }
     const fwd = new THREE.Vector3().subVectors(controls.target, camera.position); fwd.y = 0;
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
@@ -757,16 +790,49 @@
     const dy = W.hAt(controls.target.x, controls.target.z) - W.hAt(old.x, old.z);   // sigue el relieve
     controls.target.y += dy; camera.position.add(new THREE.Vector3(controls.target.x - old.x, dy, controls.target.z - old.z));
   }
+  function chaseWant() {
+    const R = S.rover, base = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 1.1, R.z), yaw = R.heading + chase.yaw, cp = Math.cos(chase.pitch);
+    const want = base.clone().add(new THREE.Vector3(-Math.cos(yaw) * cp * chase.dist, Math.sin(chase.pitch) * chase.dist, -Math.sin(yaw) * cp * chase.dist));
+    const gh = W.hAt(want.x, want.z) + 1.0; if (want.y < gh) want.y = gh;
+    return { want, look: base.add(new THREE.Vector3(Math.cos(R.heading) * 2.2, 0.4, Math.sin(R.heading) * 2.2)) };
+  }
   function updateCamera() {
     moveCameraWASD();
-    const R = S.rover; let target = null;
-    if (camMode === 'rover') target = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 1.2, R.z);
-    else if (camMode === 'station') target = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0));
-    else if (camMode === 'colony') target = COL.g.position.clone().add(new THREE.Vector3(0, 3, 0));
-    if (target) { const delta = target.clone().sub(controls.target).multiplyScalar(camMode === 'rover' ? 1 : 0.12); controls.target.add(delta); camera.position.add(delta); }
-    controls.update();
-    const gh = W.hAt(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
-    IceEnv.updateSun(sun, W, controls.target, camera.position.distanceTo(controls.target));
+    const R = S.rover, now = performance.now(), cdt = Math.min(0.1, (now - (updateCamera.t || now)) / 1000); updateCamera.t = now;
+    if (camMode === 'rover') {
+      // 3ª persona: detrás del rover y girando con él; arrastrar mira alrededor (vuelve detrás solo), la rueda acerca/aleja
+      if (!chase.drag && now - chase.lastDrag > 1500) chase.yaw *= Math.exp(-cdt * 1.2);
+      const { want, look } = chaseWant();
+      camera.position.lerp(want, 1 - Math.exp(-cdt * 5));
+      controls.target.lerp(look, 1 - Math.exp(-cdt * 8)); camera.lookAt(controls.target);
+    } else if (camMode === 'rovercam') {
+      // cámara del mástil: se mueve con el cabezal (busca al explorar, mira al suelo al medir, vigila el taladro)
+      let pos, fwd;
+      if (RA.on && RA.tilt) {
+        RA.tilt.updateWorldMatrix(true, false);
+        pos = RA.tilt.localToWorld(new THREE.Vector3(0.24, 0.0, 0)); fwd = RA.tilt.localToWorld(new THREE.Vector3(1.24, 0, 0)).sub(pos).normalize();
+      } else { pos = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 2.5, R.z); fwd = new THREE.Vector3(Math.cos(R.heading), -0.12, Math.sin(R.heading)).normalize(); }
+      // giro elegido con el ratón, encima del movimiento del cabezal
+      fwd.applyAxisAngle(UP, rcam.yaw); const rt = new THREE.Vector3().crossVectors(fwd, UP).normalize(); fwd.applyAxisAngle(rt, rcam.pitch);
+      // distancia al suelo en el centro de la imagen (marcha sobre el relieve)
+      let dHit = 400; for (let tt = 0.3; tt < 400; tt *= 1.04) { const q = pos.clone().addScaledVector(fwd, tt), gH = detailUpd.heightAt(q.x, q.z); if (q.y < gH) { dHit = tt; break; } }
+      rcam.dist = dHit; rcam.aim.copy(pos).addScaledVector(fwd, Math.min(dHit, 400));
+      camera.position.copy(pos); controls.target.copy(rcam.aim); camera.lookAt(pos.clone().add(fwd));
+      const fov = 58 / rcam.zoom; if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    } else {
+      let target = null;
+      if (camMode === 'station') target = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0));
+      else if (camMode === 'colony') target = COL.g.position.clone().add(new THREE.Vector3(0, 3, 0));
+      if (target) { const delta = target.clone().sub(controls.target).multiplyScalar(0.12); controls.target.add(delta); camera.position.add(delta); }
+      controls.update();
+      const gh = W.hAt(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
+    }
+    const focusD = camMode === 'rovercam' ? Math.min(rcam.dist, 160) : camera.position.distanceTo(controls.target);
+    IceEnv.DETAIL.oU.value.set(Math.round(controls.target.x), Math.round(controls.target.z));   // origen cercano: precisión en el zoom
+    detailUpd(controls.target, focusD);
+    grainsUpd(controls.target.x, controls.target.z, focusD < 30);
+    if (camMode === 'rovercam') { const vis = 2 * rcam.dist * Math.tan(camera.fov * Math.PI / 360); IceEnv.updateSun(sun, W, controls.target, Math.max(vis * 1.6, 2.5), rcam.zoom > 3 ? 2.5 : 16); }   // con zoom: sombras concentradas en lo que se ve
+    else IceEnv.updateSun(sun, W, controls.target, camera.position.distanceTo(controls.target));
     updNearRocks(controls.target.x, controls.target.z);
     sky.update(camera);
   }
@@ -848,7 +914,27 @@
       tip.style.left = Math.min(r.width - 250, ev.clientX - r.left + 14) + 'px'; tip.style.top = Math.max(50, ev.clientY - r.top - 10) + 'px';
     });
     el.addEventListener('pointerleave', () => { tip.hidden = true; });
-    el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY }; });
+    el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY };
+      if (camMode === 'rover' && !destMode) { chase.drag = true; chase.px = ev.clientX; chase.py = ev.clientY; }
+      if (camMode === 'rovercam' && !destMode) { rcam.drag = true; rcam.px = ev.clientX; rcam.py = ev.clientY; } });
+    window.addEventListener('pointermove', ev => {
+      if (!rcam.drag) return;
+      const k = 0.0045 / rcam.zoom;                                   // con más zoom, giro más fino
+      rcam.yaw -= (ev.clientX - rcam.px) * k; rcam.pitch = Math.max(-1.35, Math.min(0.9, rcam.pitch - (ev.clientY - rcam.py) * k));
+      rcam.px = ev.clientX; rcam.py = ev.clientY;
+    });
+    window.addEventListener('pointerup', () => { rcam.drag = false; });
+    el.addEventListener('dblclick', () => { if (camMode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 }); });
+    window.addEventListener('pointermove', ev => {
+      if (!chase.drag) return;
+      chase.yaw -= (ev.clientX - chase.px) * 0.006; chase.pitch = Math.max(0.05, Math.min(1.25, chase.pitch + (ev.clientY - chase.py) * 0.004));
+      chase.px = ev.clientX; chase.py = ev.clientY; chase.lastDrag = performance.now();
+    });
+    window.addEventListener('pointerup', () => { if (chase.drag) { chase.drag = false; chase.lastDrag = performance.now(); } });
+    el.addEventListener('wheel', ev => {
+      if (camMode === 'rovercam') { ev.preventDefault(); rcam.zoom = Math.max(1, Math.min(60, rcam.zoom * (ev.deltaY > 0 ? 1 / 1.18 : 1.18))); updateRoverHUD(); return; }
+      if (camMode !== 'rover') return; ev.preventDefault(); chase.dist = Math.max(4, Math.min(45, chase.dist * (1 + Math.sign(ev.deltaY) * 0.12)));
+    }, { passive: false });
     el.addEventListener('pointerup', ev => {
       if (!destMode || ev.button !== 0 || !down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
       const p = pickTerrain(ev); if (!p) return;
@@ -868,17 +954,18 @@
     });
   }
 
+  function setCamLens(mode) {
+    const near = mode === 'rovercam' ? 0.08 : 0.25, fov = mode === 'rovercam' ? 58 : 46;
+    if (camera.near !== near || camera.fov !== fov) { camera.near = near; camera.fov = fov; camera.updateProjectionMatrix(); }
+    controls.enabled = !(mode === 'rover' || mode === 'rovercam');
+    $('#sim-rcam').hidden = mode !== 'rovercam';
+  }
   function setCam(mode) {
     camMode = mode;
     $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === mode)));
-    const R = S.rover;
-    if (mode === 'rover') {
-      const t = new THREE.Vector3(R.x, W.hAt(R.x, R.z) + 1.2, R.z); controls.target.copy(t);
-      const ds = Math.hypot(R.x - W.station.x, R.z - W.station.z);
-      let dx = -Math.cos(R.heading), dz = -Math.sin(R.heading);
-      if (ds < 40) { dx = (R.x - W.station.x) / ds; dz = (R.z - W.station.z) / ds; }
-      camera.position.set(t.x + dx * 11, t.y + 5, t.z + dz * 11);
-    }
+    setCamLens(mode);
+    if (mode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 });
+    if (mode === 'rover') { Object.assign(chase, { yaw: 0, pitch: 0.3, dist: 9 }); const { want, look } = chaseWant(); camera.position.copy(want); controls.target.copy(look); camera.lookAt(look); }
     if (mode === 'station') { const t = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0)); controls.target.copy(t); camera.position.set(t.x - 2, t.y + 5, t.z + 13); }
     if (mode === 'overview') { const k = W.SIZE / 600; controls.target.set(W.station.x * 0.3, 0, W.station.z * 0.3); camera.position.set(-260 * k, 330 * k, 380 * k); }
     if (mode === 'colony') { const c = COL.g.position; controls.target.set(c.x, c.y + 3, c.z); camera.position.set(c.x - 30, c.y + 22, c.z + 38); }
@@ -896,17 +983,35 @@
     applyKeys();
     if (S.running) sim.step(dt * warp);
     if (tracks) tracks.update(S.rover, S.t);
+    if (visible) dustUpd(S.rover, dt, S.running && Math.abs(S.rover.speed) > 0.01);
     if (!visible) return;
     const t = now / 1000;
     if (iceL) iceL.update(t, camera);
     updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
-    renderer.render(scene, camera);
+    if (composer) { grade.uniforms.time.value = t; grade.uniforms.roverCam.value = camMode === 'rovercam' ? 1 : 0; composer.render(dt); }
+    else renderer.render(scene, camera);
+    if (camMode === 'rovercam' && now - (frame.hud || 0) > 150) { frame.hud = now; updateRoverHUD(); }
     updateLabels();
     if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); }
     if (now - lastChart > 1200) { lastChart = now; updateCharts(); }
   }
-  function resize() { const host = $('#sim-view'); renderer.setSize(host.clientWidth, host.clientHeight); camera.aspect = host.clientWidth / host.clientHeight; camera.updateProjectionMatrix(); }
+  function resize() {
+    const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight;
+    renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+    if (composer) { composer.setSize(w, h); grade.uniforms.res.value.set(w, h); }
+  }
+  // Visor de la cámara del mástil: rumbo, inclinación del cabezal, batería y tarea
+  function updateRoverHUD() {
+    const R = S.rover; let deg = Math.round((90 - R.heading * 180 / Math.PI + 360 * 4) % 360);
+    $('#rc-rumbo').textContent = `RUMBO ${String(deg).padStart(3, '0')}°`;
+    $('#rc-incl').textContent = `INCL. ${RA.on ? (-RA.tiltA * 180 / Math.PI).toFixed(0) : '0'}°`;
+    $('#rc-bat').textContent = `BAT ${Math.round(R.battery / sim.ROVER.cap * 100)} %`;
+    $('#rc-tarea').textContent = (TASKS[R.task] || R.task).toUpperCase();
+    $('#rc-zv').textContent = `${rcam.zoom < 10 ? rcam.zoom.toFixed(1) : Math.round(rcam.zoom)}×`;
+    $('#rc-zfill').style.height = `${Math.log(rcam.zoom) / Math.log(60) * 100}%`;
+    $('#rc-dist').textContent = rcam.dist >= 400 ? 'DIST —' : `DIST ${rcam.dist < 10 ? rcam.dist.toFixed(1) : Math.round(rcam.dist)} m`;
+  }
 
   // =====================================================================
   // PANEL DE CONTROL
