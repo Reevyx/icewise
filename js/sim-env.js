@@ -40,7 +40,7 @@
     const c = document.createElement('canvas'); c.width = c.height = n;
     const g = c.getContext('2d'), img = g.createImageData(n, n); fill(img.data, n); g.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
-    if (srgb) t.encoding = THREE.sRGBEncoding; return t;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t;
   }
   function writeNormals(d, h, n, s) {
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
@@ -93,6 +93,60 @@
     return canvasTex(n, d => writeNormals(d, h, n, 0.7), false);
   }
   const groundTex = () => groundTex.t || (groundTex.t = Object.assign(groundTextures(), { fine: fineNormal() }));
+  // Regolito lunar escaneado (Poly Haven «moon_01», CC0): color y relieve finos que se ven al acercarse. Hasta que carga,
+  // se usan los procedurales. Rocas lunares escaneadas («moon_rock_01…07», CC0) sustituyen a las rocas generadas.
+  const white1 = (() => { const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); t.needsUpdate = true; return t; })();
+  const REGO = { color: { value: white1 }, normal: { value: null }, on: { value: 0 } };
+  function loadScanned(W, scene, local) {
+    const L = new THREE.TextureLoader(), done = () => { if (IceEnv.onAsset) IceEnv.onAsset('rocas'); };
+    const rep = t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+    const base = local && window.ICE_TERRAIN_LOCAL ? window.ICE_TERRAIN_LOCAL : null;
+    L.load(base ? base.color : 'assets/terrain/regolito_color_2k.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; REGO.color.value = rep(t); REGO.on.value = 1; done(); }, undefined, done);
+    L.load(base ? base.normal : 'assets/terrain/regolito_normal_2k.jpg', t => { REGO.normal.value = rep(t); done(); }, undefined, done);
+    const parse = (gl) => {
+      const types = [];
+      gl.scene.traverse(o => { if (o.isMesh) { o.material.envMapIntensity = 0.3; o.material.color.setScalar(0.42); types.push({ geo: o.geometry, mat: o.material }); } });   // albedo lunar (~0,12)
+      ROCKS.types = types; ROCKS.sets.forEach(syncRocks); done();
+    };
+    const gl = new THREE.GLTFLoader(); const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco170/'); gl.setDRACOLoader(draco);
+    if (base) {                                                          // doble clic: el decodificador llega con modelos-locales.js
+      const b64 = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+      const t0 = performance.now();
+      (function go() {
+        if (!window.ICE_DRACO) { if (performance.now() - t0 < 30000) setTimeout(go, 200); else done(); return; }
+        draco._loadLibrary = (url, type) => Promise.resolve(type === 'arraybuffer' ? b64(window.ICE_DRACO.wasm) : window.ICE_DRACO.wrapper);
+        gl.parse(b64(base.rocas), '', parse, done);
+      })();
+    } else gl.load('assets/terrain/rocas_lunares.glb', parse, undefined, done);
+  }
+  // Las rocas se colocan en un InstancedMesh "plantilla" (forma procedural). Al cargar las escaneadas, cada instancia pasa a
+  // uno de los 7 tipos: misma posición y tamaño, solo giro horizontal (la base escaneada es plana y va apoyada en el suelo).
+  const ROCKS = { types: null, sets: [] };
+  const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _qy = new THREE.Quaternion();
+  function registerRocks(proc, scene, sink = 0.1) { const set = { proc, scene, sink, typed: null }; ROCKS.sets.push(set); proc.userData.rockSet = set; syncRocks(set); return set; }
+  function syncRocks(set) {
+    if (!ROCKS.types) return;
+    const T = ROCKS.types, proc = set.proc;
+    if (!set.typed) {
+      set.typed = T.map(t => { const m = new THREE.InstancedMesh(t.geo, t.mat, proc.instanceMatrix.count);   // capacidad completa: el reparto por posición no es exacto
+        m.castShadow = proc.castShadow; m.receiveShadow = true; m.frustumCulled = false; set.scene.add(m); return m; });
+      patchTree(set.scene, SVref.sv);
+    }
+    const cnt = T.map(() => 0);
+    for (let i = 0; i < proc.count; i++) {
+      proc.getMatrixAt(i, _m); _m.decompose(_p, _q, _s);
+      // forma, giro y altura según la POSICIÓN de la roca (no según su número en la lista): al regenerarse las rocas
+      // cercanas mientras se mueve la cámara, cada roca conserva su aspecto y su luz
+      const hsh = (Math.imul(Math.round(_p.x * 64), 73856093) ^ Math.imul(Math.round(_p.z * 64), 19349663)) >>> 0;
+      _qy.setFromAxisAngle(UPV, (hsh % 6283) / 1000);
+      const size = (_s.x + _s.z) * 1.05, k = (hsh >>> 13) % T.length;                    // ancho similar al de la roca procedural
+      _p.y -= size * set.sink; _s.set(size, size * (0.8 + 0.4 * ((hsh >>> 7) % 10) / 10), size);
+      _m.compose(_p, _qy, _s); if (cnt[k] < set.typed[k].instanceMatrix.count) set.typed[k].setMatrixAt(cnt[k]++, _m);
+    }
+    set.typed.forEach((m, k) => { m.count = cnt[k]; m.instanceMatrix.needsUpdate = true; });
+    proc.visible = false;
+  }
+  const SVref = { sv: null }, UPV = new THREE.Vector3(0, 1, 0);
 
   // ---------- depósitos de hielo ----------
   // Escarcha azul blanquecina con bordes ramificados, más densa donde hay más hielo, y destellos de cristales que cambian
@@ -193,33 +247,36 @@
           'float iceSunVis() { return smoothstep( 0.22, 0.78, texture2D( sunVisMap, vec2( vSunXZ.x * sunVisXf.x + sunVisXf.y, vSunXZ.y * sunVisXf.z + sunVisXf.w ) ).r ); }\n' + sh.fragmentShader;
       }
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
-        'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
-        'getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );\n#if ( UNROLLED_LOOP_INDEX == 0 )\ndirectLight.color *= iceSunVis();\n#endif'));
+        'getDirectionalLightInfo( directionalLight, directLight );',
+        'getDirectionalLightInfo( directionalLight, directLight );\n#if ( UNROLLED_LOOP_INDEX == 0 )\ndirectLight.color *= iceSunVis();\n#endif'));
       if (opt.terrain) {
-        sh.uniforms.detailNormalMap = { value: opt.detail }; sh.uniforms.detailScale = { value: opt.detailScale }; sh.uniforms.detailStrength = { value: 1.1 };
+        sh.uniforms.detailNormalMap = REGO.normal; sh.uniforms.regoMap = REGO.color; sh.uniforms.regoOn = REGO.on; sh.uniforms.detailScale = { value: opt.detailScale }; sh.uniforms.detailStrength = { value: 1.1 };
         // Coordenadas relativas a un origen cercano a la cámara (terOrigin): con zoom extremo, las coordenadas absolutas
         // y las derivadas entre píxeles se quedan sin decimales y producen ruido. El relieve se orienta con los ejes del mundo.
         sh.uniforms.terOrigin = DETAIL.oU;
         sh.vertexShader = 'uniform vec2 terOrigin;\nvarying vec2 vTerXZ;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvTerXZ = (modelMatrix * vec4(transformed, 1.0)).xz - terOrigin;');
-        sh.fragmentShader = 'uniform vec2 terOrigin;\nvarying vec2 vTerXZ;\nuniform sampler2D detailNormalMap;\nuniform float detailScale;\nuniform float detailStrength;\n' +
+        sh.fragmentShader = 'uniform vec2 terOrigin;\nvarying vec2 vTerXZ;\nuniform sampler2D detailNormalMap;\nuniform sampler2D regoMap;\nuniform float regoOn;\nuniform float detailScale;\nuniform float detailStrength;\n' +
           'vec2 terUV(float tile, vec2 off) { return vTerXZ / tile + fract(terOrigin / tile) + off; }\n' + sh.fragmentShader
           .replace('#include <map_fragment>', `#ifdef USE_MAP
-            vec4 texelColor = texture2D( map, vUv ) * 0.55 + texture2D( map, vUv * 3.71 + vec2( 0.37, 0.11 ) ) * 0.45;
-            texelColor = mapTexelToLinear( texelColor );
-            texelColor.rgb *= 0.62 + 0.75 * texture2D( map, vUv * 0.043 + vec2( 0.5 ) ).r;
+            vec4 texelColor = texture2D( map, vMapUv ) * 0.55 + texture2D( map, vMapUv * 3.71 + vec2( 0.37, 0.11 ) ) * 0.45;
+            texelColor.rgb *= 0.62 + 0.75 * texture2D( map, vMapUv * 0.043 + vec2( 0.5 ) ).r;
             float dV = length( vViewPosition );
             float microA = texture2D( map, terUV( 0.27, vec2( 0.13, 0.71 ) ) ).r, microB = texture2D( map, terUV( 1.05, vec2( 0.5, 0.2 ) ) ).r;
-            texelColor.rgb *= mix( 1.0, 0.7 + 0.6 * microA, clamp( 1.0 - dV / 7.0, 0.0, 1.0 ) ) * mix( 1.0, 0.7 + 0.6 * microB, clamp( 1.0 - dV / 25.0, 0.0, 1.0 ) );
+            texelColor.rgb *= mix( 1.0, 0.7 + 0.6 * microA, clamp( 1.0 - dV / 7.0, 0.0, 1.0 ) * ( 1.0 - 0.6 * regoOn ) ) * mix( 1.0, 0.7 + 0.6 * microB, clamp( 1.0 - dV / 25.0, 0.0, 1.0 ) * ( 1.0 - regoOn ) );
+            // regolito escaneado en dos escalas (3,1 m y 0,9 m) para que no se note la repetición; se desvanece con la distancia
+            vec3 rA = texture2D( regoMap, terUV( 3.1, vec2( 0.0 ) ) ).rgb, rB = texture2D( regoMap, terUV( 0.93, vec2( 0.41, 0.17 ) ) ).rgb;
+            vec3 rego = ( rA * 0.65 + rB * 0.35 ) / 0.19;
+            texelColor.rgb *= mix( vec3( 1.0 ), mix( vec3( dot( rego, vec3( 0.333 ) ) ), rego, 0.25 ), regoOn * 0.85 * clamp( 1.0 - dV / 80.0, 0.0, 1.0 ) );
             diffuseColor *= texelColor;
           #endif`)
           .replace('#include <normal_fragment_maps>', `{
              vec3 Nv = normal;
              vec3 Tv = ( viewMatrix * vec4( 1.0, 0.0, 0.0, 0.0 ) ).xyz; Tv = normalize( Tv - Nv * dot( Nv, Tv ) );
              vec3 Bv = ( viewMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz; Bv = normalize( Bv - Nv * dot( Nv, Bv ) - Tv * dot( Tv, Bv ) );
-             vec3 mapN = texture2D( normalMap, vUv ).xyz * 2.0 - 1.0; mapN.xy *= normalScale;
-             vec3 mapD = texture2D( detailNormalMap, vUv * detailScale ).xyz * 2.0 - 1.0;
+             vec3 mapN = texture2D( normalMap, vMapUv ).xyz * 2.0 - 1.0; mapN.xy *= normalScale;
+             vec3 mapD = texture2D( detailNormalMap, vMapUv * detailScale ).xyz * 2.0 - 1.0;
              float fadeD = clamp( 1.0 - length( vViewPosition ) / 70.0, 0.0, 1.0 );
-             vec3 mapE = texture2D( detailNormalMap, terUV( 0.36, vec2( 0.31, 0.77 ) ) ).xyz * 2.0 - 1.0;
+             vec3 mapE = texture2D( detailNormalMap, terUV( 0.93, vec2( 0.41, 0.17 ) ) ).xyz * 2.0 - 1.0;
              float fadeE = clamp( 1.0 - length( vViewPosition ) / 6.0, 0.0, 1.0 );
              vec3 nT = vec3( mapN.xy + mapD.xy * detailStrength * fadeD + mapE.xy * 1.4 * fadeE, mapN.z * mapD.z );
              normal = normalize( Tv * nT.x + Bv * nT.y + Nv * nT.z );
@@ -261,9 +318,10 @@
   function terrainMaterial(W, SV, attr, holes) {
     const TILE = 64;
     const T = groundTex();
-    T.alb.repeat.set(W.SIZE / TILE, W.SIZE / TILE);
+    T.alb.repeat.set(W.SIZE / TILE, W.SIZE / TILE); T.crat.repeat.copy(T.alb.repeat);
     const m = new THREE.MeshStandardMaterial({ map: T.alb, normalMap: T.crat, normalScale: new THREE.Vector2(1.15, 1.15), vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
-    patchMaterial(m, SV, { terrain: true, attr, holes, detail: T.fine, detailScale: TILE / 4 });
+    if (!REGO.normal.value) REGO.normal.value = T.fine; SVref.sv = SV;
+    patchMaterial(m, SV, { terrain: true, attr, holes, detail: T.fine, detailScale: TILE / 3.1 });   // baldosa de detalle = 3,1 m (tamaño real del escaneo)
     return m;
   }
 
@@ -349,6 +407,7 @@
       }
       fn.needsUpdate = true;
     }
+    window.IceEnv.farHeight = Hf;   // para calcular el horizonte hacia la Tierra
     const mesh = new THREE.Mesh(g, terrainMaterial(W, SV, true)); mesh.receiveShadow = false; mesh.castShadow = false; mesh.userData.skipSunVis = true;
     scene.add(mesh);
     // visibilidad del Sol en el entorno lejano: rayo hacia el Sol sobre el relieve (con curvatura), por partes
@@ -372,10 +431,15 @@
       if (v < nV) setTimeout(chunk, 0);
       else {                                                                     // suavizado final entre vértices vecinos
         const out = new Float32Array(vis);
-        for (let k = 1; k < K - 1; k++) for (let mm = 0; mm < M; mm++) {
-          const i = k * M + mm; out[i] = (vis[i] * 2 + vis[k * M + (mm + 1) % M] + vis[k * M + (mm + M - 1) % M] + vis[i - M] + vis[i + M]) / 6;
+        for (let it = 0; it < 6; it++) {                                   // varias pasadas: sin dientes de sierra en las crestas
+          for (let k = 1; k < K - 1; k++) for (let mm = 0; mm < M; mm++) {
+            const i = k * M + mm; let a = vis[i] * 2, c = 2;
+            for (let d = 1; d <= 3; d++) { a += vis[k * M + (mm + d) % M] + vis[k * M + (mm + M - d) % M]; c += 2; }
+            out[i] = (a + vis[i - M] + vis[i + M]) / (c + 2);
+          }
+          vis.set(out);
         }
-        vis.set(out); attr.needsUpdate = true; IceEnv.farTime = performance.now() - tStart;
+        attr.needsUpdate = true; IceEnv.farTime = performance.now() - tStart;
       }
     })();
     return mesh;
@@ -409,6 +473,7 @@
     const CELL = 12, RAD = 7, PER = 18, cap = (2 * RAD + 1) ** 2 * PER;
     const mesh = new THREE.InstancedMesh(rockGeometry(3, 2), rockMaterial(), cap);
     mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
+    registerRocks(mesh, scene, 0.12);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
     let cur = null;
     return function update(cx, cz) {
@@ -427,152 +492,192 @@
         }
       }
       mesh.count = n; mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.userData.rockSet) syncRocks(mesh.userData.rockSet);
     };
   }
 
-  // ---------- cielo: Vía Láctea, estrellas, Sol, Tierra ----------
-  // Sin atmósfera las estrellas no titilan; brillan fijas. La Vía Láctea, los destellos de lente y el halo del Sol
-  // son efectos de cámara para que la escena se aprecie (como en una foto de larga exposición).
+  // ---------- cielo real: NASA Deep Star Maps 2020, estrellas de Hipparcos/Tycho, Tierra Blue Marble/Black Marble ----------
+  // Orientación: desde el polo sur lunar el cenit apunta (casi) al polo sur de la eclíptica, cerca de la Gran Nube de
+  // Magallanes; la eclíptica corre junto al horizonte (por eso el Sol y la Tierra están siempre bajos). La fecha elegida
+  // (Sol en longitud eclíptica ≈ 92°, junio) solo gira el cielo en acimut: así el centro galáctico queda a ~25° de la
+  // Tierra, en el lado contrario al Sol. La Tierra se ve en la dirección de
+  // la longitud 0 lunar, con la fase que corresponde al ángulo real Sol–Tierra (150°: Tierra gibosa, 93 % iluminada).
   function radialTex(stops, n = 256) {
     const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
     stops.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, n, n);
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }
-  function raysTex(n = 512) {                                                   // corona con rayos para el Sol
+  function raysTex(n = 512) {
     const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'), r = rng(3);
     g.translate(n / 2, n / 2); g.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 110; i++) {
       const a = r() * Math.PI * 2, L = n * (0.12 + 0.38 * Math.pow(r(), 2)), w = 0.6 + r() * 1.8;
       const gr = g.createLinearGradient(0, 0, Math.cos(a) * L, Math.sin(a) * L); gr.addColorStop(0, 'rgba(255,245,225,0.35)'); gr.addColorStop(1, 'rgba(255,235,200,0)');
       g.strokeStyle = gr; g.lineWidth = w; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * L, Math.sin(a) * L); g.stroke();
     }
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
   }
-  function earthTextures() {
-    const w = 1024, h = 512, mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-    const cd = mk(), cn = mk(), cc = mk(), gd = cd.getContext('2d'), gn = cn.getContext('2d'), gc = cc.getContext('2d');
-    const day = gd.createImageData(w, h), night = gn.createImageData(w, h), cloud = gc.createImageData(w, h), r = rng(21);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const lat = (0.5 - y / h) * Math.PI, X = x / w * 12, Y = y / h * 6, k = (y * w + x) * 4;
-      const landF = fbm(X, Y, 6, 31, 12) + 0.1 * Math.cos(lat * 2) - 0.08, land = landF > 0.52, ice = Math.abs(lat) > 1.18;
-      let R = 10, G = 38, B = 86;
-      if (land) { const t = clamp((landF - 0.52) * 6, 0, 1), dry = fbm(X * 2, Y * 2, 3, 77, 24); R = 70 + 90 * dry * t + 20 * t; G = 88 + 30 * (1 - dry); B = 48 + 14 * t; if (Math.abs(lat) < 0.35 && dry < 0.45) { R = 46; G = 82; B = 44; } }
-      if (ice) { R = G = B = 236; }
-      day.data.set([R, G, B, land || ice ? 0 : 255], k);                       // alfa = océano (para el reflejo del Sol)
-      const city = land && !ice && Math.abs(lat) < 1.0 && fbm(X * 6, Y * 6, 3, 99, 72) > 0.6 && r() < 0.35;
-      const li = city ? 160 + 95 * r() : 0; night.data.set([li, li * 0.78, li * 0.45, 255], k);
-      const cl = clamp((fbm(X * 2.1 + 5, Y * 2.1, 5, 61, 25) - 0.48) * 3.0, 0, 1) * (Math.abs(lat) > 1.25 ? 0.4 : 1);
-      cloud.data.set([255, 255, 255, cl * 235], k);
-    }
-    gd.putImageData(day, 0, 0); gn.putImageData(night, 0, 0); gc.putImageData(cloud, 0, 0);
-    const T = c => { const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t; };
-    return { day: T(cd), night: T(cn), cloud: T(cc) };
+  const SKY = { lambdaE: 241.85 * Math.PI / 180, eps: 23.4393 * Math.PI / 180 };
+  function skyMatrix() {                                                   // mundo → ecuatorial J2000
+    const cE = Math.cos(SKY.lambdaE), sE = Math.sin(SKY.lambdaE), ce = Math.cos(SKY.eps), se = Math.sin(SKY.eps);
+    // mundo → marco lunar: Xm = −z, Ym = x, Zm = −y (arriba = polo sur)
+    const Wm = new THREE.Matrix3().set(0, 0, -1, 1, 0, 0, 0, -1, 0);
+    const Me = new THREE.Matrix3().set(cE, -sE, 0, sE, cE, 0, 0, 0, 1);     // marco lunar → eclíptico (Xm hacia la Tierra)
+    const Eq = new THREE.Matrix3().set(1, 0, 0, 0, ce, -se, 0, se, ce);    // eclíptico → ecuatorial
+    return Eq.multiply(Me).multiply(Wm);
   }
-  const NOISE3 = `float h3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-    float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
-      return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
-                 mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z); }
-    float f3(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += a * n3(p); p *= 2.02; a *= 0.5; } return s; }`;
   function buildSky(W, scene) {
-    const grp = new THREE.Group(), RS = 85000;
+    const grp = new THREE.Group(), RS = 85000, local = location.protocol === 'file:';
     const sd = new THREE.Vector3(W.sunDir.x, W.sunDir.y, W.sunDir.z).normalize();
-    const band = new THREE.Vector3(0.3, 0.55, 0.78).normalize();               // normal del plano galáctico (ilustrativa)
-    const gcen = new THREE.Vector3(1, 0, 0).sub(band.clone().multiplyScalar(band.x)).normalize().applyAxisAngle(band, 2.2);
-    // 1) Bóveda: Vía Láctea con nubes, núcleo cálido, franjas de polvo y nebulosas; luz zodiacal cerca del Sol
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(RS * 1.03, 64, 32), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
-      uniforms: { band: { value: band }, gcen: { value: gcen }, sun: { value: sd } },
-      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform vec3 band; uniform vec3 gcen; uniform vec3 sun; varying vec3 vD; ${NOISE3}
+    const M = skyMatrix(), Mi = M.clone().transpose();
+    const U = { cine: { value: 1 } };
+    const texLoader = new THREE.TextureLoader();
+    const tex = (url, srgb, cb) => { const t = texLoader.load(url, () => { if (cb) cb(); if (IceEnv.onAsset) IceEnv.onAsset('cielo'); }); t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    const L = local && window.ICE_SKY_LOCAL ? window.ICE_SKY_LOCAL : null;
+    const urls = { dia: L ? L.dia : 'assets/sky/tierra_dia_4k.jpg', noche: L ? L.noche : 'assets/sky/tierra_noche_4k.jpg', oceano: L ? L.oceano : 'assets/sky/tierra_oceano_2k.png', fondo: L ? L.fondo : 'assets/sky/cielo_fondo_1k.png' };
+    // 1) Fondo negro con un resplandor muy suave de la Vía Láctea (su brillo difuso real, desenfocado ~3°). No se usa la
+    //    textura detallada: al ampliar se pixelaba. Todo el detalle lo ponen las estrellas reales, dibujadas como puntos.
+    U.pr = { value: 1 };
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(RS * 1.03, 96, 48), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
+      uniforms: { fondo: { value: tex(urls.fondo, false) }, M: { value: M }, cine: U.cine, fovK: { value: 1 } },
+      vertexShader: 'varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `uniform sampler2D fondo; uniform mat3 M; uniform float cine; uniform float fovK; varying vec3 vD;
         void main(){
-          vec3 d = normalize(vD); float b = dot(d, band);
-          float plane = exp(-b * b / 0.018), wide = exp(-b * b / 0.09);
-          float core = exp(-pow(acos(clamp(dot(d, gcen), -1.0, 1.0)), 2.0) / 0.35);
-          float cl = f3(d * 5.0), fine = f3(d * 22.0);
-          float dust = smoothstep(0.45, 0.75, f3(d * 9.0 + 3.1)) * exp(-b * b / 0.004);   // franjas oscuras de polvo
-          vec3 warm = vec3(1.0, 0.86, 0.7), cool = vec3(0.82, 0.84, 0.9);
-          vec3 col = mix(cool, warm, core) * (plane * (0.5 + 0.9 * cl) * (0.6 + 0.6 * fine) + 0.25 * wide * cl) * (1.0 - 0.85 * dust);
-          col *= 0.085 + 0.12 * core;
-          float neb = smoothstep(0.66, 0.82, f3(d * 7.0 + 9.0)) * plane;            // nebulosas rojizas y azuladas
-          col += neb * mix(vec3(0.5, 0.12, 0.2), vec3(0.15, 0.25, 0.55), step(0.5, n3(d * 3.0))) * 0.06;
-          float sa = acos(clamp(dot(d, sun), -1.0, 1.0));                          // luz zodiacal
-          col += vec3(1.0, 0.9, 0.75) * 0.05 * exp(-sa * sa / 0.08) * smoothstep(-0.05, 0.25, d.y + 0.05);
-          gl_FragColor = vec4(col, 1.0);
+          vec3 e = M * normalize(vD);
+          float ra = atan(e.y, e.x), dec = asin(clamp(e.z, -1.0, 1.0));
+          vec2 uv = vec2(fract(0.5 - ra / 6.2831853), 0.5 + dec / 3.1415927);
+          float bgv = texture2D(fondo, uv).r, bg = bgv * bgv * 0.25;          // brillo difuso real (lineal)
+          float g = clamp((bg - 0.006) / 0.1, 0.0, 1.0);
+          // tonos muy suaves: un velo azul violáceo apenas visible en la banda, más claro solo donde es más densa
+          vec3 glow = mix(vec3(0.22, 0.25, 0.6), vec3(0.5, 0.5, 0.8), g) * pow(g, 1.6) * 0.07;
+          gl_FragColor = vec4(glow * mix(0.06, 1.0, cine) * fovK, 1.0);
         }` }));
     dome.renderOrder = -10; dome.frustumCulled = false; grp.add(dome);
-    // 2) Estrellas: color según temperatura, las brillantes con halo y destellos en cruz
-    const n = 11000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), brt = new Float32Array(n), r = rng(99);
-    for (let i = 0; i < n; i++) {
-      let v; const inBand = i > 6000;
-      do { v = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); } while (v.lengthSq() > 1 || v.lengthSq() < 0.01);
-      v.normalize(); if (inBand) v.addScaledVector(band, -v.dot(band) * (0.8 + 0.18 * r())).normalize();
-      pos.set([v.x * RS, v.y * RS, v.z * RS], i * 3);
-      const mag = Math.pow(r(), inBand ? 6 : 3.4), t = r();
-      const c = t < 0.12 ? [1, 0.72, 0.52] : t < 0.3 ? [1, 0.9, 0.78] : t < 0.55 ? [0.75, 0.84, 1] : [1, 1, 1];
-      const L = (inBand ? 0.22 : 0.3) + 1.9 * mag; col.set([c[0] * L, c[1] * L, c[2] * L], i * 3);
-      const big = mag > 0.82 && !inBand; size[i] = big ? 16 + 14 * mag : (inBand ? 1.4 : 1.6) + 2.8 * mag; brt[i] = big ? 1 : 0;
+    // 2) 62 000 estrellas reales (Hipparcos/Tycho y Gaia, extraídas de NASA SVS) como puntos nítidos a cualquier zoom.
+    //    La Vía Láctea aparece sola: allí hay muchas más estrellas.
+    let stars = null;
+    if (window.ICE_STARS) {
+      const bin = atob(window.ICE_STARS.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const GAIA0 = 26000; let relG = 1;
+      const q = new Uint16Array(u8.buffer), n = window.ICE_STARS.n, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), brt = new Float32Array(n), v = new THREE.Vector3();
+      for (let i = 0; i < n; i++) {
+        const ra = q[i * 6] / 65535 * 2 * Math.PI, dec = (q[i * 6 + 1] / 65535 - 0.5) * Math.PI;
+        v.set(Math.cos(dec) * Math.cos(ra), Math.cos(dec) * Math.sin(ra), Math.sin(dec)).applyMatrix3(Mi).multiplyScalar(RS);
+        pos.set([v.x, v.y, v.z], i * 3);
+        // brillo según el puesto (lista ordenada de más a menos brillante), comprimido como en una foto: ~ raíz del flujo real
+        // las débiles (Gaia, al final de la lista) usan su brillo medido en el mapa, para que no parezcan todas iguales
+        const rel = Math.pow(10, q[i * 6 + 2] / 65535 * 7 - 7); if (i === GAIA0) relG = rel;
+        const rk = i + 1, I = i < GAIA0 ? 0.13 + 4.8 * Math.pow(rk, -0.42) : 0.05 + 0.3 * Math.sqrt(rel / relG), r = q[i * 6 + 3] / 65535, g = q[i * 6 + 4] / 65535, b = q[i * 6 + 5] / 65535, m = (r + g + b) / 3;
+        const sat = rk < 3000 ? 1.5 : 0.15;                                 // color real; las débiles (Gaia), casi blancas: su color en el mapa lo tiñe el fondo
+        col.set([(m + (r - m) * sat) * I, (m + (g - m) * sat) * I, (m + (b - m) * sat) * I], i * 3);
+        // picos de difracción en las 25 más brillantes; un leve halo en las 250 siguientes; el resto, puntos finos
+        const big = rk <= 25, mid = !big && rk <= 250;
+        size[i] = big ? 14 + 30 * Math.pow(rk, -0.45) : mid ? 4 + 5 * Math.pow(rk / 25, -0.5) : 1.6 + 3.0 * Math.pow(rk, -0.22); brt[i] = big ? 1 : mid ? 0.5 : 0;
+      }
+      const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      sg.setAttribute('size', new THREE.BufferAttribute(size, 1)); sg.setAttribute('bright', new THREE.BufferAttribute(brt, 1));
+      stars = new THREE.Points(sg, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, uniforms: { cine: U.cine, pr: U.pr },
+        // puntos de al menos 3 px con su brillo repartido: sin parpadeo ni dientes al mover la cámara
+        vertexShader: `attribute float size; attribute float bright; uniform float cine; uniform float pr; varying vec3 vC; varying float vB;
+          void main(){ float s = size * pr * mix(0.6, 1.0, cine), ps = max(s, 3.0);
+            vC = color * mix(bright > 0.75 ? 0.3 : 0.04, 1.0, cine) * (bright > 0.25 ? 1.0 : s / ps); vB = bright;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_PointSize = ps; }`,
+        fragmentShader: `varying vec3 vC; varying float vB;
+          void main(){ vec2 p = gl_PointCoord - 0.5; float d = length(p);
+            float big = step(0.75, vB), mid = step(0.25, vB) * (1.0 - big);
+            float core = big > 0.5 ? exp(-d * d * 420.0) * 2.2 + 0.2 * exp(-d * d * 40.0)
+                       : mid > 0.5 ? exp(-d * d * 300.0) * 2.0 + 0.06 * exp(-d * d * 40.0) : exp(-d * d * 16.0);
+            float sp = big * (exp(-abs(p.x) * 90.0) * exp(-abs(p.y) * 6.0) + exp(-abs(p.y) * 90.0) * exp(-abs(p.x) * 6.0)) * 0.8;
+            gl_FragColor = vec4(vC * (core + sp), 1.0); }` }));
+      stars.frustumCulled = false; grp.add(stars);
     }
-    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    sg.setAttribute('size', new THREE.BufferAttribute(size, 1)); sg.setAttribute('bright', new THREE.BufferAttribute(brt, 1));
-    const stars = new THREE.Points(sg, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true,
-      vertexShader: 'attribute float size; attribute float bright; varying vec3 vC; varying float vB; void main(){ vC = color; vB = bright; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv; gl_PointSize = size; }',
-      fragmentShader: `varying vec3 vC; varying float vB;
-        void main(){ vec2 p = gl_PointCoord - 0.5; float d = length(p);
-          float core = vB > 0.5 ? exp(-d * d * 260.0) + 0.25 * exp(-d * d * 30.0) : smoothstep(0.5, 0.0, d);
-          float spikes = vB * (exp(-abs(p.x) * 70.0) * exp(-abs(p.y) * 5.5) + exp(-abs(p.y) * 70.0) * exp(-abs(p.x) * 5.5)) * 0.8;
-          float a = vB > 0.5 ? core + spikes : core * core;
-          gl_FragColor = vec4(vC * a, 1.0); }` }));
-    stars.frustumCulled = false; grp.add(stars);
-    // 3) Sol: disco, resplandor y corona de rayos (los tapa el relieve cuando queda bajo el horizonte)
+    // 3) Sol: disco, resplandor y corona de rayos
     const spr = (map, s, d, add = true) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, transparent: true })); o.scale.setScalar(s); o.position.copy(sd).multiplyScalar(RS * d); grp.add(o); return o; };
     spr(radialTex([[0, 'rgba(255,250,240,1)'], [0.05, 'rgba(255,244,225,.85)'], [0.2, 'rgba(255,225,190,.2)'], [1, 'rgba(255,210,170,0)']]), 17000, 0.95);
-    spr(raysTex(), 26000, 0.955);
+    spr(raysTex(), 30000, 0.955);
     spr(radialTex([[0, '#ffffff'], [0.45, '#fffaf0'], [0.5, 'rgba(255,250,240,0)']]), 820, 0.94, false);
-    // 4) Tierra: día, luces de ciudades en el lado nocturno, reflejo del Sol en el océano, nubes y atmósfera
-    const az = Math.atan2(sd.z, sd.x) + 1.9, el = 0.11, ed = new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az));
-    const ER = RS * 0.8 * Math.tan(0.95 * Math.PI / 180), ET = earthTextures();
-    const earthMat = new THREE.ShaderMaterial({ uniforms: { day: { value: ET.day }, night: { value: ET.night }, sun: { value: sd } },
+    // 4) Tierra: Blue Marble (día con nubes), Black Marble (luces), brillo del Sol en el océano y atmósfera
+    const ER = RS * 0.8 * Math.sin(0.95 * Math.PI / 180);                 // radio aparente real: 0,95°
+    const dayT = tex(urls.dia, true), nightT = tex(urls.noche), oceanT = tex(urls.oceano);
+    const earthU = { day: { value: dayT }, night: { value: nightT }, ocean: { value: oceanT }, sun: { value: sd } };
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(ER, 128, 64), new THREE.ShaderMaterial({ uniforms: earthU,
       vertexShader: 'varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }',
-      fragmentShader: `uniform sampler2D day; uniform sampler2D night; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
-        void main(){ vec4 dt = texture2D(day, vUv); vec3 n = normalize(vN); float ndl = dot(n, sun);
-          float lit = smoothstep(-0.08, 0.25, ndl);
-          vec3 c = pow(dt.rgb, vec3(2.2)) * (0.05 + 1.25 * max(ndl, 0.0));
-          c *= mix(vec3(1.0, 0.55, 0.35), vec3(1.0), smoothstep(0.0, 0.3, ndl)) ;                       // terminador anaranjado
-          float spec = pow(max(dot(reflect(-sun, n), normalize(vV)), 0.0), 60.0) * dt.a * lit;
-          c += vec3(1.0, 0.95, 0.85) * spec * 1.2;
-          c += pow(texture2D(night, vUv).rgb, vec3(2.2)) * (1.0 - lit) * 1.4;                              // ciudades
-          gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0); }` });
-    const earth = new THREE.Mesh(new THREE.SphereGeometry(ER, 64, 40), earthMat);
-    earth.position.copy(ed).multiplyScalar(RS * 0.8); earth.rotation.set(0.41, 1.2, 0.2); grp.add(earth);
-    const clouds = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.012, 64, 40), new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
-      uniforms: { map: { value: ET.cloud }, sun: { value: sd } },
-      vertexShader: 'varying vec2 vUv; varying vec3 vN; void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'uniform sampler2D map; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; void main(){ float a = texture2D(map, vUv).a; float l = smoothstep(-0.1, 0.3, dot(normalize(vN), sun)); gl_FragColor = vec4(vec3(0.95) * (0.04 + l), a * (0.25 + 0.75 * l)); }' }));
-    clouds.position.copy(earth.position); clouds.rotation.copy(earth.rotation); grp.add(clouds);
-    const atm = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.05, 64, 40), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
-      uniforms: { sun: { value: sd }, c: { value: earth.position } },
-      vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position,1.0); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }',
-      fragmentShader: 'uniform vec3 sun; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 2.5); float l = smoothstep(-0.35, 0.45, dot(vN, sun)); vec3 c = mix(vec3(1.0, 0.45, 0.25), vec3(0.35, 0.62, 1.0), smoothstep(-0.1, 0.4, dot(vN, sun))); gl_FragColor = vec4(c * f * l * 1.6, 1.0); }' }));
-    atm.position.copy(earth.position); grp.add(atm);
+      fragmentShader: `uniform sampler2D day; uniform sampler2D night; uniform sampler2D ocean; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+        void main(){
+          vec3 n = normalize(vN), v = normalize(vV); float ndl = dot(n, sun), ndv = max(dot(n, v), 0.0);
+          vec3 alb = texture2D(day, vUv).rgb;
+          float lit = smoothstep(-0.06, 0.12, ndl);
+          vec3 c = alb * max(ndl, 0.0) * 2.4 * mix(vec3(1.0, 0.62, 0.42), vec3(1.0), smoothstep(0.0, 0.25, ndl));
+          float oc = texture2D(ocean, vUv).r;
+          vec3 h = normalize(sun + v); c += vec3(1.0, 0.93, 0.8) * oc * pow(max(dot(n, h), 0.0), 140.0) * 6.0 * lit;   // brillo del Sol en el mar
+          float lights = texture2D(night, vUv).r; c += vec3(1.0, 0.72, 0.38) * lights * lights * 0.9 * (1.0 - lit);    // ciudades de noche
+          float limb = pow(1.0 - ndv, 2.2);                                                            // atmósfera sobre el disco
+          c = mix(c, vec3(0.28, 0.5, 1.0) * (0.15 + 1.4 * smoothstep(-0.2, 0.4, ndl)), limb * 0.55);
+          gl_FragColor = vec4(c, 1.0);
+        }` }));
+    const atmU = { sun: { value: sd }, center: { value: new THREE.Vector3() }, R: { value: ER }, Ra: { value: ER * 1.06 } };   // atmósfera algo engrosada para que se vea a 40 px
+    const atm = new THREE.Mesh(new THREE.SphereGeometry(ER * 1.06, 96, 48), new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide, uniforms: atmU,
+      vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: `uniform vec3 sun; uniform vec3 center; uniform float R; uniform float Ra; varying vec3 vW;
+        void main(){
+          vec3 ro = cameraPosition, rd = normalize(vW - ro), oc = center - ro;
+          float t = dot(oc, rd), h = length(oc - rd * t);
+          if (h < R) discard;                                                  // detrás del planeta
+          float alt = (h - R) / (Ra - R), dens = exp(-alt * 5.0) * (1.0 - alt);
+          vec3 p = normalize(ro + rd * t - center); float mu = dot(p, sun);
+          float day = smoothstep(-0.25, 0.25, mu);
+          vec3 ray = mix(vec3(1.0, 0.42, 0.18), vec3(0.32, 0.58, 1.0), smoothstep(-0.05, 0.35, mu)) * day;
+          float fwd = pow(max(dot(rd, sun), 0.0), 6.0);                         // dispersión hacia delante (Sol detrás de la Tierra)
+          vec3 col = ray * dens * 2.2 + vec3(0.55, 0.7, 1.0) * fwd * dens * 2.4;   // anillo iluminado a contraluz
+          gl_FragColor = vec4(col, 1.0);
+        }` }));
+    grp.add(earth, atm);
     grp.traverse(o => { o.userData.skipSunVis = true; });
     scene.add(grp);
-    // 5) Destellos de lente: fantasmas a lo largo de la línea Sol–centro de la imagen, solo si el Sol se ve
+    // Eje de la Tierra (polo norte celeste) en el mundo; la Tierra gira con el tiempo de la simulación (1 vuelta / 23,93 h)
+    const northW = new THREE.Vector3(0, 0, 1).applyMatrix3(Mi).normalize(), qAlign = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), northW), qSpin = new THREE.Quaternion();
+    const earthDir = new THREE.Vector3(0, Math.sin(4 * Math.PI / 180), -Math.cos(4 * Math.PI / 180));
+    function placeEarth(Hf, from) {                                         // elevación: dentro del rango de libración, sobre el relieve
+      let hz = -90;
+      if (Hf && from) for (let t = 30; t < 40000; t *= 1.06) { const z = from.z - t; hz = Math.max(hz, Math.atan2(Hf(from.x, z) - from.y, t) * 180 / Math.PI); }
+      const el = Math.max(2.0, Math.min(6.5, hz + 1.3)) * Math.PI / 180;
+      earthDir.set(0, Math.sin(el), -Math.cos(el));
+      earth.position.copy(earthDir).multiplyScalar(RS * 0.8); atm.position.copy(earth.position);
+      return el * 180 / Math.PI;
+    }
+    placeEarth(null, null);
+    // Texturas de 8K al hacer mucho zoom (solo con servidor; con doble clic se quedan las de 2K)
+    let hiRes = false;
+    function loadHiRes() {
+      if (hiRes || local) return; hiRes = true;
+      texLoader.load('assets/sky/tierra_dia_8k.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; earthU.day.value = t; });
+    }
+    // 5) Destellos de lente: fantasmas de colores en la línea Sol–centro y raya horizontal (anamórfica)
     const ghostTex = radialTex([[0, 'rgba(255,255,255,0.0)'], [0.55, 'rgba(255,255,255,0.12)'], [0.75, 'rgba(255,255,255,0.35)'], [0.85, 'rgba(255,255,255,0.08)'], [1, 'rgba(255,255,255,0)']]);
-    const ghostDef = [[-0.35, 0.05, 0x8fd0ff], [-0.7, 0.09, 0xffc890], [0.25, 0.03, 0xb8a8ff], [-1.15, 0.15, 0x9fffd8], [-1.5, 0.06, 0xffe0b0]];
-    const ghosts = ghostDef.map(([f, s, c]) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map: ghostTex, color: c, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0.0 })); o.userData = { f, s }; o.renderOrder = 20; o.frustumCulled = false; scene.add(o); return o; });
+    const discTex = radialTex([[0, 'rgba(255,255,255,0.25)'], [0.7, 'rgba(255,255,255,0.12)'], [1, 'rgba(255,255,255,0)']]);
+    const ghostDef = [[-0.45, 0.035, 0xffd2a0, ghostTex], [-0.85, 0.06, 0xffc890, ghostTex], [0.3, 0.022, 0xfff0dc, discTex], [-1.3, 0.05, 0xffe0b0, discTex]];   // cálidos: sin tonos azules alrededor del Sol
+    const mk = (map, c) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map, color: c, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0 })); o.renderOrder = 20; o.frustumCulled = false; scene.add(o); return o; };
+    const ghosts = ghostDef.map(([f, s, c, m]) => { const o = mk(m, c); o.userData = { f, s }; return o; });
+    const streak = mk(radialTex([[0, 'rgba(255,255,255,0.9)'], [0.15, 'rgba(255,225,190,0.3)'], [1, 'rgba(255,210,170,0)']]), 0xffe2c0);
     const tmp = new THREE.Vector3(), shl = Math.hypot(sd.x, sd.z), tanE = sd.y / shl;
-    let flare = 0, spin = 0;
-    return { group: grp, earthDir: ed, update(camera, dt = 0.016) {
-      grp.position.copy(camera.position);
-      spin += dt * 0.004; earth.rotation.y = 1.2 + spin; clouds.rotation.y = 1.2 + spin * 1.6;
-      // ¿se ve el Sol? (delante, en pantalla y por encima del relieve hacia el Sol)
-      tmp.copy(camera.position).addScaledVector(sd, 1000).project(camera);
-      let vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
-      if (vis) for (const t of [15, 40, 90, 200, 450, 1000, 2200]) { const x = camera.position.x + sd.x / shl * t, z = camera.position.z + sd.z / shl * t; if (W.hAt(x, z) > camera.position.y + tanE * t) { vis = false; break; } }
-      flare += ((vis ? 1 : 0) - flare) * Math.min(1, dt * 6);
-      const sx = tmp.x, sy = tmp.y, fov = Math.tan(camera.fov * Math.PI / 360) * 2 * 10;
-      ghosts.forEach(o => { const p = new THREE.Vector3(sx * o.userData.f, sy * o.userData.f, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
-        o.position.copy(p); o.scale.setScalar(o.userData.s * fov); o.material.opacity = 0.55 * flare; o.visible = flare > 0.02; });
-    } };
+    let flare = 0;
+    return { group: grp, earthDir, placeEarth, U, loadHiRes, setCine(on) { U.cine.value = on ? 1 : 0; },
+      update(camera, dt = 0.016, simT = 0) {
+        grp.position.copy(camera.position);
+        atmU.center.value.copy(earth.position).add(grp.position);
+        qSpin.setFromAxisAngle(new THREE.Vector3(0, 1, 0), simT / 86164 * Math.PI * 2 + 2.2); earth.quaternion.copy(qAlign).multiply(qSpin);
+        if (camera.fov < 14) loadHiRes();
+        dome.material.uniforms.fovK.value = 0.12 + 0.88 * Math.pow(Math.min(1, Math.max(0, (camera.fov - 1) / 12)), 0.7);   // con zoom, el fondo no muestra el grano del JPG
+        tmp.copy(camera.position).addScaledVector(sd, 1000).project(camera);
+        let vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
+        if (vis) for (const t of [15, 40, 90, 200, 450, 1000, 2200]) { const x = camera.position.x + sd.x / shl * t, z = camera.position.z + sd.z / shl * t; if (W.hAt(x, z) > camera.position.y + tanE * t) { vis = false; break; } }
+        flare += ((vis ? 1 : 0) - flare) * Math.min(1, dt * 6);
+        const sx = tmp.x, sy = tmp.y, fov = Math.tan(camera.fov * Math.PI / 360) * 2 * 10, k = flare * (0.35 + 0.65 * U.cine.value);
+        ghosts.forEach(o => { const p = new THREE.Vector3(sx * o.userData.f, sy * o.userData.f, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
+          o.position.copy(p); o.scale.setScalar(o.userData.s * fov); o.material.opacity = 0.22 * k; o.visible = k > 0.02; });
+        const ps = new THREE.Vector3(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
+        streak.position.copy(ps); streak.scale.set(fov * 0.55, fov * 0.008, 1); streak.material.opacity = 0.3 * k; streak.visible = k > 0.02;
+      } };
   }
 
   // ---------- mapa de entorno (reflejos de los metales y luz rebotada) ----------
@@ -596,16 +701,22 @@
       d[k] = enc(L); d[k + 1] = enc(L * 0.985); d[k + 2] = enc(L * 0.96 + (dy > 0 ? 0.002 : 0)); d[k + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.encoding = THREE.sRGBEncoding;
+    const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }
 
   // ---------- sombra del Sol que sigue a la cámara (alta resolución donde se mira) ----------
   const _f = new THREE.Vector3();
+  const _snapF = new THREE.Vector3(), _snapD = new THREE.Vector3(), _snapR = new THREE.Vector3(), _snapU = new THREE.Vector3(), _snapUp = new THREE.Vector3(0, 1, 0);
   function updateSun(sun, W, focus, camDist, minHalf = 16) {
     const half = clamp(camDist * 1.1, minHalf, W.HALF * 1.6), D = half * 3 + 400, sd = W.sunDir;
-    sun.position.set(focus.x + sd.x * D, focus.y + sd.y * D, focus.z + sd.z * D); sun.target.position.copy(focus); sun.target.updateMatrixWorld();
     const c = sun.shadow.camera, vh = Math.max(half, 30);
+    // el centro de la sombra avanza a saltos de un texel del mapa de sombras: así los bordes no tiemblan al mover la cámara
+    const ms = sun.shadow.mapSize.x || 2048, tu = 2 * half / ms, tv = 2 * vh / ms, f = _snapF.copy(focus);
+    _snapD.set(sd.x, sd.y, sd.z).normalize(); _snapR.crossVectors(_snapUp, _snapD).normalize(); _snapU.crossVectors(_snapD, _snapR);
+    const a = Math.round(f.dot(_snapR) / tu) * tu, b = Math.round(f.dot(_snapU) / tv) * tv, w = f.dot(_snapD);
+    f.copy(_snapR).multiplyScalar(a).addScaledVector(_snapU, b).addScaledVector(_snapD, w);
+    sun.position.set(f.x + sd.x * D, f.y + sd.y * D, f.z + sd.z * D); sun.target.position.copy(f); sun.target.updateMatrixWorld();
     if (Math.abs(c.right - half) > half * 0.06 || c.far !== D * 2) {
       Object.assign(c, { left: -half, right: half, top: vh, bottom: -vh, near: 1, far: D * 2 }); c.updateProjectionMatrix();
       sun.shadow.normalBias = 0.03 + half * 0.002; sun.shadow.bias = -0.0004;   // Sol rasante (1,2°): más margen contra el autosombreado
@@ -703,9 +814,9 @@
     function flush() {
       if (dirtyFrom < 0) return;
       const n = q - dirtyFrom;
-      pa.updateRange.offset = dirtyFrom * 18; pa.updateRange.count = n * 18; pa.needsUpdate = true;
-      ua.updateRange.offset = dirtyFrom * 12; ua.updateRange.count = n * 12; ua.needsUpdate = true;
-      ba.updateRange.offset = dirtyFrom * 6; ba.updateRange.count = n * 6; ba.needsUpdate = true;
+      pa.clearUpdateRanges(); pa.addUpdateRange(dirtyFrom * 18, n * 18); pa.needsUpdate = true;
+      ua.clearUpdateRanges(); ua.addUpdateRange(dirtyFrom * 12, n * 12); ua.needsUpdate = true;
+      ba.clearUpdateRanges(); ba.addUpdateRange(dirtyFrom * 6, n * 6); ba.needsUpdate = true;
       g.setDrawRange(0, filled * 6); dirtyFrom = -1;
     }
     function update(R, t) {
@@ -736,7 +847,7 @@
         const x = pos[v * 3], z = pos[v * 3 + 2];
         if (Math.abs(x - cx) < hp && Math.abs(z - cz) < hp) { pos[v * 3 + 1] = fn(x, z) + 0.035; moved.push(v); }
       }
-      pa.updateRange.offset = 0; pa.updateRange.count = filled * 18; pa.needsUpdate = true;
+      pa.clearUpdateRanges(); pa.addUpdateRange(0, filled * 18); pa.needsUpdate = true;
     }
     return { update, clear, reproject, mesh, setLife(s) { mat.uniforms.vida.value = s; } };
   }
@@ -745,14 +856,19 @@
   // Aberración cromática suave, gradación (sombras hacia azul frío), viñeta, visor de la cámara del rover,
   // conversión lineal → sRGB y grano fino. El brillo (bloom) va en el pase anterior.
   const GradeShader = {
-    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, roverCam: { value: 0 }, res: { value: new THREE.Vector2(1, 1) } },
+    uniforms: { tDiffuse: { value: null }, time: { value: 0 }, roverCam: { value: 0 }, res: { value: new THREE.Vector2(1, 1) }, exposure: { value: 1.0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform float roverCam; uniform vec2 res; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float time; uniform float roverCam; uniform vec2 res; uniform float exposure; varying vec2 vUv;
       float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      vec3 rrt(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
+      vec3 aces(vec3 c){
+        const mat3 I = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+        const mat3 O = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+        return clamp(O * rrt(I * (c * exposure / 0.6)), 0.0, 1.0); }
       void main(){
         vec2 c = vUv - 0.5; float r2 = dot(c, c);
         float ab = (0.004 + 0.006 * roverCam) * r2;
-        vec3 col = vec3(texture2D(tDiffuse, vUv + c * ab).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - c * ab).b);
+        vec3 col = aces(vec3(texture2D(tDiffuse, vUv + c * ab).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - c * ab).b));
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
         col += vec3(0.012, 0.006, -0.008) * smoothstep(0.5, 1.0, l);                 // luces apenas cálidas
         col = mix(vec3(l), col, 1.06);
@@ -878,5 +994,5 @@
     };
   }
 
-  window.IceEnv = { DETAIL, nearGrains, wheelDust, GradeShader, detailTerrain, iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
+  window.IceEnv = { REGO, loadScanned, registerRocks, syncRocks, DETAIL, nearGrains, wheelDust, GradeShader, detailTerrain, iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
 })();

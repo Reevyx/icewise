@@ -56,7 +56,7 @@
     el.innerHTML = PIPE.map((p, i) => `<a href="#simulacion" class="step reveal"><span class="n">${String(i + 1).padStart(2, '0')}</span><div class="t">${p.t}</div><div class="d">${p.d}</div></a>`).join('');
   }
 
-  const KEY_REFS = [3, 4, 5, 6, 11, 12, 14, 16, 21, 22, 24, 27, 29, 31, 46, 47, 48, 49, 50, 51, 42, 43];
+  const KEY_REFS = [3, 4, 5, 6, 11, 12, 14, 16, 21, 22, 24, 27, 29, 31, 46, 47, 48, 49, 50, 51, 52, 53, 54, 42, 43];
   function initRefs() {
     const ol = $('#ref-list'); if (!ol) return;
     ol.innerHTML = IceData.REFS.filter(r => KEY_REFS.includes(r.id)).map(r =>

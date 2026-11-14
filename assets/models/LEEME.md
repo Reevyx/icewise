@@ -15,7 +15,7 @@ Convenciones:
 - Unidades en metros. Origen en el suelo, en el centro del objeto.
 - Rover: frente hacia +X. Las ruedas se llaman `wheel_…` (giran solas) y el taladro `drill` (baja al perforar).
 - Opciones de exportación: *Include → Selected Objects* o toda la escena, *+Y Up* activado (por defecto).
-- Para que pese menos, activa *Compression* (Draco). La web trae el decodificador en `assets/vendor/draco/`.
+- Para que pese menos, activa *Compression* (Draco). La web trae el decodificador en `assets/vendor/draco170/` (motor Three.js r170 en `assets/vendor/three-r170.js`).
 - `rover.blend` es el archivo editable del rover (texturas incluidas). Para ver los materiales en Blender usa la vista *Material Preview*.
 
 La carga funciona en GitHub Pages o con un servidor local (`python -m http.server`). Si el archivo no existe, la web usa el modelo actual.

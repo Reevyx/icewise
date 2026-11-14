@@ -143,11 +143,11 @@
       <div class="eyebrow"><span class="idx">03</span><span class="bar"></span>Simulación en tiempo real</div>
       <h2>Toma el control de la misión.</h2>
       <p class="lead">Estás en el borde real del cráter Shackleton. Los cristales azules marcan dónde hay hielo bajo el suelo. El rover no los ve: tiene que descubrirlos con su sensor. Muévete por el mapa con <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, arrastra para girar la cámara y usa la rueda para acercarte; pulsa <kbd>E</kbd> para elegir en el terreno a dónde enviar el rover. En la estación, un biofiltro con microorganismos limpia el agua obtenida.</p>
-      <p class="muted" style="font-size:13px;margin-top:8px">Relieve y sombras reales (LOLA, 3,2 km alrededor de la estación). El resto del cráter que se ve a lo lejos es un modelo aproximado, solo para dar contexto.</p>
+      <p class="muted" style="font-size:13px;margin-top:8px">Relieve y sombras reales (LOLA, 3,2 km alrededor de la estación). El resto del cráter que se ve a lo lejos es un modelo aproximado, solo para dar contexto. El cielo es real (mapas de estrellas de NASA con datos de Gaia e Hipparcos) y la Tierra está hecha con imágenes de satélite de NASA, en su dirección y fase reales vistas desde Shackleton. Las rocas y el regolito son escaneos fotográficos (Poly Haven, CC0); con «Vista Tierra» se ve la Tierra con teleobjetivo, como en las fotos reales. Las 62 000 estrellas son reales y la Vía Láctea se ve por su densidad, con un velo azul muy tenue (estético). Con «Cielo de larga exposición» se ven como en una foto de exposición larga; desactívalo para verlo como lo vería el ojo con el suelo iluminado. Al perforar se abre una vista en corte ilustrativa junto a la broca: el espesor de la capa seca y el porcentaje de hielo son los del modelo en ese punto, y las virutas caen con la gravedad lunar. El despiece muestra el diseño propio del rover, y los datos del mapa y del centro de control salen del modelo de la simulación.</p>
     </div>
 
     <div class="sim-wrap">
-      <div class="sim-stage">
+      <div class="sim-stage" id="sim-stage">
         <div id="sim-view" class="sim-view" tabindex="0" aria-label="Vista 3D de la simulación. Usa W A S D para moverte por el mapa, arrastra para girar la cámara, usa la rueda para acercarte y pulsa E para elegir a dónde enviar el rover.">
           <div id="sim-labels" class="sim-labels" aria-hidden="true"></div>
           <div class="sim-hud" aria-live="polite">
@@ -167,7 +167,7 @@
             <div class="rc-hint">Arrastra para mirar · Rueda: zoom · Doble clic: centrar</div>
           </div>
           <div class="sim-dest" id="sim-dest" hidden>Modo destino: haz clic en el terreno para enviar el rover · <kbd>Esc</kbd> para salir</div>
-          <div class="sim-help" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>: moverse · Arrastrar: girar/mirar · Rueda: acercar · <kbd>E</kbd>: enviar rover · Cámaras: 3ª persona y cámara del rover</div>
+          <div class="sim-help" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> moverse · Arrastrar: girar · Rueda: acercar · <kbd>E</kbd> enviar rover · <kbd>M</kbd> mapa · <kbd>G</kbd> control · <kbd>X</kbd> despiece · <kbd>F</kbd> pantalla completa</div>
 
           <div class="sim-legend" id="sim-legend">
             <div data-l="ice"><span class="lg-ice"></span><span>Hielo bajo el suelo</span><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></div>
@@ -175,13 +175,50 @@
             <div data-l="psr" hidden><span class="lg-psr"></span><span>Sombra permanente (≈ 40 K)</span></div>
             <div data-l="trail"><span class="lg-hole"></span><span>Perforación</span></div>
           </div>
-          <div class="sim-core" id="sim-core"><canvas width="210" height="250" aria-label="Corte del subsuelo bajo el rover"></canvas></div>
+          <div class="sim-tools" id="sim-tools" role="group" aria-label="Herramientas">
+            <button type="button" data-t="mapa" aria-pressed="false" aria-label="Mapa y puntos de paso (tecla M)" title="Mapa y puntos de paso (M)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg><kbd>M</kbd></button>
+            <button type="button" data-t="control" aria-pressed="false" aria-label="Centro de control (tecla G)" title="Centro de control (G)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V4"/></svg><kbd>G</kbd></button>
+            <button type="button" data-t="despiece" aria-pressed="false" aria-label="Despiece del rover (tecla X)" title="Despiece del rover (X)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><kbd>X</kbd></button>
+            <button type="button" data-t="pantalla" aria-pressed="false" aria-label="Pantalla completa (tecla F)" title="Pantalla completa (F)"><svg class="fs-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><svg class="fs-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><kbd>F</kbd></button>
+          </div>
+          <div class="sim-side" id="sim-side">
+            <div class="sim-panel2 sim-map" id="sim-map" hidden>
+              <div class="sm-head"><span>Mapa · ruta y puntos de paso</span><button type="button" class="sm-x" data-close aria-label="Cerrar el mapa">×</button></div>
+              <canvas width="440" height="440" aria-label="Mapa de la zona: relieve real, rastro del rover, perforaciones y puntos de paso"></canvas>
+              <div class="sm-legend"><span><i class="k-st"></i>Estación</span><span><i class="k-col"></i>Colonia</span><span><i class="k-rov"></i>Rover</span><span><i class="k-wp"></i>Punto de paso</span><span><i class="k-psr"></i>Sombra permanente</span></div>
+              <div class="sm-row"><span id="sm-count" class="muted">Sin puntos de paso</span><span class="sm-btns"><button type="button" class="btn btn--primary btn--sm" id="sm-go" disabled>Recorrer ruta</button><button type="button" class="btn btn--quiet btn--sm" id="sm-clear">Borrar</button></span></div>
+              <p class="sm-hint">Clic en el mapa: añadir un punto de paso · clic derecho: quitar el último. En cada punto el rover mide el hielo y decide si perforar.</p>
+            </div>
+            <div class="sim-core" id="sim-core"><canvas width="210" height="250" aria-label="Corte del subsuelo bajo el rover"></canvas></div>
+          </div>
+          <div class="sim-panel2 sim-ctrl" id="sim-ctrl" hidden>
+            <div class="sm-head"><span>Centro de control · telemetría</span><button type="button" class="sm-x" data-close aria-label="Cerrar el centro de control">×</button></div>
+            <div class="sc-task" id="sc-task">—</div>
+            <div class="sc-row"><span class="k">Energía</span><b id="sc-bat">—</b><div class="sc-bar"><i id="sc-bat-bar"></i></div><small id="sc-bat-s">—</small></div>
+            <div class="sc-row"><span class="k">Temperatura</span><b id="sc-temp">—</b><div class="sc-bar"><i id="sc-temp-bar"></i></div><small id="sc-temp-s">—</small></div>
+            <div class="sc-row"><span class="k">Pendiente</span><b id="sc-slope">—</b><div class="sc-bar"><i id="sc-slope-bar"></i></div><small id="sc-slope-s">—</small></div>
+            <div class="sc-row"><span class="k">Velocidad</span><b id="sc-speed">—</b><div class="sc-bar"><i id="sc-speed-bar"></i></div><small id="sc-speed-s">—</small></div>
+            <div class="sc-row"><span class="k">Perforación</span><b id="sc-drill">—</b><div class="sc-bar"><i id="sc-drill-bar"></i></div><small id="sc-drill-s">—</small></div>
+            <div class="sc-row"><span class="k">Muestra</span><b id="sc-cargo">—</b><div class="sc-bar"><i id="sc-cargo-bar"></i></div><small id="sc-cargo-s">—</small></div>
+            <div class="sc-row"><span class="k">Comunicación</span><b id="sc-link">—</b><div class="sc-bar"><i id="sc-link-bar"></i></div><small id="sc-link-s">—</small></div>
+            <p class="sm-hint">Valores del modelo de la simulación. La comunicación se calcula con la línea de vista sobre el relieve real.</p>
+          </div>
+          <div class="sim-speed" id="sim-speed" hidden aria-hidden="true"><b id="sim-speed-v">0,0</b><span>km/h</span></div>
+          <div class="sim-exp-labels" id="sim-exp-labels" hidden></div>
+          <div class="sim-exp" id="sim-exp" hidden>
+            <div class="sm-head"><span>Despiece del rover</span><button type="button" class="sm-x" data-close aria-label="Salir del despiece">×</button></div>
+            <h4 id="se-name">Elige una pieza</h4>
+            <p id="se-desc">Toca una etiqueta o una pieza del rover para ver qué hace.</p>
+            <label class="se-range"><span>Separación</span><input type="range" id="se-amt" min="0" max="1.6" step="0.01" value="1"></label>
+            <p class="sm-hint">Diseño propio de ICEWISE (modelo de Blender). La simulación queda en pausa mientras miras el despiece · <kbd>Esc</kbd> para salir.</p>
+          </div>
           <div class="sim-tip" id="sim-tip" hidden></div>
           <div class="sim-pop" id="sim-pop" hidden></div>
 
           <div class="sim-cam seg" id="sim-cam" role="group" aria-label="Cámara">
             <button data-c="rover" aria-pressed="true">3ª persona</button>
             <button data-c="rovercam" aria-pressed="false">Cámara del rover</button>
+            <button data-c="tierra" aria-pressed="false" title="Teleobjetivo hacia la Tierra desde la estación (rueda: zoom)">Vista Tierra</button>
             <button data-c="station" aria-pressed="false">Estación</button>
             <button data-c="colony" aria-pressed="false">Colonia</button>
             <button data-c="overview" aria-pressed="false">Vista general</button>
@@ -194,6 +231,15 @@
             <button data-k="right" aria-label="Girar a la derecha">▶</button>
           </div>
 
+          <div class="sim-loader" id="sim-loader" role="status" aria-live="polite">
+            <div class="sim-loader-card">
+              <div class="eyebrow">ICEWISE · Simulación 3D</div>
+              <h3>Preparando el borde del cráter Shackleton</h3>
+              <div class="sl-bar"><i id="sl-fill"></i></div>
+              <div class="sl-pct"><span id="sl-pct">0 %</span><span id="sl-now">Iniciando el motor gráfico…</span></div>
+              <ul class="sl-steps" id="sl-steps"></ul>
+            </div>
+          </div>
           <div class="sim-intro" id="sim-intro">
             <div class="sim-intro-card">
               <div class="eyebrow">Cómo usar la simulación</div>
@@ -227,6 +273,19 @@
           </div>
           <span class="sp"></span>
           <button class="btn btn--quiet btn--sm" id="sim-reset">Reiniciar todo</button>
+          <div class="sim-qwrap">
+            <button class="sim-gear" id="sim-qbtn" aria-label="Calidad gráfica" aria-expanded="false" title="Calidad gráfica"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+            <div class="sim-qpop" id="sim-qpop" hidden>
+              <div class="caption">Calidad gráfica</div>
+              <div class="seg" id="sim-quality" role="group" aria-label="Calidad gráfica">
+                <button data-q="maxima" aria-pressed="true">Máxima</button>
+                <button data-q="alta" aria-pressed="false">Alta</button>
+                <button data-q="media" aria-pressed="false">Media</button>
+                <button data-q="baja" aria-pressed="false">Baja</button>
+              </div>
+              <p>Máxima: sombras 4K, oclusión ambiental y antialiasing. Baja: para computadores modestos.</p>
+            </div>
+          </div>
         </div>
         <div class="sim-process" id="sim-process" aria-label="Etapas del proceso del agua. Pulsa una para ver esa parte."></div>
         <div class="sim-toggles" aria-label="Capas del mapa">
@@ -235,6 +294,7 @@
           <label><input type="checkbox" id="ov-psr"> Sombra permanente</label>
           <label><input type="checkbox" id="ov-trail" checked> Rastro y perforaciones</label>
           <label><input type="checkbox" id="ov-fill" checked> Luz de apoyo</label>
+          <label title="Como una astrofotografía: realza estrellas y Vía Láctea. En la realidad, con el suelo iluminado por el Sol, casi no se verían."><input type="checkbox" id="ov-cine" checked> Cielo de larga exposición</label>
         </div>
         <p class="caption" style="margin-top:12px">Terreno: topografía real del borde del cráter Shackleton (LOLA/LRO, NASA, 10 m por píxel). Las sombras permanentes se calculan con ese relieve; el hielo dentro de ellas es simulado. En el polo el Sol está a solo ~1° sobre el horizonte: la «luz de apoyo» ilumina desde arriba únicamente para ver mejor el relieve.</p>
       </div>
@@ -484,16 +544,9 @@
   </div>
 </footer>
 
-<script src="assets/vendor/three.min.js"></script>
-<script src="assets/vendor/OrbitControls.js"></script>
-<script src="assets/vendor/GLTFLoader.js"></script>
-<script src="assets/vendor/DRACOLoader.js"></script>
-<script src="assets/vendor/post/CopyShader.js"></script>
-<script src="assets/vendor/post/LuminosityHighPassShader.js"></script>
-<script src="assets/vendor/post/EffectComposer.js"></script>
-<script src="assets/vendor/post/RenderPass.js"></script>
-<script src="assets/vendor/post/ShaderPass.js"></script>
-<script src="assets/vendor/post/UnrealBloomPass.js"></script>
+<script src="assets/vendor/three-r170.js"></script>
+<script src="assets/sky/estrellas.js"></script>
+<script>if (location.protocol === 'file:') document.write('<script src="assets/sky/cielo-local.js"><\/script><script src="assets/terrain/terreno-local.js"><\/script>');</script>
 <script src="js/sim-env.js"></script>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>

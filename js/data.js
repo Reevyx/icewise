@@ -57,6 +57,9 @@
     { id: 49, kind: 'agency', text: 'CORDIS (Comisión Europea). LUWEX — A water extraction system for the Moon (proyecto 101081937).', url: 'https://cordis.europa.eu/project/id/101081937' },
     { id: 50, kind: 'agency', text: 'Barta, D. J., Pickering, K. D., Meyer, C. et al. (2015). A biologically-based Alternative Water Processor for long duration space missions. NASA NTRS 20150014482.', url: 'https://ntrs.nasa.gov/citations/20150014482' },
     { id: 51, kind: 'news', text: 'Space.com. There\'s lots of water on the Moon for astronauts. But is it safe to drink? (Aqualunar Challenge).', url: 'https://www.space.com/moon-water-astronauts-aqualunar-drinking-safety-contest' },
+    { id: 52, kind: 'image', text: 'NASA/Goddard Space Flight Center Scientific Visualization Studio (2020). Deep Star Maps 2020 (mapas de la Vía Láctea y de estrellas Hipparcos/Tycho-2). Datos Gaia DR2: ESA/Gaia/DPAC. Usado para el cielo de la simulación.', url: 'https://svs.gsfc.nasa.gov/4851' },
+    { id: 53, kind: 'image', text: 'NASA/Goddard SVS — Blue Marble (Tierra con nubes, 8192×4096) y NASA Earth Observatory — Black Marble 2016 (luces nocturnas). Usados para la Tierra de la simulación.', url: 'https://svs.gsfc.nasa.gov/3615' },
+    { id: 54, kind: 'image', text: 'Poly Haven. Moon Rock 01–07 y Moon 01 (rocas y regolito escaneados por fotogrametría, licencia CC0). Usados para el suelo y las rocas de la simulación.', url: 'https://polyhaven.com/a/moon_rock_01' },
     { id: 45, kind: 'image', text: 'NASA (2026). art002e014055 — Craters Along the Lunar Terminator. Fotografía de la tripulación de Artemis II.', url: 'https://images.nasa.gov/details/art002e014055' }
   ];
 

@@ -1,5 +1,5 @@
 /* =========================================================================
-   ICEWISE — Vista 3D (Three.js r128) y panel de control de la simulación
+   ICEWISE — Vista 3D (Three.js r170) y panel de control de la simulación
    ========================================================================= */
 (function () {
   'use strict';
@@ -7,9 +7,19 @@
 
   let sim, S, P, W;
   let renderer, scene, camera, controls, sun, terrain, fill, SV, sky, updNearRocks, tracks, iceL, destMode = false;
-  let composer = null, bloom = null, grade = null, detailUpd = () => {};
+  let composer = null, bloom = null, grade = null, gtao = null, detailUpd = () => {}, earthshine = null;
+  // Calidad gráfica (r170). Por defecto, la máxima. Se recuerda en este navegador.
+  const QUALITY = {
+    maxima: { pr: 2, msaa: 4, smaa: false, gtao: true, bloom: true, shadow: 4096, detail: true, grains: true },
+    alta: { pr: 1.5, msaa: 4, smaa: false, gtao: true, bloom: true, shadow: 4096, detail: true, grains: true },
+    media: { pr: 1, msaa: 0, smaa: true, gtao: false, bloom: true, shadow: 2048, detail: true, grains: false },
+    baja: { pr: 0.75, msaa: 0, smaa: false, gtao: false, bloom: false, shadow: 1024, detail: false, grains: false }
+  };
+  let qName = (() => { try { const v = localStorage.getItem('icewise-calidad'); if (QUALITY[v]) return v; } catch (_) {} return 'maxima'; })();
+  let Q = QUALITY[qName];
   const chase = { yaw: 0, pitch: 0.3, dist: 9, drag: false, lastDrag: 0 };   // cámara en 3ª persona
   const rcam = { yaw: 0, pitch: 0, zoom: 1, drag: false, dist: 0, aim: new THREE.Vector3() };   // cámara del mástil
+  const tele = { yaw: 0, pitch: 0, fov: 6.5, drag: false };   // Vista Tierra: teleobjetivo desde la estación
   let grainsUpd = () => {}, dustUpd = () => {};
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
@@ -27,7 +37,7 @@
   // =====================================================================
   function canvasTex(w, h, draw, repeat) {
     const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); }
     t.anisotropy = 4; return t;
   }
@@ -70,36 +80,29 @@
   // ESCENA
   // =====================================================================
   function buildScene(host) {
-    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    THREE.ColorManagement.enabled = false;   // los colores en hexadecimal se usan tal cual (como en la versión anterior)
+    renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+    renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
     host.appendChild(renderer.domElement);
     scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
     camera = new THREE.PerspectiveCamera(46, 1, 0.25, 100000);
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.495, minDistance: 2.2, maxDistance: W.SIZE * 2.5, rotateSpeed: 0.8, zoomSpeed: 1.1 });
-    // Postprocesado: escena (con antialiasing multimuestra si hay WebGL2) → brillo de las luces (bloom) → acabado de cámara
-    if (THREE.EffectComposer && THREE.UnrealBloomPass) {
-      let rt;
-      if (renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget) { rt = new THREE.WebGLMultisampleRenderTarget(2, 2, { format: THREE.RGBAFormat }); rt.samples = 4; }
-      composer = new THREE.EffectComposer(renderer, rt);
-      composer.addPass(new THREE.RenderPass(scene, camera));
-      bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.65, 0.45, 0.92); composer.addPass(bloom);
-      grade = new THREE.ShaderPass(IceEnv.GradeShader); composer.addPass(grade);
-    }
 
     // Luz: Sol rasante real (1,2° sobre el horizonte) con sombras que siguen a la cámara; luz cenicienta de la Tierra;
     // reflejo del terreno iluminado (mapa de entorno). La "luz de apoyo" es opcional y no es realista.
     const sd = W.sunDir;
-    sun = new THREE.DirectionalLight(0xfff4e6, 3.6); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+    sun = new THREE.DirectionalLight(0xfff4e6, 3.6 * Math.PI); sun.castShadow = true; sun.shadow.mapSize.set(Q.shadow, Q.shadow);
     scene.add(sun, sun.target); IceEnv.updateSun(sun, W, new THREE.Vector3(), 400);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.02));   // casi nada: en la Luna las sombras son negras
-    fill = new THREE.DirectionalLight(0xf2f2f2, 0.13); fill.position.set(-sd.x * W.SIZE * 0.6, W.SIZE, -sd.z * W.SIZE * 0.6); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.02 * Math.PI));   // casi nada: en la Luna las sombras son negras
+    fill = new THREE.DirectionalLight(0xf2f2f2, 0.13 * Math.PI); fill.position.set(-sd.x * W.SIZE * 0.6, W.SIZE, -sd.z * W.SIZE * 0.6); scene.add(fill);
     SV = IceEnv.sunVisTexture(W);
-    sky = IceEnv.buildSky(W, scene);
-    const earthshine = new THREE.DirectionalLight(0xc9d6ff, 0.045); earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE); scene.add(earthshine);
-    scene.environment = IceEnv.envMap(renderer, W);
+    sky = IceEnv.buildSky(W, scene); sky.U.pr.value = renderer.getPixelRatio(); if (Q.pr >= 1.5) sky.loadHiRes();   // Máxima y Alta: Tierra en 8K desde el inicio
+    earthshine = new THREE.DirectionalLight(0xc9d6ff, 0.045 * Math.PI); earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE); scene.add(earthshine);
+    scene.environment = IceEnv.envMap(renderer, W); scene.environmentIntensity = 0.35;   // r170 sí aplica el entorno: lo justo para los reflejos
+    buildComposer();
 
     // Terreno: relieve real LOLA + microcráteres, guijarros y variación de albedo
     const geo = new THREE.PlaneGeometry(W.SIZE, W.SIZE, W.N - 1, W.N - 1); geo.rotateX(-Math.PI / 2);
@@ -115,6 +118,9 @@
     terrain = mesh(geo, IceEnv.terrainMaterial(W, SV, false, true)); terrain.castShadow = false;
     scene.add(terrain);
     if (W.real && W.shackleton) IceEnv.buildFar(W, SV, scene, geo.attributes.normal);
+    // La Tierra, en la dirección real (longitud 0 lunar) y algo por encima del horizonte (dentro del rango de libración)
+    sky.placeEarth(IceEnv.farHeight || ((x, z) => W.hAt(x, z)), new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 2, W.station.z));
+    earthshine.position.copy(sky.earthDir).multiplyScalar(W.SIZE);
     detailUpd = IceEnv.detailTerrain(W, geo, SV, scene);   // terreno detallado alrededor de la cámara
     grainsUpd = IceEnv.nearGrains(W, scene, detailUpd.heightAt); dustUpd = IceEnv.wheelDust(W, scene);
     tracks = IceEnv.wheelTracks(W, scene);
@@ -129,7 +135,8 @@
     detMesh = new THREE.Mesh(geo, overlay(detTex)); detMesh.renderOrder = 2; scene.add(detMesh);
 
     buildCrystals(); buildBoulders(); updNearRocks = IceEnv.nearRocks(W, scene);
-    buildRover(); buildStation(); buildColony(); buildMarkers(); loadCustomModels();
+    IceEnv.loadScanned(W, scene, location.protocol === 'file:');   // rocas y regolito escaneados (Poly Haven, CC0)
+    buildRover(); buildStation(); buildColony(); buildMarkers(); loadCustomModels(); buildDrillFX();
     IceEnv.patchTree(scene, SV);
     addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
     addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
@@ -183,6 +190,7 @@
       p.set(x, W.hAt(x, z) + k * 0.15, z); m4.compose(p, q, s); rocks.setMatrixAt(n++, m4);
     }
     rocks.count = n; rocks.castShadow = true; rocks.receiveShadow = true; scene.add(rocks);
+    IceEnv.registerRocks(rocks, scene, 0.1);
   }
 
   // ---------- Rover ----------
@@ -233,8 +241,8 @@
     const cart = [];
     for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; cart.push(cyl(0.05, 0.05, 0.2, std(0x50505c), -0.55 + Math.cos(a) * 0.14, 1.36, -0.2 + Math.sin(a) * 0.14, g, 10)); }
     // Luces
-    const head2 = new THREE.SpotLight(0xf2f4ff, 5, 90, 0.6, 0.45, 1.3); head2.position.set(1.15, 1.1, 0); head2.target.position.set(12, -1, 0); g.add(head2, head2.target);
-    const work = new THREE.PointLight(0xe8ecff, 1.0, 9, 1.5); work.position.set(0, 3.3, 0); g.add(work);
+    const head2 = new THREE.SpotLight(0xf2f4ff, 820, 90, 0.6, 0.45, 2); head2.position.set(1.15, 1.1, 0); head2.target.position.set(12, -1, 0); g.add(head2, head2.target);
+    const work = new THREE.PointLight(0xe8ecff, 15, 9, 2); work.position.set(0, 3.3, 0); g.add(work);
     scene.add(g);
     Object.assign(R3, { g, wheels, auger, carriage, head: head2, beacon, cart });
   }
@@ -289,7 +297,7 @@
     const wall = cyl(1.15, 1.15, 1.6, glassM, 0, 1.1, 0, bio, 48); wall.castShadow = false;
     const dome = mesh(new THREE.SphereGeometry(1.15, 40, 16, 0, Math.PI * 2, 0, Math.PI / 2), glassM, 0, 1.9, 0, bio); dome.castShadow = false;
     const ring = mesh(new THREE.TorusGeometry(1.17, 0.04, 8, 48), new THREE.MeshBasicMaterial({ color: 0xf5f6ff }), 0, 1.9, 0, bio); ring.rotation.x = Math.PI / 2;
-    const lamp = new THREE.PointLight(0xffffff, 0.0, 4.5); lamp.position.y = 2.2; bio.add(lamp);
+    const lamp = new THREE.PointLight(0xffffff, 0.0, 4.5, 2); lamp.position.y = 2.2; bio.add(lamp);
     const rock = mesh(new THREE.DodecahedronGeometry(0.42, 1), std(0x7a7a84, { roughness: 1, metalness: 0, flatShading: true }), 0.35, 0.55, 0.2, bio); rock.scale.y = 0.7;
     const mkPoints = (color, size, n) => {
       const geo = new THREE.BufferGeometry(), p = new Float32Array(n * 3);
@@ -338,7 +346,7 @@
     for (let k = 0; k < 4; k++) box(0.06, 2.4, 3.2, metal, 10 + k * 0.5, 1.4, -6, g);
     const wing = new THREE.Group(); wing.position.set(14, 0, 6); wing.rotation.y = -Math.atan2(W.sunDir.z, W.sunDir.x); g.add(wing);
     cyl(0.08, 0.08, 6, metal, 0, 3, 0, wing, 8); box(0.08, 3.2, 4.4, cells, 0, 5.2, 0, wing);
-    const lamp = new THREE.PointLight(0xfff1dc, 1.4, 40, 1.6); lamp.position.set(0, 8, 0); g.add(lamp);
+    const lamp = new THREE.PointLight(0xfff1dc, 360, 40, 2); lamp.position.set(0, 8, 0); g.add(lamp);
     scene.add(g);
     // Tubería sobre soportes: del tanque de la planta al depósito de la colonia, siguiendo el terreno
     const a = ST.tank.getWorldPosition(new THREE.Vector3()), b = new THREE.Vector3(c.x - 6, y0, c.z - 8);
@@ -369,15 +377,21 @@
     const listP = local ? loadScript('assets/models/modelos-locales.js').then(() => Object.keys(window.ICE_EMBED || {}))
       : fetch('assets/models/models.json').then(r => r.ok ? r.json() : []);
     listP.then(list => {
+      const known = (Array.isArray(list) ? list : []).filter(n => ['rover', 'station', 'colony', 'biofilter'].includes(n));
+      loadSet('modelos', 0, known.length || 1); if (!known.length) loadSet('modelos', 1);
       const loader = new THREE.GLTFLoader();
       if (THREE.DRACOLoader) {
-        const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco/'); draco.setDecoderConfig({ type: 'wasm' });
+        const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco170/'); draco.setDecoderConfig({ type: 'wasm' });
         if (local && window.ICE_DRACO) draco._loadLibrary = (url, type) => Promise.resolve(type === 'arraybuffer' ? b64ToBuf(window.ICE_DRACO.wasm) : window.ICE_DRACO.wrapper);
         loader.setDRACOLoader(draco);
       }
       const within = (o, roots) => roots.some(k => { for (let p = o; p; p = p.parent) if (p === k) return true; return false; });
       const hide = (group, keep) => group.traverse(o => { if (o.isMesh && !within(o, keep)) o.visible = false; });
-      const prep = (scn) => scn.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const prep = (scn) => scn.traverse(o => { if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
+        [].concat(o.material).forEach(m => {
+          if (/celda_solar/.test(m.name)) { m.metalness = 0.0; m.roughness = 0.28; m.envMapIntensity = 0.5; m.polygonOffset = true; m.polygonOffsetFactor = -4; m.polygonOffsetUnits = -4; }   // vidrio liso con antirreflejo; por delante del sustrato (la compresión los deja a ~1 mm)
+          if (/vidrio/.test(m.name)) { m.envMapIntensity = 0.4; m.roughness = Math.max(m.roughness, 0.12); }
+        }); });
       const targets = {
         rover: (scn) => {
           const wheels = [], drills = [];
@@ -393,12 +407,12 @@
       };
       (Array.isArray(list) ? list : []).forEach(name => {
         if (!targets[name]) return;
-        const onLoad = g => { prep(g.scene); targets[name](g.scene); IceEnv.patchTree(g.scene, SV); console.info(`Modelo de Blender cargado: ${name}.glb`); };
-        const onErr = e => console.warn(`No se pudo cargar el modelo ${name}; se usa el modelo procedural.`, e || '');
+        const onLoad = g => { prep(g.scene); targets[name](g.scene); IceEnv.patchTree(g.scene, SV); loadAdd('modelos'); console.info(`Modelo de Blender cargado: ${name}.glb`); };
+        const onErr = e => { loadAdd('modelos'); console.warn(`No se pudo cargar el modelo ${name}; se usa el modelo procedural.`, e || ''); };
         if (local) { try { loader.parse(b64ToBuf(window.ICE_EMBED[name]), '', onLoad, onErr); } catch (e) { onErr(e); } }
         else loader.load(`assets/models/${name}.glb`, onLoad, undefined, onErr);
       });
-    }).catch(() => console.warn('Modelos de Blender no disponibles; se usan los modelos procedurales.'));
+    }).catch(() => { loadSet('modelos', 1, 1); console.warn('Modelos de Blender no disponibles; se usan los modelos procedurales.'); });
   }
 
   // ---------- Animación del rover de Blender ----------
@@ -417,6 +431,7 @@
   function setupRoverAnim(scn) {
     const get = n => scn.getObjectByName(n);
     const piv = n => { const o = get(n); if (o) { o.userData.q0 = o.quaternion.clone(); o.userData.p0 = o.position.clone(); } return o; };
+    RA.scn = scn;
     Object.assign(RA, {
       az: piv('piv_brazo_azimut'), sh: piv('piv_brazo_hombro'), el: piv('piv_brazo_codo'), wr: piv('piv_brazo_muneca'),
       pan: piv('piv_mastil_giro'), tilt: piv('piv_mastil_cabeceo'), car: piv('piv_carrusel'), head: piv('piv_taladro_carro'),
@@ -434,7 +449,7 @@
     const strip = (x, y, z, w, h, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), blue); m.position.set(x, z, -y); R3.g.add(m); return m; };
     RA.blue = [strip(0, 0.622, 0.95, 1.25, 0.028, 0.012), strip(0, -0.622, 0.95, 1.25, 0.028, 0.012), strip(1.08, 0.6, 0.9, 0.014, 0.075, 0.04), strip(1.08, -0.6, 0.9, 0.014, 0.075, 0.04),
       strip(-1.3, 0.42, 1.0, 0.014, 0.025, 0.32), strip(-1.3, -0.42, 1.0, 0.014, 0.025, 0.32), strip(0.75, -0.32, 2.66, 0.16, 0.012, 0.16)];
-    RA.glow = [new THREE.PointLight(0x5266eb, 0.9, 5, 2), new THREE.PointLight(0x5266eb, 0.9, 5, 2)];
+    RA.glow = [new THREE.PointLight(0x5266eb, 2.4, 5, 2), new THREE.PointLight(0x5266eb, 2.4, 5, 2)];
     RA.glow[0].position.set(0, 0.35, -0.85); RA.glow[1].position.set(0, 0.35, 0.85); RA.glow.forEach(l => R3.g.add(l));
     RA.leds.forEach(m => { m.emissive = new THREE.Color(0xdfe8ff); });
     RA.beacon.forEach(m => { m.emissive = new THREE.Color(0x5266eb); });
@@ -507,9 +522,9 @@
     if (alive) { RA.panA = approach(RA.panA, pan, 0.9, dt); RA.tiltA = approach(RA.tiltA, tilt, 0.6, dt); }
     rotTo(RA.pan, AX_Z, RA.panA); rotTo(RA.tilt, AX_Y, RA.tiltA);
     // --- luces: faros según la oscuridad; baliza parpadea al moverse o perforar
-    const dark = R3.head && R3.head.intensity > 1;
+    const dark = R3.head && R3.head.intensity > 300;
     RA.leds.forEach(m => { m.emissiveIntensity = alive ? (dark ? 3.2 : 1.6) : 0.05; });
-    if (RA.blue) { const k = alive ? 0.8 + 0.2 * Math.sin(t * 2.4) : 0.05; RA.blue[0].material.color.setRGB(0.4 * k, 0.95 * k, 3.2 * k); RA.glow.forEach(l => { l.intensity = alive ? 0.9 * k : 0; }); }
+    if (RA.blue) { const k = alive ? 0.8 + 0.2 * Math.sin(t * 2.4) : 0.05; RA.blue[0].material.color.setRGB(0.4 * k, 0.95 * k, 3.2 * k); RA.glow.forEach(l => { l.intensity = alive ? 2.4 * k : 0; }); }
     const busy = Math.abs(R.speed) > 0.005 || task === 'drill' || RA.seq;
     RA.beacon.forEach(m => { m.emissiveIntensity = !alive ? 0 : busy ? (Math.sin(t * 6) > 0 ? 4 : 0.3) : 1.6; });
   }
@@ -558,7 +573,7 @@
     STA.mLedSt = mats.ICW_LED; STA.mBeacon = mats.ICW_baliza;
     if (STA.mLedSt) STA.mLedSt.emissive = new THREE.Color(0x5266eb);
     if (STA.mBeacon) STA.mBeacon.emissive = new THREE.Color(0x5266eb);
-    STA.padLight = new THREE.PointLight(0x5266eb, 1.0, 10, 2); STA.padLight.position.copy(scn.localToWorld(new THREE.Vector3(10, 0.6, 8))); scene.add(STA.padLight);
+    STA.padLight = new THREE.PointLight(0x5266eb, 14, 10, 2); STA.padLight.position.copy(scn.localToWorld(new THREE.Vector3(10, 0.6, 8))); scene.add(STA.padLight);
     // --- Ventanas al interior del proceso ---
     const B2T = (x, y, z) => scn.localToWorld(new THREE.Vector3(x, z, -y));      // coordenadas de Blender → mundo
     Object.assign(STA, {
@@ -696,7 +711,7 @@
     R3.auger.position.y = (R3.augerBase ?? 0.3) + (drilling || R.drillDepth > 0 ? -0.28 - R.drillDepth : 0);
     R3.carriage.position.y = drilling ? 1.6 - Math.min(0.9, R.drillDepth * 0.9) : 1.6;
     if (drilling) R3.auger.rotation.y = t * 9;
-    R3.head.intensity = W.envT(R.x, R.z) < 120 ? 2.2 : 0.5;
+    R3.head.intensity = W.envT(R.x, R.z) < 120 ? 820 : 190;
     R3.beacon.material.color.setHex(R.task === 'dead' ? 0x444455 : COBALT);
     const fill = Math.round(Math.min(1, (R.cargoReg + R.cargoIce) / P.cargoCap) * 6);
     R3.cart.forEach((c, k) => c.material.color.setHex(k < fill ? 0xdfe6ff : 0x50505c));
@@ -712,11 +727,14 @@
     const tr = S.trail, arr = trailGeo.attributes.position.array, n = Math.min(tr.length, 4000);
     for (let i = 0; i < n; i++) { const [x, z] = tr[tr.length - n + i]; arr[i * 3] = x; arr[i * 3 + 1] = W.hAt(x, z) + 0.25; arr[i * 3 + 2] = z; }
     trailGeo.attributes.position.needsUpdate = true; trailGeo.setDrawRange(0, n);
-    if (S.holes.length < holesDrawn) { holesGroup.clear(); holesDrawn = 0; }
+    if (S.holes.length < holesDrawn) { holesGroup.clear(); holesDrawn = 0; DR.rings = []; (DR.boreMeshes || []).forEach(m => scene.remove(m)); DR.boreMeshes = []; }
     while (holesDrawn < S.holes.length) {
       const hdat = S.holes[holesDrawn++], y = W.hAt(hdat.x, hdat.z);
-      const m = new THREE.Mesh(new THREE.CircleGeometry(0.55, 18), new THREE.MeshBasicMaterial({ color: 0x050508 })); m.rotation.x = -Math.PI / 2; m.position.set(hdat.x, y + 0.08, hdat.z); holesGroup.add(m);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 18), new THREE.MeshBasicMaterial({ color: hdat.w >= P.iceThreshold ? 0xdfe6ff : 0x70707d })); ring.rotation.x = -Math.PI / 2; ring.position.set(hdat.x, y + 0.09, hdat.z); holesGroup.add(ring);
+      const bp = DR.bores[holesDrawn - 1] || hdat, by = detailUpd.heightAt ? detailUpd.heightAt(bp.x, bp.z) : W.hAt(bp.x, bp.z);
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.05, 24), new THREE.MeshBasicMaterial({ color: 0x010102, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })); m.rotation.x = -Math.PI / 2; m.position.set(bp.x, by + 0.02, bp.z); scene.add(m);   // pozo de 10 cm
+      const lip = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.11, 24), new THREE.MeshBasicMaterial({ color: 0x0c0c10, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 })); lip.rotation.x = -Math.PI / 2; lip.position.copy(m.position); lip.position.y -= 0.002; scene.add(lip);   // borde de suelo removido
+      (DR.boreMeshes = DR.boreMeshes || []).push(m, lip);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 18), new THREE.MeshBasicMaterial({ color: hdat.w >= P.iceThreshold ? 0xdfe6ff : 0x70707d })); ring.rotation.x = -Math.PI / 2; ring.position.set(hdat.x, y + 0.09, hdat.z); holesGroup.add(ring); DR.rings.push(ring);
     }
   }
 
@@ -767,7 +785,7 @@
       o.pts.material.opacity = dying ? 0.4 : st.startsWith('Latente') ? 0.6 : 0.95;
     });
     BIO.lichen.count = Math.min(140, Math.round(B.N[2] / 100 * 140 * 4));
-    BIO.lamp.intensity = P.light && P.chamber === 'inside' ? 1.0 : 0;
+    BIO.lamp.intensity = P.light && P.chamber === 'inside' ? 4.7 : 0;
     BIO.ring.material.color.setHex(B.T < 0 ? 0x9fb4ff : B.T > 35 ? 0xffe2cc : 0xf5f6ff);
     crystals.material.emissiveIntensity = 0.3 + 0.08 * Math.sin(t * 1.6);
   }
@@ -805,6 +823,12 @@
       const { want, look } = chaseWant();
       camera.position.lerp(want, 1 - Math.exp(-cdt * 5));
       controls.target.lerp(look, 1 - Math.exp(-cdt * 8)); camera.lookAt(controls.target);
+    } else if (camMode === 'tierra') {
+      // Teleobjetivo hacia la Tierra desde la estación: la Tierra se ve grande sobre el horizonte comprimido (como en las fotos reales)
+      const st = W.station, bx = st.x - 15, bz = st.z + 6, pos = new THREE.Vector3(bx, W.hAt(bx, bz) + 1.8, bz);   // a un lado de la estación, con vista despejada
+      const fwd = sky.earthDir.clone().applyAxisAngle(UP, tele.yaw); const rt = new THREE.Vector3().crossVectors(fwd, UP).normalize(); fwd.applyAxisAngle(rt, tele.pitch);
+      camera.position.copy(pos); controls.target.copy(pos).addScaledVector(fwd, 60); camera.lookAt(controls.target);
+      if (Math.abs(camera.fov - tele.fov) > 1e-3) { camera.fov = tele.fov; camera.updateProjectionMatrix(); }
     } else if (camMode === 'rovercam') {
       // cámara del mástil: se mueve con el cabezal (busca al explorar, mira al suelo al medir, vigila el taladro)
       let pos, fwd;
@@ -827,14 +851,15 @@
       controls.update();
       const gh = W.hAt(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
     }
-    const focusD = camMode === 'rovercam' ? Math.min(rcam.dist, 160) : camera.position.distanceTo(controls.target);
+    const focusD = camMode === 'rovercam' ? Math.min(rcam.dist, 160) : camMode === 'tierra' ? 1e9 : camera.position.distanceTo(controls.target);
     IceEnv.DETAIL.oU.value.set(Math.round(controls.target.x), Math.round(controls.target.z));   // origen cercano: precisión en el zoom
-    detailUpd(controls.target, focusD);
-    grainsUpd(controls.target.x, controls.target.z, focusD < 30);
-    if (camMode === 'rovercam') { const vis = 2 * rcam.dist * Math.tan(camera.fov * Math.PI / 360); IceEnv.updateSun(sun, W, controls.target, Math.max(vis * 1.6, 2.5), rcam.zoom > 3 ? 2.5 : 16); }   // con zoom: sombras concentradas en lo que se ve
+    detailUpd(controls.target, Q.detail ? focusD : 1e9);
+    grainsUpd(controls.target.x, controls.target.z, Q.grains && focusD < 30);
+    if (camMode === 'tierra') IceEnv.updateSun(sun, W, camera.position, 120);
+    else if (camMode === 'rovercam') { const vis = 2 * rcam.dist * Math.tan(camera.fov * Math.PI / 360); IceEnv.updateSun(sun, W, controls.target, Math.max(vis * 1.6, 2.5), rcam.zoom > 3 ? 2.5 : 16); }   // con zoom: sombras concentradas en lo que se ve
     else IceEnv.updateSun(sun, W, controls.target, camera.position.distanceTo(controls.target));
     updNearRocks(controls.target.x, controls.target.z);
-    sky.update(camera);
+    sky.update(camera, cdt, S.t);
   }
 
   function updateLabels() {
@@ -916,7 +941,13 @@
     el.addEventListener('pointerleave', () => { tip.hidden = true; });
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY };
       if (camMode === 'rover' && !destMode) { chase.drag = true; chase.px = ev.clientX; chase.py = ev.clientY; }
-      if (camMode === 'rovercam' && !destMode) { rcam.drag = true; rcam.px = ev.clientX; rcam.py = ev.clientY; } });
+      if (camMode === 'rovercam' && !destMode) { rcam.drag = true; rcam.px = ev.clientX; rcam.py = ev.clientY; }
+      if (camMode === 'tierra' && !destMode) { tele.drag = true; tele.px = ev.clientX; tele.py = ev.clientY; } });
+    window.addEventListener('pointermove', ev => {
+      if (!tele.drag) return; const k = 0.0045 * tele.fov / 46;
+      tele.yaw -= (ev.clientX - tele.px) * k; tele.pitch = Math.max(-0.4, Math.min(0.6, tele.pitch - (ev.clientY - tele.py) * k)); tele.px = ev.clientX; tele.py = ev.clientY;
+    });
+    window.addEventListener('pointerup', () => { tele.drag = false; });
     window.addEventListener('pointermove', ev => {
       if (!rcam.drag) return;
       const k = 0.0045 / rcam.zoom;                                   // con más zoom, giro más fino
@@ -924,7 +955,7 @@
       rcam.px = ev.clientX; rcam.py = ev.clientY;
     });
     window.addEventListener('pointerup', () => { rcam.drag = false; });
-    el.addEventListener('dblclick', () => { if (camMode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 }); });
+    el.addEventListener('dblclick', () => { if (camMode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 }); if (camMode === 'tierra') Object.assign(tele, { yaw: 0, pitch: 0, fov: 6.5 }); });
     window.addEventListener('pointermove', ev => {
       if (!chase.drag) return;
       chase.yaw -= (ev.clientX - chase.px) * 0.006; chase.pitch = Math.max(0.05, Math.min(1.25, chase.pitch + (ev.clientY - chase.py) * 0.004));
@@ -932,10 +963,12 @@
     });
     window.addEventListener('pointerup', () => { if (chase.drag) { chase.drag = false; chase.lastDrag = performance.now(); } });
     el.addEventListener('wheel', ev => {
+      if (camMode === 'tierra') { ev.preventDefault(); tele.fov = Math.max(2, Math.min(40, tele.fov * (ev.deltaY > 0 ? 1.15 : 1 / 1.15))); return; }
       if (camMode === 'rovercam') { ev.preventDefault(); rcam.zoom = Math.max(1, Math.min(60, rcam.zoom * (ev.deltaY > 0 ? 1 / 1.18 : 1.18))); updateRoverHUD(); return; }
       if (camMode !== 'rover') return; ev.preventDefault(); chase.dist = Math.max(4, Math.min(45, chase.dist * (1 + Math.sign(ev.deltaY) * 0.12)));
     }, { passive: false });
     el.addEventListener('pointerup', ev => {
+      if (EXP.on && ev.button === 0 && down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) <= 5) { expPick(ev); return; }
       if (!destMode || ev.button !== 0 || !down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
       const p = pickTerrain(ev); if (!p) return;
       const r = el.getBoundingClientRect();
@@ -949,7 +982,7 @@
     $('#sim-dest-btn').addEventListener('click', () => setDestMode(!destMode));
     window.addEventListener('keydown', e => {
       if (!visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.code === 'KeyE' && !e.repeat) { setDestMode(!destMode); e.preventDefault(); }
+      if (e.code === 'KeyE' && !e.repeat && !EXP.on) { setDestMode(!destMode); e.preventDefault(); }
       else if (e.code === 'Escape' && destMode) setDestMode(false);
     });
   }
@@ -957,20 +990,492 @@
   function setCamLens(mode) {
     const near = mode === 'rovercam' ? 0.08 : 0.25, fov = mode === 'rovercam' ? 58 : 46;
     if (camera.near !== near || camera.fov !== fov) { camera.near = near; camera.fov = fov; camera.updateProjectionMatrix(); }
-    controls.enabled = !(mode === 'rover' || mode === 'rovercam');
+    controls.enabled = !(mode === 'rover' || mode === 'rovercam' || mode === 'tierra');
     $('#sim-rcam').hidden = mode !== 'rovercam';
   }
   function setCam(mode) {
+    if (mode !== 'despiece') { if (EXP.on) { EXP.prev = null; setExplode(false); } else if (EXP.k > 0) EXP.prev = null; }   // otra cámara: se cierra el despiece sin volver a la anterior
     camMode = mode;
     $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === mode)));
     setCamLens(mode);
     if (mode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 });
+    if (mode === 'tierra') Object.assign(tele, { yaw: 0, pitch: 0, fov: 6.5 });
     if (mode === 'rover') { Object.assign(chase, { yaw: 0, pitch: 0.3, dist: 9 }); const { want, look } = chaseWant(); camera.position.copy(want); controls.target.copy(look); camera.lookAt(look); }
     if (mode === 'station') { const t = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0)); controls.target.copy(t); camera.position.set(t.x - 2, t.y + 5, t.z + 13); }
     if (mode === 'overview') { const k = W.SIZE / 600; controls.target.set(W.station.x * 0.3, 0, W.station.z * 0.3); camera.position.set(-260 * k, 330 * k, 380 * k); }
     if (mode === 'colony') { const c = COL.g.position; controls.target.set(c.x, c.y + 3, c.z); camera.position.set(c.x - 30, c.y + 22, c.z + 38); }
-    $('#sim-core').hidden = mode !== 'rover';
+    if (mode === 'despiece') {                                              // órbita alrededor del rover, vista de tres cuartos
+      const R = S.rover, c = R3.g.position.clone().add(new THREE.Vector3(0, 1.0, 0)), a = R.heading + 2.3;
+      controls.target.copy(c); camera.position.set(c.x + Math.cos(a) * 8.6, c.y + 3.4, c.z + Math.sin(a) * 8.6);
+    }
+    setToolUI();
     updateProcess(true);
+  }
+
+  // =====================================================================
+  // PERFORACIÓN EN ACCIÓN: corte del subsuelo, barrena, virutas y montón de detritos
+  // =====================================================================
+  // Mientras el rover perfora se abre en el suelo una ventana en corte (ilustrativa) junto a la broca: se ven la capa seca,
+  // la capa con hielo (espesor y % de hielo reales del modelo en ese punto), el pozo partido por la mitad y la barrena girando.
+  // Técnica: la boca del corte marca el stencil; paredes, pozo, barrena y virutas internas solo se dibujan dentro de ella.
+  const DR = { act: false, axis: new THREE.Vector3(), yaw: 0, gy: 0, dry: 0.2, ice: 0, vis: 0, endT: 0, holes: -1, bores: [], rings: [], ringT: 0 };
+  const CUT_W = 1.0, CUT_D = 1.05, CUT_H = 1.3, BORE_R = 0.066, LUNA_G = 1.62;
+  const INSIDE = { transparent: true, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc, stencilFail: THREE.KeepStencilOp, stencilZFail: THREE.KeepStencilOp, stencilZPass: THREE.KeepStencilOp };
+  const STRATA_VS = 'varying vec3 vW; varying vec3 vN; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }';
+  const STRATA_FS = `uniform float gy; uniform float dry; uniform float ice; uniform float dark; uniform vec2 org; varying vec3 vW; varying vec3 vN;
+    float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+    void main(){
+      float d = gy - vW.y;                                                     // profundidad bajo la superficie (m)
+      vec2 L = vW.xz - org;                                                    // coordenadas locales: sin pérdida de precisión en el ruido
+      vec2 p = abs(vN.y) > 0.5 ? L : vec2(dot(L, normalize(vec2(-vN.z, vN.x) + 1e-5)), -d);
+      float g1 = vn(p * 55.0), g2 = vn(p * 170.0), peb = vn(p * 32.0 + 7.0);
+      // capa seca: regolito suelto, gris claro, con guijarros
+      vec3 dryC = vec3(0.33, 0.33, 0.335) * (0.7 + 0.42 * g1 + 0.2 * g2);
+      dryC *= 1.0 - 0.5 * smoothstep(0.8, 0.84, peb);
+      // capa con hielo: regolito cementado por el hielo (más oscuro) con granos y venas de hielo según el % real
+      vec3 wetC = vec3(0.2, 0.205, 0.225) * (0.75 + 0.35 * g1 + 0.2 * g2);
+      float grains = smoothstep(0.985 - 0.014 * ice, 1.0, vn(p * 125.0 + 3.0));
+      // lentes de hielo: finas, casi horizontales y cortadas; solo en las paredes
+      float vr = 1.0 - abs(vn(p * vec2(1.6, 11.0) + 11.0) * 2.0 - 1.0);
+      float veins = smoothstep(1.0 - 0.0035 * ice, 1.0, vr) * smoothstep(0.5, 0.62, vn(p * vec2(3.0, 6.0) + 5.0)) * step(2.0, ice) * step(abs(vN.y), 0.5);
+      float iceK = clamp(grains * 1.4 + veins, 0.0, 1.0);
+      float layer = smoothstep(dry - 0.012, dry + 0.012, d);
+      vec3 col = mix(dryC, mix(wetC, vec3(0.74, 0.86, 1.0), iceK), layer);
+      col *= 1.0 - 0.4 * exp(-pow((d - dry) / 0.01, 2.0));                    // contacto entre las capas
+      col = mix(col, vec3(0.43, 0.43, 0.44), smoothstep(0.035, 0.0, d) * 0.6); // borde superior polvoriento
+      float lit = (0.5 + 0.5 * exp(-d * 1.3)) * (0.82 + 0.18 * abs(vN.x - vN.z)) * (abs(vN.y) > 0.5 ? 0.6 : 1.0); // foco de trabajo: más oscuro en lo hondo y en el fondo
+      vec3 c = col * lit * dark * 0.72;
+      c += vec3(0.22, 0.5, 1.0) * iceK * layer * 0.22 * dark;                  // realce del hielo para verlo en la sombra permanente
+      gl_FragColor = vec4(c, 1.0);
+    }`;
+  function strataMat(dark, U) {
+    return new THREE.ShaderMaterial(Object.assign({ uniforms: { gy: U.gy, dry: U.dry, ice: U.ice, org: U.org, dark: { value: dark } }, vertexShader: STRATA_VS, fragmentShader: STRATA_FS,
+      side: THREE.BackSide, depthFunc: THREE.AlwaysDepth, depthWrite: true }, INSIDE));
+  }
+  function buildDrillFX() {
+    const U = { gy: { value: 0 }, dry: { value: 0.2 }, ice: { value: 0 }, org: { value: new THREE.Vector2() } }; DR.U = U;
+    const g = new THREE.Group(); g.visible = false; scene.add(g); DR.g = g;
+    // boca del corte: invisible, solo marca el stencil donde se ve el suelo
+    DR.open = new THREE.Mesh(new THREE.PlaneGeometry(CUT_W, CUT_D, 6, 4).rotateX(-Math.PI / 2).translate(0, 0, CUT_D / 2),
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, transparent: true, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp }));
+    DR.open.renderOrder = 1000;
+    // paredes y fondo (caja vista por dentro) y pozo partido por la mitad en la pared del fondo
+    DR.box = new THREE.Mesh(new THREE.BoxGeometry(CUT_W, CUT_H, CUT_D), strataMat(1, U)); DR.box.position.set(0, -CUT_H / 2 + 0.06, CUT_D / 2); DR.box.renderOrder = 1001;
+    DR.bore = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true, Math.PI / 2, Math.PI), strataMat(0.62, U)); DR.bore.renderOrder = 1002;
+    // virutas que suben por la hélice de la barrena (dentro del pozo)
+    const NI = 70; DR.inPos = new Float32Array(NI * 3); DR.inCol = new Float32Array(NI * 3);
+    const ig = new THREE.BufferGeometry(); ig.setAttribute('position', new THREE.BufferAttribute(DR.inPos, 3)); ig.setAttribute('color', new THREE.BufferAttribute(DR.inCol, 3));
+    DR.inPts = new THREE.Points(ig, new THREE.PointsMaterial(Object.assign({ size: 0.022, vertexColors: true, sizeAttenuation: true }, INSIDE))); DR.inPts.renderOrder = 1004; DR.inPts.frustumCulled = false;
+    g.add(DR.open, DR.box, DR.bore, DR.inPts);
+    // virutas despedidas desde la boca del pozo (parábolas con la gravedad lunar, sin aire que las frene)
+    const NE = 220; DR.ej = Array.from({ length: NE }, () => ({ on: false, p: new THREE.Vector3(), v: new THREE.Vector3(), ice: false }));
+    DR.ejPos = new Float32Array(NE * 3); DR.ejCol = new Float32Array(NE * 3);
+    const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(DR.ejPos, 3)); eg.setAttribute('color', new THREE.BufferAttribute(DR.ejCol, 3));
+    DR.ejPts = new THREE.Points(eg, new THREE.PointsMaterial({ size: 0.028, vertexColors: true, sizeAttenuation: true })); DR.ejPts.frustumCulled = false; scene.add(DR.ejPts);
+    DR.emit = 0; DR.pile = null; newPile();
+    const tag = document.createElement('div'); tag.className = 'cut-tag'; tag.hidden = true; $('#sim-view').appendChild(tag); DR.tag = tag;
+  }
+  function newPile() {                                                        // montón de detritos alrededor del pozo
+    const m = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 }), 520);
+    m.count = 0; m.castShadow = false; m.receiveShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(520 * 3), 3);
+    scene.add(m); IceEnv.patchTree(m, SV); DR.pile = m;
+  }
+  const _dq = new THREE.Quaternion(), _de = new THREE.Euler(), _ds = new THREE.Vector3(), _dm = new THREE.Matrix4(), _dc = new THREE.Color(), _dv = new THREE.Vector3();
+  const groundH = (x, z) => (detailUpd.heightAt ? detailUpd.heightAt(x, z) : W.hAt(x, z));
+  function placeCut() {                                                       // la pared del fondo pasa por el eje de la broca y mira a la cámara
+    const dx = camera.position.x - DR.axis.x, dz = camera.position.z - DR.axis.z;
+    DR.yaw = Math.atan2(dx, dz); DR.g.position.set(DR.axis.x, DR.gy, DR.axis.z); DR.g.rotation.set(0, DR.yaw, 0); DR.g.updateMatrixWorld(true);
+    const pa = DR.open.geometry.attributes.position;                          // la boca se ciñe al relieve
+    for (let i = 0; i < pa.count; i++) { _dv.set(pa.getX(i), 0, pa.getZ(i)).applyMatrix4(DR.g.matrixWorld); pa.setY(i, groundH(_dv.x, _dv.z) - DR.gy + 0.012); }
+    pa.needsUpdate = true; DR.open.geometry.computeBoundingSphere();
+  }
+  function augerClone() {                                                     // copia de la barrena que se dibuja dentro del corte
+    if (DR.augSrc === R3.auger) return;
+    if (DR.aug) { scene.remove(DR.aug); DR.aug = null; }
+    DR.augSrc = R3.auger; if (!R3.auger) return;
+    const c = R3.auger.clone(true); c.matrixAutoUpdate = false;
+    c.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.receiveShadow = false; o.renderOrder = 1003;
+      o.material = [].concat(o.material).map(m => { const k = m.clone(); k.onBeforeCompile = m.onBeforeCompile; k.customProgramCacheKey = m.customProgramCacheKey; return Object.assign(k, INSIDE); });
+      if (o.material.length === 1) o.material = o.material[0]; });
+    scene.add(c); DR.aug = c;
+  }
+  function updateDrillFX(t, dt) {
+    if (!DR.g) return;
+    const R = S.rover, drilling = R.task === 'drill';
+    augerClone();
+    // perforación terminada: el montón queda en su sitio, con el pozo de 10 cm
+    if (DR.holes < 0) DR.holes = S.totals.holes;
+    if (S.totals.holes < DR.holes) { DR.bores = []; DR.holes = S.totals.holes; DR.pile.count = 0; (DR.piles || []).forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); DR.piles = []; }
+    if (S.totals.holes > DR.holes) { DR.holes = S.totals.holes; DR.bores.push({ x: DR.axis.x, z: DR.axis.z }); DR.pile.instanceMatrix.needsUpdate = true; (DR.piles = DR.piles || []).push(DR.pile); newPile(); DR.endT = t; DR.vis = P.drillDepth; }
+    if (drilling && !DR.act && R3.auger) {                                    // empieza una perforación
+      R3.auger.updateWorldMatrix(true, false); R3.auger.getWorldPosition(DR.axis);
+      DR.gy = groundH(DR.axis.x, DR.axis.z); DR.dry = W.dryLayer(R.x, R.z); DR.ice = W.iceWt(R.x, R.z);
+      DR.U.gy.value = DR.gy; DR.U.org.value.set(DR.axis.x, DR.axis.z); DR.U.dry.value = DR.dry; DR.U.ice.value = DR.ice; DR.act = true; DR.endT = 1e9; placeCut();
+    }
+    if (DR.act && !drilling) {                                                // se cierra al alejarse el rover o a los 4 s
+      if (DR.endT > t) DR.endT = t;
+      if (t - DR.endT > 4 || Math.hypot(R.x - DR.axis.x, R.z - DR.axis.z) > 6) DR.act = false;
+    }
+    if (drilling) DR.vis = R.drillDepth;
+    const camD = camera.position.distanceTo(DR.axis), show = DR.act && camD < 70 && !EXP.on;
+    DR.g.visible = show; if (DR.aug) DR.aug.visible = show && drilling;
+    if (show) {
+      _dv.set(camera.position.x - DR.axis.x, 0, camera.position.z - DR.axis.z).normalize();
+      if (_dv.x * Math.sin(DR.yaw) + _dv.z * Math.cos(DR.yaw) < -0.35) placeCut();   // la cámara pasó al otro lado
+      const dd = Math.max(0.02, DR.vis);
+      DR.bore.scale.set(BORE_R, dd + 0.06, BORE_R); DR.bore.position.set(0, 0.06 - (dd + 0.06) / 2, 0);
+      if (DR.aug) { R3.auger.updateWorldMatrix(true, true); DR.aug.matrix.copy(R3.auger.matrixWorld); }
+      // virutas subiendo por la hélice: su color depende de la capa de donde salen
+      const n = DR.inPos.length / 3, iceF = Math.min(0.85, Math.max(0.2, DR.ice / 9));
+      for (let i = 0; i < n; i++) {
+        const s = ((i / n) + t * 0.45) % 1, depth = drilling ? dd * (1 - s) : -1, a = s * 26 + t * 9 + i;
+        const lp = _dv.set(Math.cos(a) * 0.046, depth < 0 ? 50 : -depth, Math.sin(a) * 0.046);
+        DR.inPos[i * 3] = lp.x; DR.inPos[i * 3 + 1] = lp.y; DR.inPos[i * 3 + 2] = lp.z;
+        const icy = depth > DR.dry && ((i * 7919) % 100) / 100 < iceF;
+        _dc.setRGB(icy ? 0.75 : 0.36, icy ? 0.86 : 0.35, icy ? 1.0 : 0.33); DR.inCol[i * 3] = _dc.r; DR.inCol[i * 3 + 1] = _dc.g; DR.inCol[i * 3 + 2] = _dc.b;
+      }
+      DR.inPts.geometry.attributes.position.needsUpdate = true; DR.inPts.geometry.attributes.color.needsUpdate = true;
+      // etiqueta del corte
+      _dv.copy(DR.axis); _dv.y = DR.gy + 0.25; _dv.project(camera);
+      const host = $('#sim-view'), vis = _dv.z < 1 && camD < 40;
+      DR.tag.hidden = !vis;
+      if (vis) { DR.tag.style.transform = `translate(${(_dv.x * 0.5 + 0.5) * host.clientWidth}px, ${(-_dv.y * 0.5 + 0.5) * host.clientHeight}px) translate(-50%, -100%)`;
+        set_(DR.tag, `Corte ilustrativo · capa seca ${fmt(DR.dry * 100, 0)} cm · hielo ${fmt(DR.ice, 1)} %${drilling ? ` · broca a ${fmt(R.drillDepth, 2)} m` : ''}`); }
+    } else DR.tag.hidden = true;
+    // virutas despedidas: salen mientras gira la broca y caen formando el montón
+    if (drilling && S.running) DR.emit += dt * 55;
+    const icyNow = drilling && R.drillDepth > DR.dry, iceF2 = Math.min(0.8, Math.max(0.15, DR.ice / 9));
+    for (const e of DR.ej) {
+      if (!e.on && DR.emit >= 1) {
+        DR.emit -= 1; e.on = true; const a = Math.random() * 6.283, sp = 0.1 + Math.random() * 0.35;
+        e.p.set(DR.axis.x + Math.cos(a) * 0.05, DR.gy + 0.03, DR.axis.z + Math.sin(a) * 0.05); e.v.set(Math.cos(a) * sp, 0.12 + Math.random() * 0.45, Math.sin(a) * sp);   // la barrena las empuja hacia fuera, a poca altura
+        e.ice = icyNow && Math.random() < iceF2;
+      }
+      if (e.on) {
+        e.v.y -= LUNA_G * dt; e.p.addScaledVector(e.v, dt);
+        const gh = groundH(e.p.x, e.p.z);
+        if (e.p.y <= gh) {                                                    // cae: se suma al montón
+          e.on = false; const pile = DR.pile;
+          if (pile.count < pile.instanceMatrix.count) {
+            let ox = e.p.x - DR.axis.x, oz = e.p.z - DR.axis.z; const r = Math.hypot(ox, oz), rr = Math.min(r, 0.45) / Math.max(r, 1e-4); ox *= rr; oz *= rr;
+            const sz = 0.006 + Math.random() * 0.014;
+            _de.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); _dq.setFromEuler(_de); _ds.set(sz, sz * 0.7, sz);
+            const x = DR.axis.x + ox, z = DR.axis.z + oz;
+            _dm.compose(_dv.set(x, groundH(x, z) + sz * 0.3, z), _dq, _ds); pile.setMatrixAt(pile.count, _dm);
+            pile.setColorAt(pile.count, e.ice ? _dc.setRGB(0.82, 0.9, 1.0) : _dc.setRGB(0.42, 0.42, 0.43)); pile.count++;
+            pile.instanceMatrix.needsUpdate = true; pile.instanceColor.needsUpdate = true;
+          }
+        }
+      }
+    }
+    for (let i = 0; i < DR.ej.length; i++) { const e = DR.ej[i];
+      DR.ejPos[i * 3] = e.on ? e.p.x : 0; DR.ejPos[i * 3 + 1] = e.on ? e.p.y : -1e5; DR.ejPos[i * 3 + 2] = e.on ? e.p.z : 0;
+      _dc.setRGB(e.ice ? 0.85 : 0.5, e.ice ? 0.93 : 0.49, e.ice ? 1.0 : 0.46); DR.ejCol[i * 3] = _dc.r; DR.ejCol[i * 3 + 1] = _dc.g; DR.ejCol[i * 3 + 2] = _dc.b; }
+    DR.ejPts.geometry.attributes.position.needsUpdate = true; DR.ejPts.geometry.attributes.color.needsUpdate = true;
+    // marcas de perforación (anillos del mapa): solo se ven de lejos, de cerca queda el pozo real
+    if (t - DR.ringT > 0.5) { DR.ringT = t; DR.rings.forEach(r => { r.visible = camera.position.distanceTo(r.position) > 30; }); }
+  }
+  function set_(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+
+  // =====================================================================
+  // HERRAMIENTAS: despiece del rover (X), mapa con ruta y puntos de paso (M), centro de control (G)
+  // =====================================================================
+  // ---------- Despiece interactivo del rover de Blender ----------
+  // Cada pieza de primer nivel del modelo se aparta de su sitio según su grupo. Las descripciones son del diseño propio
+  // de ICEWISE; las cifras (300 W, 5 kWh, 1 m, 8 cartuchos) son las que usa el motor de la simulación.
+  const EXP_GROUPS = [
+    { id: 'paneles', re: /^(panel_solar|soporte_panel|soporte_trasero|DET-bisagra)/, h: 0.45, v: 1.15, name: 'Paneles solares',
+      d: 'Tres alas de células solares (300 W en la simulación). Cargan la batería mientras el rover está al sol; en la sombra no producen nada.' },
+    { id: 'antenas', re: /^(antena|DET-cable_antena)/, h: 0.75, v: 0.95, name: 'Comunicaciones',
+      d: 'Antena orientable de alta ganancia y antena UHF. Envían los datos a la estación cuando hay línea de vista; el relieve puede bloquearla.' },
+    { id: 'mastil', re: /^(mastil|piv_mastil|DET-cable_mastil|DET-sensor_solar)/, h: 0.25, v: 1.3, name: 'Mástil con cámaras',
+      d: 'Cámaras de navegación en un cabezal que gira e inclina: busca al explorar, mira al suelo al medir y vigila el taladro. Es la «Cámara del rover».' },
+    { id: 'brazo', re: /^arm$/, h: 1.15, v: 0.45, name: 'Brazo robótico',
+      d: 'Cuatro articulaciones (base, hombro, codo y muñeca). Lleva cada muestra del taladro a un cartucho del carrusel.' },
+    { id: 'taladro', re: /^(drill|piv_taladro|taladro_|DET-cremallera|DET-cadena|DET-cable_taladro)/, h: 1.05, v: -0.05, name: 'Taladro',
+      d: 'Barrena de 10 cm que perfora hasta 1 m. El carro baja por una cremallera; el hielo endurece el suelo y la perforación tarda más.' },
+    { id: 'carrusel', re: /^piv_carrusel/, h: 0.35, v: 0.85, name: 'Carrusel de muestras',
+      d: 'Ocho cartuchos sellados. Guardan las muestras de suelo con hielo hasta la estación, donde se descargan al horno.' },
+    { id: 'bateria', re: /^(bateria|DET-tornillos_bateria)/, h: 1.05, v: 0.35, name: 'Batería',
+      d: '5 kWh en la simulación. Alimenta ruedas, instrumentos, calefacción y taladro. El rover vuelve antes de bajar de la reserva.' },
+    { id: 'ciencia', re: /^(espectrometro|detector_He3|radar_GPR|DET-analizador)/, h: 0.95, v: -0.45, name: 'Instrumentos científicos',
+      d: 'Espectrómetro de neutrones y detectores de helio-3: notan el hidrógeno del hielo bajo el suelo. Radar de penetración y analizador de muestras. En la simulación solo se usa el espectrómetro.' },
+    { id: 'ruedas', re: /^(wheel|piv_direccion|balancin|bogie|horquilla|pivote_|DET-(motor_rueda|direccion|diferencial|barra_diferencial|biela|tapa_pivote|tornillos_suspension|juntas))/, lat: 0.95, v: -0.15, name: 'Ruedas y suspensión',
+      d: 'Seis ruedas con motor propio y suspensión de balancines (rocker-bogie) que mantiene las seis apoyadas. Las cuatro de las esquinas giran para dirigir.' },
+    { id: 'chasis', re: /./, h: 0, v: 0, name: 'Chasis y electrónica',
+      d: 'Casco con aislamiento multicapa, radiador con persianas, electrónica, faros y cámaras de peligro. Mantiene el interior por encima de −10 °C.' }
+  ];
+  const EXP = { on: false, built: false, k: 0, target: 0, amt: 1, sel: null, objs: [], meshes: [], groups: {}, root: null, prev: null, wasRunning: false };
+  function expBuild() {
+    if (EXP.built) return true;
+    if (!RA.on || !RA.scn) return false;
+    const root = RA.scn.getObjectByName('rover') || RA.scn; EXP.root = root;
+    root.updateWorldMatrix(true, true);
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), m = new THREE.Matrix4();
+    const boxLocal = o => { const b = new THREE.Box3(); o.traverse(n => { if (!n.isMesh) return; if (!n.geometry.boundingBox) n.geometry.computeBoundingBox(); m.multiplyMatrices(inv, n.matrixWorld); b.union(n.geometry.boundingBox.clone().applyMatrix4(m)); }); return b; };
+    const all = boxLocal(root), c0 = all.getCenter(new THREE.Vector3());
+    EXP_GROUPS.forEach(G => { EXP.groups[G.id] = { G, box: new THREE.Box3(), off: new THREE.Vector3(), n: 0 }; });
+    root.children.slice().forEach(o => {
+      const G = EXP_GROUPS.find(g => g.re.test(o.name)), b = boxLocal(o); if (b.isEmpty()) return;
+      const c = b.getCenter(new THREE.Vector3()).sub(c0), hd = new THREE.Vector3(c.x, 0, c.z);
+      if (hd.lengthSq() < 1e-4) hd.set(1, 0, 0); hd.normalize();
+      const off = G.lat ? new THREE.Vector3(c.x * 0.2, G.v, Math.sign(c.z || 1) * G.lat) : hd.multiplyScalar(G.h).add(new THREE.Vector3(0, G.v, 0));
+      o.userData.ep0 = o.position.clone(); o.userData.eoff = off; EXP.objs.push(o);
+      const gr = EXP.groups[G.id]; gr.box.union(b); gr.off.add(off); gr.n++;
+      o.traverse(n => { if (n.isMesh) { n.userData.eg = G.id; EXP.meshes.push(n); } });
+    });
+    Object.values(EXP.groups).forEach(gr => { if (gr.n) gr.off.divideScalar(gr.n); });
+    // etiquetas: una por grupo
+    const box = $('#sim-exp-labels'); box.innerHTML = '';
+    Object.values(EXP.groups).filter(gr => gr.n).forEach(gr => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'exp-tag'; b.textContent = gr.G.name; b.dataset.g = gr.G.id;
+      b.addEventListener('click', () => expSelect(gr.G.id)); box.appendChild(b); gr.el = b;
+      gr.anchor = gr.box.getCenter(new THREE.Vector3()); gr.anchor.y = gr.box.max.y;
+      if (gr.G.lat) { gr.anchor.z = gr.box.max.z; gr.off.set(0, gr.G.v, gr.G.lat); }
+      else if (gr.G.v < 0) gr.anchor.y = gr.box.min.y - 0.1;                   // piezas que bajan: etiqueta por debajo
+    });
+    EXP.built = true; return true;
+  }
+  function expSelect(id) {
+    EXP.sel = EXP.sel === id ? null : id;
+    const gr = EXP.sel && EXP.groups[EXP.sel];
+    set('se-name', gr ? gr.G.name : 'Elige una pieza');
+    set('se-desc', gr ? gr.G.d : 'Toca una etiqueta o una pieza del rover para ver qué hace. Arrastra para girar alrededor y usa la rueda para acercarte.');
+    Object.values(EXP.groups).forEach(g => { if (g.el) g.el.setAttribute('aria-pressed', String(g.G.id === EXP.sel)); });
+    EXP.meshes.forEach(n => { [].concat(n.material).forEach(mt => { if (!mt.emissive) return; const o = mt.userData.eEm; if (!o) return;
+      if (n.userData.eg === EXP.sel) mt.emissive.setRGB(0.1, 0.13, 0.42); else mt.emissive.copy(o); }); });
+  }
+  function setExplode(on) {
+    if (on === EXP.on) return;
+    if (on) {
+      if (!expBuild()) { toast('El despiece necesita el modelo 3D del rover, que aún se está cargando.'); return; }
+      if (destMode) setDestMode(false);
+      EXP.on = true; EXP.target = 1;
+      EXP.wasRunning = S.running; if (S.running) { sim.cmd.pause(); toggleRunLabel(); }
+      EXP.prev = { mode: camMode, pos: camera.position.clone(), tgt: controls.target.clone() };
+      // materiales propios mientras dura el despiece (para resaltar un grupo sin teñir piezas de otros grupos)
+      EXP.meshes.forEach(n => { n.userData.mOrig = n.material;
+        const cl = mt => { const c = mt.clone(); c.onBeforeCompile = mt.onBeforeCompile; c.customProgramCacheKey = mt.customProgramCacheKey; if (c.emissive) c.userData.eEm = c.emissive.clone(); return c; };
+        n.material = Array.isArray(n.material) ? n.material.map(cl) : cl(n.material); });
+      setCam('despiece'); expSelect(null);
+      $('#sim-exp').hidden = false; $('#sim-exp-labels').hidden = false;
+    } else {
+      EXP.on = false; EXP.target = 0; EXP.sel = null;
+      $('#sim-exp').hidden = true; $('#sim-exp-labels').hidden = true;
+    }
+    setToolUI();
+  }
+  function expFinish() {                                                     // al terminar de cerrar: todo vuelve a su sitio
+    EXP.objs.forEach(o => o.position.copy(o.userData.ep0));
+    EXP.meshes.forEach(n => { if (n.userData.mOrig) { [].concat(n.material).forEach(mt => mt.dispose()); n.material = n.userData.mOrig; n.userData.mOrig = null; } });
+    const p = EXP.prev; EXP.prev = null;
+    if (p) { setCam(p.mode === 'despiece' ? 'rover' : p.mode); if (!['rover', 'rovercam', 'tierra'].includes(p.mode)) { camera.position.copy(p.pos); controls.target.copy(p.tgt); } }
+    if (EXP.wasRunning && !S.running) { sim.cmd.start(); toggleRunLabel(); }
+  }
+  function updateExplode(dt) {
+    if (!EXP.built || (!EXP.on && EXP.k === 0)) return;
+    EXP.k = approach(EXP.k, EXP.target, 1.6, dt);
+    const e = ease(EXP.k) * EXP.amt;
+    EXP.objs.forEach(o => o.position.copy(o.userData.ep0).addScaledVector(o.userData.eoff, e));
+    if (!EXP.on && EXP.k === 0) { expFinish(); return; }
+    // etiquetas sobre cada grupo
+    const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight, v = new THREE.Vector3();
+    EXP.root.updateWorldMatrix(true, false);
+    const shown = [];
+    Object.values(EXP.groups).forEach(gr => {
+      if (!gr.el) return;
+      v.copy(gr.anchor).addScaledVector(gr.off, e); v.y += 0.12; EXP.root.localToWorld(v); v.project(camera);
+      const show = EXP.on && EXP.k > 0.6 && v.z < 1;
+      gr.el.style.display = show ? 'block' : 'none';
+      if (show) { if (!gr.lw) { gr.lw = gr.el.offsetWidth; gr.lh = gr.el.offsetHeight; } shown.push({ gr, x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h }); }
+    });
+    // sin solapes: de arriba abajo, cada etiqueta baja lo justo para no tapar a las ya colocadas
+    shown.sort((a, b) => a.y - b.y);
+    shown.forEach((L, i) => {
+      for (let pass = 0; pass < 4; pass++) {
+        let moved = false;
+        for (let j = 0; j < i; j++) { const M = shown[j];
+          if (Math.abs(L.x - M.x) < (L.gr.lw + M.gr.lw) / 2 + 4 && Math.abs(L.y - M.y) < L.gr.lh + 3) { L.y = M.y + L.gr.lh + 3; moved = true; } }
+        if (!moved) break;
+      }
+      L.gr.el.style.transform = `translate(${L.x}px, ${L.y}px) translate(-50%, -100%)`;
+    });
+  }
+  function expPick(ev) {                                                     // clic en una pieza del rover = elegir su grupo
+    const r = renderer.domElement.getBoundingClientRect();
+    mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(mouse, camera);
+    const hit = raycaster.intersectObjects(EXP.meshes, false)[0];
+    if (hit && hit.object.userData.eg) expSelect(hit.object.userData.eg);
+  }
+
+  // ---------- Mapa: relieve real, rastro, perforaciones y ruta con puntos de paso ----------
+  const ROUTE = { pts: [], active: false, i: 0, sent: -1, marks: [] };
+  const MAP = { base: null };
+  function mapBase() {                                                       // relieve sombreado (luz cartográfica del NO) + sombra permanente
+    if (MAP.base) return MAP.base;
+    const N = W.N, c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data, H = W.H, s2 = 2 * W.STEP;
+    const L = new THREE.Vector3(-0.55, 0.75, -0.4).normalize();
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const k = j * N + i, dx = (H[j * N + Math.min(N - 1, i + 1)] - H[j * N + Math.max(0, i - 1)]) / s2, dz = (H[Math.min(N - 1, j + 1) * N + i] - H[Math.max(0, j - 1) * N + i]) / s2;
+      const n = new THREE.Vector3(-dx, 1, -dz).normalize(), sh = Math.max(0, n.dot(L));
+      let r = 26 + 150 * sh, gg = r, b = r + 4;
+      if (W.psr && W.psr[k] > 0.5) { r = r * 0.45 + 82 * 0.35; gg = gg * 0.45 + 102 * 0.35; b = b * 0.45 + 235 * 0.4; }
+      else if (W.shadowNow && W.shadowNow[k] > 0.5) { r *= 0.6; gg *= 0.6; b *= 0.62; }
+      d[k * 4] = r; d[k * 4 + 1] = gg; d[k * 4 + 2] = b; d[k * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); MAP.base = c; return c;
+  }
+  function drawMap() {
+    const cv = $('#sim-map canvas'); if (!cv || $('#sim-map').hidden) return;
+    const g = cv.getContext('2d'), Z = cv.width, R = S.rover, k = Z / W.SIZE;
+    const X = x => (x + W.HALF) * k, Y = z => (z + W.HALF) * k;
+    g.imageSmoothingEnabled = true; g.drawImage(mapBase(), 0, 0, Z, Z);
+    // rastro del rover
+    const tr = S.trail; if (tr.length > 1) { g.strokeStyle = 'rgba(237,237,243,.55)'; g.lineWidth = 1.5; g.beginPath(); tr.forEach(([x, z], i) => i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z))); g.stroke(); }
+    // perforaciones
+    S.holes.forEach(hh => { g.strokeStyle = '#ededf3'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(hh.x), Y(hh.z), 3.5, 0, 6.283); g.stroke(); });
+    // estación y colonia
+    const st = W.station, cp = COL.g.position;
+    g.fillStyle = '#ededf3'; g.fillRect(X(st.x) - 5, Y(st.z) - 5, 10, 10);
+    g.beginPath(); g.arc(X(cp.x), Y(cp.z), 5.5, 0, 6.283); g.fill();
+    g.font = '600 15px Inter, sans-serif'; g.fillStyle = 'rgba(237,237,243,.92)'; g.fillText('Estación', X(st.x) + 9, Y(st.z) + 5); g.fillText('Colonia', X(cp.x) + 9, Y(cp.z) + 5);
+    // ruta: línea discontinua rover → puntos de paso pendientes
+    const pend = ROUTE.pts.slice(ROUTE.active ? ROUTE.i : 0);
+    if (pend.length) {
+      g.setLineDash([7, 6]); g.strokeStyle = '#5266eb'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(R.x), Y(R.z)); pend.forEach(p => g.lineTo(X(p.x), Y(p.z))); g.stroke(); g.setLineDash([]);
+    }
+    ROUTE.pts.forEach((p, i) => {
+      const done = ROUTE.active && i < ROUTE.i;
+      g.fillStyle = done ? 'rgba(82,102,235,.35)' : '#5266eb'; g.beginPath(); g.arc(X(p.x), Y(p.z), 10, 0, 6.283); g.fill();
+      g.fillStyle = '#fff'; g.font = '700 12px Inter, sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), X(p.x), Y(p.z) + 4); g.textAlign = 'left';
+    });
+    // rover: triángulo blanco con su rumbo
+    g.save(); g.translate(X(R.x), Y(R.z)); g.rotate(R.heading); g.fillStyle = '#fff'; g.strokeStyle = '#171721'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(11, 0); g.lineTo(-7, 7); g.lineTo(-4, 0); g.lineTo(-7, -7); g.closePath(); g.stroke(); g.fill(); g.restore();
+    // escala
+    const L5 = 500 * k; g.fillStyle = 'rgba(23,23,33,.75)'; g.fillRect(Z - L5 - 28, Z - 34, L5 + 18, 24);
+    g.strokeStyle = '#ededf3'; g.lineWidth = 2; g.beginPath(); g.moveTo(Z - L5 - 18, Z - 16); g.lineTo(Z - 18, Z - 16); g.stroke();
+    g.fillStyle = '#ededf3'; g.font = '600 12px Inter, sans-serif'; g.fillText('500 m', Z - L5 / 2 - 34, Z - 20);
+  }
+  function routeMarks() {                                                    // postes azules en el terreno para cada punto de paso
+    while (ROUTE.marks.length < ROUTE.pts.length) {
+      const m = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.32, 0.4, 2.2), toneMapped: false });
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3, 8), mat); pole.position.y = 1.5;
+      const top = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), mat); top.position.y = 3.2;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.32, 0.4, 1.6), toneMapped: false, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06;
+      m.add(pole, top, ring); m.userData.top = top; m.traverse(o => { o.userData.skipSunVis = true; }); scene.add(m); ROUTE.marks.push(m);
+    }
+    ROUTE.marks.forEach((m, i) => { const p = ROUTE.pts[i]; m.visible = !!p && !(ROUTE.active && i < ROUTE.i);
+      if (p) m.position.set(p.x, W.hAt(p.x, p.z), p.z); });
+  }
+  function routeTick() {
+    if (!ROUTE.active) return;
+    const R = S.rover, p = ROUTE.pts[ROUTE.i];
+    if (!p) { ROUTE.active = false; routeMarks(); setRouteUI(); toast('Ruta completada: el rover pasó por todos los puntos.'); return; }
+    if (R.task === 'dead') { ROUTE.active = false; setRouteUI(); return; }
+    if (ROUTE.sent !== ROUTE.i) { sim.cmd.goTo(p.x, p.z); ROUTE.sent = ROUTE.i; return; }
+    if (['goto', 'characterize', 'decide', 'drill', 'reposition'].includes(R.task)) return;   // va al punto, mide y decide si perfora
+    if (R.task === 'return' || R.task === 'idle') { ROUTE.active = false; setRouteUI(); toast('Ruta en pausa: el rover vuelve a la estación (batería o bodega). Pulsa «Seguir ruta» para continuar.'); return; }
+    ROUTE.i++; routeMarks();                                                 // punto terminado: al siguiente
+  }
+  function setRouteUI() {
+    const go = $('#sm-go'); if (go) { go.textContent = ROUTE.active ? 'Detener ruta' : (ROUTE.i > 0 && ROUTE.i < ROUTE.pts.length ? 'Seguir ruta' : 'Recorrer ruta'); go.disabled = !ROUTE.pts.length; }
+    set('sm-count', ROUTE.pts.length ? `${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}` : 'Sin puntos de paso');
+    drawMap();
+  }
+
+  // ---------- Centro de control: telemetría del rover (valores del modelo de la simulación) ----------
+  function losStation() {                                                    // línea de vista mástil → antena de la estación sobre el relieve real
+    const R = S.rover, st = W.station, ay = W.hAt(R.x, R.z) + 2.3, by = W.hAt(st.x, st.z) + 5;
+    for (let i = 1; i < 80; i++) { const f = i / 80, x = R.x + (st.x - R.x) * f, z = R.z + (st.z - R.z) * f; if (W.hAt(x, z) > ay + (by - ay) * f) return false; }
+    return true;
+  }
+  function updateControl() {
+    if ($('#sim-ctrl').hidden) return;
+    const R = S.rover, bat = R.battery / sim.ROVER.cap, slope = W.slopeAt(R.x, R.z), kmh = Math.abs(R.speed) * 3.6, cargo = R.cargoReg + R.cargoIce;
+    const dSt = Math.hypot(R.x - W.station.x, R.z - W.station.z), los = losStation();
+    set('sc-bat', `${fmt(bat * 100, 0)} %`); bar('sc-bat-bar', bat); set('sc-bat-s', `gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`);
+    set('sc-temp', `${fmt(R.sysT - 273.15, 0)} °C`); bar('sc-temp-bar', (R.sysT - 233) / 80); set('sc-temp-s', `interior · exterior ${fmt(R.Tenv || 0, 0)} K (${fmt((R.Tenv || 0) - 273.15, 0)} °C)`);
+    set('sc-slope', `${fmt(slope, 0)}°`); bar('sc-slope-bar', slope / 25); set('sc-slope-s', slope > 15 ? 'más de 15°: no perfora aquí' : 'límite para perforar: 15°');
+    set('sc-speed', `${fmt(kmh, 1)} km/h`); bar('sc-speed-bar', Math.abs(R.speed) / Math.max(0.01, P.vmax)); set('sc-speed-s', `máxima ${fmt(P.vmax * 3.6, 1)} km/h · recorrido ${fmt(S.totals.dist / 1000, 2)} km`);
+    set('sc-drill', `${fmt(R.drillDepth, 2)} m`); bar('sc-drill-bar', R.drillDepth / Math.max(0.01, P.drillDepth)); set('sc-drill-s', `de ${fmt(P.drillDepth, 2)} m · ${S.totals.holes} perforaciones`);
+    set('sc-cargo', `${fmt(cargo, 1)} kg`); bar('sc-cargo-bar', cargo / P.cargoCap); set('sc-cargo-s', `de ${fmt(P.cargoCap, 0)} kg · hielo ${fmt(R.cargoIce, 2)} kg`);
+    set('sc-link', los ? 'Directa' : 'Bloqueada'); bar('sc-link-bar', los ? 1 : 0); set('sc-link-s', `${los ? 'línea de vista con la estación' : 'el relieve tapa la antena de la estación'} · ${fmt(dSt, 0)} m`);
+    $('#sc-link').classList.toggle('warn', !los); $('#sc-slope').classList.toggle('warn', slope > 15); $('#sc-bat').classList.toggle('warn', bat < P.reserve / 100 + 0.05);
+    set('sc-task', TASKS[R.task] || R.task);
+  }
+  function updateSpeedBadge() {
+    const el = $('#sim-speed'); if (!el) return;
+    el.hidden = camMode !== 'rover' || EXP.on;
+    if (!el.hidden) { set('sim-speed-v', fmt(Math.abs(S.rover.speed) * 3.6, 1)); el.style.bottom = ($('#sim-cam').offsetHeight + 20) + 'px'; }   // encima de la barra de cámaras
+  }
+
+  // ---------- Botones y teclas de las herramientas ----------
+  function setToolUI() {
+    $$('#sim-tools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === 'mapa' ? !$('#sim-map').hidden : b.dataset.t === 'control' ? !$('#sim-ctrl').hidden : b.dataset.t === 'pantalla' ? !!fsElement() : EXP.on)));
+    $('#sim-core').hidden = camMode !== 'rover' || EXP.on;
+    $('#sim-legend').hidden = EXP.on || !$('#sim-ctrl').hidden;           // la leyenda cede su sitio al panel de control
+    $('#sim-view').classList.toggle('is-exp', EXP.on);
+  }
+  // Pantalla completa: todo el escenario (vista 3D + barra de controles + etapas del proceso)
+  const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  function toggleFullscreen() {
+    const st = $('#sim-stage');
+    if (fsElement()) { const x = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (x && x.then) x.then(onFullscreen, onFullscreen); else setTimeout(onFullscreen, 300); return; }
+    const req = st.requestFullscreen || st.webkitRequestFullscreen; if (!req) return;
+    const r = req.call(st); if (r && r.then) r.then(onFullscreen, () => toast('El navegador no permitió la pantalla completa.')); else setTimeout(onFullscreen, 300);
+  }
+  function onFullscreen() {
+    let t = $('#toast');                                                       // los avisos tienen que verse también en pantalla completa
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); }
+    (fsElement() || document.body).appendChild(t);
+    setToolUI(); resize(); if (fsElement()) $('#sim-view').focus({ preventScroll: true });
+  }
+  function toggleTool(t) {
+    if (t === 'pantalla') { toggleFullscreen(); return; }
+    if (t === 'despiece') { setExplode(!EXP.on); return; }
+    const el = $(t === 'mapa' ? '#sim-map' : '#sim-ctrl'); el.hidden = !el.hidden;
+    if (t === 'mapa') drawMap(); else updateControl();
+    setToolUI();
+  }
+  function bindTools() {
+    $$('#sim-tools button').forEach(b => b.addEventListener('click', () => toggleTool(b.dataset.t)));
+    $$('#sim-map [data-close], #sim-ctrl [data-close]').forEach(b => b.addEventListener('click', () => toggleTool(b.closest('#sim-map') ? 'mapa' : 'control')));
+    $('#sim-exp [data-close]').addEventListener('click', () => setExplode(false));
+    $('#se-amt').addEventListener('input', e => { EXP.amt = +e.target.value; });
+    // mapa: clic = añadir punto de paso, clic derecho = quitar el último
+    const cv = $('#sim-map canvas');
+    cv.addEventListener('click', ev => {
+      const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * W.SIZE - W.HALF, z = (ev.clientY - r.top) / r.height * W.SIZE - W.HALF;
+      if (ROUTE.pts.length >= 12) { toast('Máximo 12 puntos de paso.'); return; }
+      if (ROUTE.active && ROUTE.i >= ROUTE.pts.length) { ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; }
+      ROUTE.pts.push({ x, z }); routeMarks(); setRouteUI();
+    });
+    cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (ROUTE.pts.length > (ROUTE.active ? ROUTE.i + 1 : 0)) { ROUTE.pts.pop(); routeMarks(); setRouteUI(); } });
+    $('#sm-go').addEventListener('click', () => {
+      if (ROUTE.active) { ROUTE.active = false; setRouteUI(); return; }
+      if (!ROUTE.pts.length) return;
+      if (ROUTE.i >= ROUTE.pts.length) ROUTE.i = 0;
+      ROUTE.active = true; ROUTE.sent = -1; setModeUI('auto'); hideIntro(); if (!S.running) toggleRun();
+      routeMarks(); setRouteUI(); toast('El rover recorre la ruta: en cada punto mide el hielo y decide si perforar.');
+    });
+    $('#sm-clear').addEventListener('click', () => { ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; routeMarks(); setRouteUI(); });
+    window.addEventListener('keydown', e => {
+      if (!visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (e.code === 'KeyM') { toggleTool('mapa'); e.preventDefault(); }
+      else if (e.code === 'KeyG') { toggleTool('control'); e.preventDefault(); }
+      else if (e.code === 'KeyX') { toggleTool('despiece'); e.preventDefault(); }
+      else if (e.code === 'KeyF') { toggleFullscreen(); e.preventDefault(); }
+      else if (e.code === 'Escape' && EXP.on) setExplode(false);
+    });
+    const st = $('#sim-stage'); if (!(st.requestFullscreen || st.webkitRequestFullscreen)) $('#sim-tools [data-t="pantalla"]').hidden = true;   // p. ej., iPhone
+    document.addEventListener('fullscreenchange', onFullscreen); document.addEventListener('webkitfullscreenchange', onFullscreen);
+    setRouteUI(); setToolUI();
   }
 
   // =====================================================================
@@ -984,22 +1489,55 @@
     if (S.running) sim.step(dt * warp);
     if (tracks) tracks.update(S.rover, S.t);
     if (visible) dustUpd(S.rover, dt, S.running && Math.abs(S.rover.speed) > 0.01);
+    if (now - (frame.vis || 0) > 300) {                 // ¿se ve la simulación? (pausa el dibujo si no está en pantalla)
+      frame.vis = now; const r = renderer.domElement.getBoundingClientRect();
+      visible = !document.hidden && r.bottom > 0 && r.top < window.innerHeight && r.width > 0;
+    }
     if (!visible) return;
     const t = now / 1000;
     if (iceL) iceL.update(t, camera);
-    updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
+    if (!EXP.on && EXP.k === 0) { updateRover(t); if (RA.on) updateRoverAnim(t, dt); }
+    updateExplode(dt); updateDrillFX(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
     if (composer) { grade.uniforms.time.value = t; grade.uniforms.roverCam.value = camMode === 'rovercam' ? 1 : 0; composer.render(dt); }
     else renderer.render(scene, camera);
     if (camMode === 'rovercam' && now - (frame.hud || 0) > 150) { frame.hud = now; updateRoverHUD(); }
     updateLabels();
-    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); }
+    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); routeTick(); updateControl(); updateSpeedBadge(); if (now - (frame.map || 0) > 400) { frame.map = now; drawMap(); } }
     if (now - lastChart > 1200) { lastChart = now; updateCharts(); }
+  }
+  // Postprocesado: escena HDR (antialiasing de 4 muestras) → oclusión ambiental (GTAO) → brillo (bloom) → acabado de cámara
+  // (mapeo de tonos ACES y sRGB) → SMAA en calidad media. Se reconstruye al cambiar la calidad.
+  function buildComposer() {
+    if (composer) { composer.passes.forEach(p => p.dispose && p.dispose()); composer.dispose(); }
+    const host = $('#sim-view'), w = Math.max(2, host.clientWidth), h = Math.max(2, host.clientHeight), pr = renderer.getPixelRatio();
+    composer = new THREE.EffectComposer(renderer, new THREE.WebGLRenderTarget(w * pr, h * pr, { type: THREE.HalfFloatType, samples: Q.msaa, stencilBuffer: true }));
+    composer.addPass(new THREE.RenderPass(scene, camera));
+    gtao = null;
+    if (Q.gtao) {
+      gtao = new THREE.GTAOPass(scene, camera, w, h);
+      gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.4, thickness: 1.2, scale: 1.0, samples: 16, distanceFallOff: 1.0, screenSpaceRadius: false });
+      gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
+      gtao.blendIntensity = 0.85; composer.addPass(gtao);
+    }
+    bloom = new THREE.UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), 0.38, 0.42, 3.2); bloom.enabled = Q.bloom; composer.addPass(bloom);
+    grade = new THREE.ShaderPass(IceEnv.GradeShader); composer.addPass(grade);
+    if (Q.smaa) composer.addPass(new THREE.SMAAPass(w * pr, h * pr));
+  }
+  function applyQuality(name) {
+    if (!QUALITY[name]) return;
+    qName = name; Q = QUALITY[name];
+    try { localStorage.setItem('icewise-calidad', name); } catch (_) {}
+    renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
+    sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    buildComposer(); resize();
+    if (sky) { sky.U.pr.value = renderer.getPixelRatio(); if (Q.pr >= 1.5) sky.loadHiRes(); }   // estrellas a escala de píxel; Máxima y Alta: Tierra en 8K desde el inicio
+    $$('#sim-quality button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.q === name)));
   }
   function resize() {
     const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight;
     renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
-    if (composer) { composer.setSize(w, h); grade.uniforms.res.value.set(w, h); }
+    if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); grade.uniforms.res.value.set(w, h); }
   }
   // Visor de la cámara del mástil: rumbo, inclinación del cabezal, batería y tarea
   function updateRoverHUD() {
@@ -1096,6 +1634,11 @@
     }));
     const layer = (id, meshes, legendKey) => $(id).addEventListener('change', e => { meshes.forEach(m => { m.visible = e.target.checked; }); const lg = $(`#sim-legend [data-l="${legendKey}"]`); if (lg) lg.hidden = !e.target.checked; });
     $('#ov-fill').addEventListener('change', e => { fill.visible = e.target.checked; });
+    $('#ov-cine').addEventListener('change', e => { sky.setCine(e.target.checked); });
+    const qbtn = $('#sim-qbtn'), qpop = $('#sim-qpop');
+    qbtn.addEventListener('click', () => { qpop.hidden = !qpop.hidden; qbtn.setAttribute('aria-expanded', String(!qpop.hidden)); });
+    document.addEventListener('click', e => { if (!qpop.hidden && !e.target.closest('.sim-qwrap')) { qpop.hidden = true; qbtn.setAttribute('aria-expanded', 'false'); } });
+    $$('#sim-quality button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.q === qName)); b.addEventListener('click', () => { applyQuality(b.dataset.q); toast('Calidad gráfica: ' + b.textContent + '.'); }); });
     layer('#ov-ice', [iceMesh, crystals], 'ice'); layer('#ov-det', [detMesh], 'det'); layer('#ov-psr', [psrMesh], 'psr'); layer('#ov-trail', [trail, holesGroup], 'trail');
     $('#sim-drill').addEventListener('click', () => sim.cmd.drillHere());
     $('#sim-home').addEventListener('click', () => { sim.cmd.goHome(); setModeUI('auto'); });
@@ -1244,18 +1787,66 @@
     }
   }
 
+  // ---------- Pantalla de carga: cada etapa informa de su avance; al terminar se compilan los shaders y empieza ----------
+  const LOAD = {
+    order: ['motor', 'relieve', 'cielo', 'modelos', 'rocas', 'luz', 'shaders'],
+    label: { motor: 'Motor gráfico (Three.js r170)', relieve: 'Relieve real de Shackleton (NASA LOLA)', cielo: 'Cielo y Tierra (mapas de NASA)', modelos: 'Rover y estación (Blender)', rocas: 'Rocas y regolito escaneados', luz: 'Iluminación del relieve lejano', shaders: 'Preparando sombras y efectos' },
+    done: {}, total: {}, finished: false, t0: 0
+  };
+  LOAD.order.forEach(k => { LOAD.done[k] = 0; LOAD.total[k] = 1; });
+  function loadSet(id, done, total) {
+    if (total != null) LOAD.total[id] = Math.max(1, total);
+    LOAD.done[id] = Math.min(LOAD.total[id], done); renderLoader();
+  }
+  function loadAdd(id) { loadSet(id, LOAD.done[id] + 1); }
+  function renderLoader() {
+    const ul = $('#sl-steps'); if (!ul) return;
+    let sum = 0, now = null;
+    ul.innerHTML = LOAD.order.map(k => {
+      const f = LOAD.done[k] / LOAD.total[k]; sum += f;
+      const st = f >= 1 ? 'is-ok' : (!now ? (now = k, 'is-on') : '');
+      return `<li class="${st}">${LOAD.label[k]}<span>${f >= 1 ? '✓' : f > 0 ? Math.round(f * 100) + ' %' : ''}</span></li>`;
+    }).join('');
+    const pct = Math.round(sum / LOAD.order.length * 100);
+    $('#sl-fill').style.width = pct + '%'; $('#sl-pct').textContent = pct + ' %';
+    $('#sl-now').textContent = now ? LOAD.label[now] + '…' : 'Listo';
+  }
+  function watchLoad() {
+    const tick = () => {
+      if (LOAD.finished) return;
+      if (!W.real) loadSet('luz', 1); else loadSet('luz', IceEnv.farTime ? 1 : (IceEnv.farProgress || 0));
+      const pend = LOAD.order.filter(k => k !== 'shaders' && LOAD.done[k] < LOAD.total[k]);
+      const timeout = performance.now() - LOAD.t0 > 45000;                 // nunca bloquear la simulación
+      if (!pend.length || timeout) {
+        LOAD.finished = true; loadSet('shaders', 0.3);
+        const end = () => { loadSet('shaders', 1); setTimeout(() => $('#sim-loader').classList.add('is-done'), 350); };
+        (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(end, end);
+        return;
+      }
+      setTimeout(tick, 200);
+    };
+    tick();
+  }
   function init() {
     const host = $('#sim-view'); if (!host) return;
     if (!window.THREE || !THREE.OrbitControls) { host.innerHTML = '<p class="sim-fallback">No se pudo cargar el motor 3D (Three.js).</p>'; return; }
-    try { const c = document.createElement('canvas'); if (!(c.getContext('webgl') || c.getContext('experimental-webgl'))) throw 0; }
-    catch (_) { host.innerHTML = '<p class="sim-fallback">Tu navegador no admite WebGL, necesario para la simulación 3D.</p>'; return; }
-    sim = IceSim.createSim(); S = sim.S; P = sim.P; W = sim.world;
-    buildScene(host); resize(); setCam('rover');
-    buildProcess(); bindSliders(); bindUI(); bindPointer(); updateDetection(); updateUI(); drawCore(); updateProcess();
-    new ResizeObserver(resize).observe(host);
-    new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0.01 }).observe(host);
-    requestAnimationFrame(frame);
-    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; }, get stationAnim() { return STA; } };
+    try { const c = document.createElement('canvas'); if (!c.getContext('webgl2')) throw 0; }
+    catch (_) { host.innerHTML = '<p class="sim-fallback">Tu navegador no admite WebGL 2, necesario para la simulación 3D.</p>'; return; }
+    LOAD.t0 = performance.now(); renderLoader();
+    IceEnv.onAsset = cat => { if (LOAD.done[cat] != null) loadAdd(cat); };
+    // se deja pintar la pantalla de carga antes del trabajo pesado
+    requestAnimationFrame(() => setTimeout(() => {
+      loadSet('motor', 1); loadSet('cielo', 0, 4); loadSet('rocas', 0, 3);
+      sim = IceSim.createSim(); S = sim.S; P = sim.P; W = sim.world;
+      buildScene(host); loadSet('relieve', 1); resize(); setCam('rover');
+      buildProcess(); bindSliders(); bindUI(); bindPointer(); bindTools(); updateDetection(); updateUI(); drawCore(); updateProcess();
+      new ResizeObserver(resize).observe(host);
+      requestAnimationFrame(frame); watchLoad();
+      exposeAPI();
+    }, 30));
+  }
+  function exposeAPI() {
+    window.IceSimView = { sim, setCam, toggleRun, openTab, applyQuality, get quality() { return qName; }, get renderInfo() { return { frame: renderer.info.render.frame, calls: renderer.info.render.calls, visible, composer: !!composer }; }, get loaded() { return LOAD.finished && $('#sim-loader').classList.contains('is-done'); }, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; }, get stationAnim() { return STA; }, get drillFX() { return DR; } };
   }
   window.IceSimViewInit = init;
 })();

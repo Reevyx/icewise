@@ -16,7 +16,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MODELS = ROOT / 'assets' / 'models'
-DRACO = ROOT / 'assets' / 'vendor' / 'draco'
+DRACO = ROOT / 'assets' / 'vendor' / 'draco170'
 
 def b64(path):
     return base64.b64encode(path.read_bytes()).decode('ascii')
