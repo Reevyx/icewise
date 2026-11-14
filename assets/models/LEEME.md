@@ -4,8 +4,8 @@ Exporta desde Blender en **glTF binario (.glb)** y guarda aquí con estos nombre
 
 | Archivo | Sustituye a |
 |---|---|
-| `rover.glb` | el rover |
-| `station.glb` | la estación (módulo, paneles, horno, trampa fría, tanque) |
+| `rover.glb` | el rover (editable en `rover.blend`) |
+| `station.glb` | la estación completa: módulo, torres solares, tolva, cinta, horno, trampa fría, biofiltro, filtros, depósito (editable en `station.blend`) |
 | `colony.glb` | la colonia |
 | `biofilter.glb` | la cúpula del biofiltro |
 
@@ -35,6 +35,32 @@ La simulación mueve el rover según lo que está haciendo. Para eso usa estos o
 | `cartucho_0_tapa` … `cartucho_7_tapa` | color de la tapa | azul hielo = cartucho lleno |
 
 Si mueves una articulación del brazo en Blender, hay que recalcular los ángulos de `ARM` en `js/sim-view.js`.
+
+## Animación de la estación (`station.blend` → `station.glb`)
+
+La planta se mueve con el estado real de la simulación. **No cambies estos nombres**:
+
+| Objeto | Qué hace | Cuándo |
+|---|---|---|
+| `piv_tolva_tapa` | tapa de la tolva | se abre cuando el rover descarga |
+| `cinta_00` … `cinta_07` | recorrido de la cinta | las cápsulas de muestra viajan hasta el horno |
+| `piv_horno_tambor` | tambor del horno | gira mientras calienta |
+| material `EST_brillo_horno` | mirilla y junta | brillan según la temperatura del horno |
+| `flujo_vapor_00…` | tubería de vapor | bocanadas de vapor mientras el hielo se sublima |
+| `trampa_escarcha` | escarcha dentro de la trampa fría | crece con el hielo capturado |
+| `trampa_crio_piston` | criorrefrigerador | late mientras enfría |
+| `flujo_agua_00…` | tubería de agua | gotas: trampa → biofiltro → filtros → depósito |
+| material `EST_led_cultivo`, `piv_bomba_nutrientes` | biofiltro | luces de cultivo y bomba de nutrientes |
+| `filtro_nivel_0/1/2`, material `EST_uv` | filtros | baja el adsorbente; la lámpara UV se enciende al pasar agua |
+| `deposito_agua`, `deposito_indicador` | depósito | nivel del agua |
+| `piv_bomba` | bomba | gira al enviar agua a la colonia |
+| `piv_valvula_*` | volantes de las válvulas | giran al abrirse |
+| `piv_horno_lecho`, ventana del cabezal | lecho de regolito dentro del horno | se voltea al calentar; sale vapor visible por la ventana |
+| `tubo_vapor_vidrio` | tramo de vidrio de la tubería de vapor | se ve viajar el vapor |
+| `trampa_escarcha_serpentin` | escarcha sobre el serpentín | se vuelve opaca al capturar hielo; el vapor entra girando |
+| `piv_bio_distribuidor`, `bio_agua`, `bio_soportes` | lecho biológico del biofiltro | el distribuidor riega; el agua pasa de turbia a clara mientras trabajan los microorganismos |
+| `piv_indicador_0/1/2` | indicadores de flujo con ventana | la ruedita gira cuando pasa agua (el último, hacia la colonia) |
+| `piv_solar_A/B`, `piv_antena` | paneles y antena | apuntan al Sol y a la Tierra |
 
 ## Abrir la web con doble clic (sin servidor)
 

@@ -400,37 +400,71 @@
   }
 
   // ---------- huellas de las ruedas ----------
-  // Dos franjas (lado izquierdo y derecho) que siguen el recorrido real del rover y se pegan al relieve.
-  // Oscurecen el regolito (multiplican el color del suelo, como las huellas de Apolo) con el dibujo de las garras en V.
-  // Búfer circular: se guardan los últimos ~10 km; las más antiguas se van borrando.
+  // Dos franjas (izquierda y derecha) que siguen el recorrido real del rover y se pegan al relieve. Oscurecen el regolito
+  // (multiplican el color del suelo, como las huellas de Apolo) con las garras en V de las 3 ruedas de cada lado, bordes
+  // irregulares y salpicaduras. Con el tiempo se cubren de polvo por zonas hasta desaparecer.
+  // Nota de honestidad: en la Luna real las huellas duran muchísimo (las de Apolo siguen ahí); aquí se borran poco a poco
+  // para que el mapa no se sature. Búfer circular: últimos ~10 km.
+  const TRK = { TILE: 1.92, WIDTH: 0.56, CORE: 0.15, PITCH: 1.92 / 19 };   // baldosa 1,92 m; franja 0,56 m; huella ±0,15 m; garra cada 10 cm
   function trackTexture() {
-    const w = 64, h = 256, c = document.createElement('canvas'); c.width = w; c.height = h;
+    const w = 128, h = 1024, c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d'), img = g.createImageData(w, h), d = img.data, r = rng(13);
-    const N_CHEV = 4;                                       // 4 garras por baldosa (baldosa = 0,48 m: una garra cada 12 cm)
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const u = (x + 0.5) / w, v = (y + 0.5) / h, ac = Math.abs(u - 0.5) * 2;
-      const edge = 0.08 + 0.05 * vnoise(v * 24, 3.1, 7, 24);                 // borde irregular
-      const inside = sm(clamp((1 - ac) / edge, 0, 1));
-      const ph = (v * N_CHEV + ac * 0.55) % 1, chev = Math.exp(-(((ph - 0.5) / 0.09) ** 2));   // marca en V de cada garra
-      const berm = Math.exp(-(((ac - 0.93) / 0.05) ** 2));                 // bordillo de regolito empujado
-      let f = 0.66 - 0.26 * chev * (ac < 0.92 ? 1 : 0) - 0.06 * (r() - 0.5) + 0.22 * berm;
-      f = 1 - (1 - f) * inside;
-      const k = (y * w + x) * 4, val = clamp(f, 0, 1) * 255; d[k] = val; d[k + 1] = val; d[k + 2] = val; d[k + 3] = 255;
+    const n = (v, K, s, x = 0.5) => vnoise(v * K, x, s, K);                 // ruido periódico a lo largo de la huella
+    const WHEELS = [[0, 0, 1], [0.016, 0.37, 0.7], [-0.011, 0.71, 0.55]];   // 3 ruedas: desplazamiento lateral, fase, fuerza
+    const f = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const v = (y + 0.5) / h, vm = v * TRK.TILE;
+      const halfW = TRK.CORE + 0.012 * (n(v, 12, 3) - 0.5) * 2 + 0.006 * (n(v, 48, 4) - 0.5) * 2;
+      const wob = 0.008 * (n(v, 6, 5) - 0.5) * 2;                            // la huella no es perfectamente recta
+      for (let x = 0; x < w; x++) {
+        const uc = ((x + 0.5) / w - 0.5) * TRK.WIDTH - wob, au = Math.abs(uc);
+        const inside = sm(clamp((halfW + 0.004 - au) / 0.012, 0, 1));
+        let chev = 0;
+        for (const [ow, ph0, st] of WHEELS) {
+          const ph = (((vm + ph0 * TRK.PITCH + Math.abs(uc - ow) * 0.5) / TRK.PITCH) % 1 + 1) % 1;
+          const broken = 0.35 + 0.65 * n(v, 38, 11 + Math.round(st * 7), (x / w) * 3);   // garras rotas o más débiles
+          chev = Math.max(chev, Math.exp(-(((ph - 0.5) / 0.13) ** 2)) * st * broken);
+        }
+        const compact = 0.74 + 0.07 * (n(v, 9, 21, x / w * 2) - 0.5) * 2;       // regolito compactado con manchas
+        let val = 1 - inside * (1 - (compact - 0.25 * chev));
+        const out = au - halfW;                                              // fuera de la huella: bordillo y salpicaduras
+        if (out > 0) {
+          val *= 1 - 0.10 * Math.exp(-(((out - 0.012) / 0.01) ** 2)) * (0.4 + 0.6 * n(v, 30, 31));
+          if (r() < 0.05 * Math.exp(-out / 0.03)) val *= 0.62 + 0.25 * r();
+        } else if (r() < 0.012) val *= 0.8;                                  // granos removidos
+        f[y * w + x] = val;
+      }
     }
+    for (let k = 0; k < w * h; k++) { const v = clamp(f[k], 0, 1) * 255; d[k * 4] = v; d[k * 4 + 1] = v; d[k * 4 + 2] = v * 0.99; d[k * 4 + 3] = 255; }
     g.putImageData(img, 0, 0);
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+    const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
   }
-  function wheelTracks(W, scene) {
-    const MAXQ = 52000, STEP = 0.4, TILE = 0.48, HALF_W = 0.16, OFFSET = 1.0;   // ancho de huella 0,32 m; ruedas a ±1,0 m del eje
-    const pos = new Float32Array(MAXQ * 6 * 3), uv = new Float32Array(MAXQ * 6 * 2);
+  function wheelTracks(W, scene, life = 30 * 3600) {
+    const MAXQ = 52000, STEP = 0.4, HALF = TRK.WIDTH / 2, OFFSET = 1.0;      // ruedas a ±1,0 m del eje del rover
+    const pos = new Float32Array(MAXQ * 6 * 3), uv = new Float32Array(MAXQ * 6 * 2), born = new Float32Array(MAXQ * 6);
     const g = new THREE.BufferGeometry();
-    const pa = new THREE.BufferAttribute(pos, 3), ua = new THREE.BufferAttribute(uv, 2);
-    pa.setUsage(THREE.DynamicDrawUsage); ua.setUsage(THREE.DynamicDrawUsage);
-    g.setAttribute('position', pa); g.setAttribute('uv', ua); g.setDrawRange(0, 0);
-    const mat = new THREE.MeshBasicMaterial({ map: trackTexture(), transparent: true, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true,
-      toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    const pa = new THREE.BufferAttribute(pos, 3), ua = new THREE.BufferAttribute(uv, 2), ba = new THREE.BufferAttribute(born, 1);
+    [pa, ua, ba].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('position', pa); g.setAttribute('uv', ua); g.setAttribute('nace', ba); g.setDrawRange(0, 0);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: trackTexture() }, ahora: { value: 0 }, vida: { value: life } },
+      vertexShader: `attribute float nace; varying vec2 vUv; varying float vNace; varying vec2 vW;
+        void main(){ vUv = uv; vNace = nace; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+      fragmentShader: `uniform sampler2D map; uniform float ahora; uniform float vida; varying vec2 vUv; varying float vNace; varying vec2 vW;
+        float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+        void main(){
+          vec3 c = texture2D(map, vUv).rgb;
+          float age = clamp((ahora - vNace) / vida, 0.0, 1.2);
+          float n = 0.55 * vn(vW * 0.35) + 0.3 * vn(vW * 1.7) + 0.15 * vn(vW * 7.0);   // el polvo cubre por zonas
+          float keep = smoothstep(age - 0.12, age + 0.12, n * 0.9 + 0.08) * (1.0 - smoothstep(0.85, 1.15, age));
+          gl_FragColor = vec4(mix(vec3(1.0), c, keep), 1.0);
+        }`,
+      transparent: true, depthWrite: false, blending: THREE.MultiplyBlending, premultipliedAlpha: true,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 1; mesh.userData.skipSunVis = true; scene.add(mesh);
-    let q = 0, filled = 0, last = null, lastT = -1, dist = [0, 0], prev = [null, null], dirtyFrom = -1;
+    let q = 0, filled = 0, last = null, lastT = -1, dist = [0, 0], prev = [null, null], dirtyFrom = -1, now = 0;
     // Altura exacta de la malla del terreno (dos triángulos por celda, como PlaneGeometry), no la bilineal:
     // así la huella queda pegada al suelo y no se esconde bajo él.
     const N = W.N, H = W.H, STP = W.STEP, HF = W.HALF;
@@ -441,12 +475,11 @@
     };
     function clear() { q = 0; filled = 0; last = null; prev = [null, null]; dist = [0, 0]; g.setDrawRange(0, 0); }
     function quad(a, b, s) {
-      // a, b: centros de huella; s: lado
       const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz); if (L < 1e-4) return;
-      const nx = -dz / L * HALF_W, nz = dx / L * HALF_W, v0 = dist[s] / TILE, v1 = (dist[s] + L) / TILE; dist[s] += L;
+      const nx = -dz / L * HALF, nz = dx / L * HALF, v0 = dist[s] / TRK.TILE, v1 = (dist[s] + L) / TRK.TILE; dist[s] += L;
       const P = [[a.x - nx, a.z - nz, 0, v0], [a.x + nx, a.z + nz, 1, v0], [b.x + nx, b.z + nz, 1, v1], [b.x - nx, b.z - nz, 0, v1]];
       const o = q * 6;
-      [0, 1, 2, 0, 2, 3].forEach((i, k) => { const p = P[i]; pos.set([p[0], y(p[0], p[1]), p[1]], (o + k) * 3); uv.set([p[2], p[3]], (o + k) * 2); });
+      [0, 1, 2, 0, 2, 3].forEach((i, k) => { const p = P[i]; pos.set([p[0], y(p[0], p[1]), p[1]], (o + k) * 3); uv.set([p[2], p[3]], (o + k) * 2); born[o + k] = now; });
       if (dirtyFrom < 0) dirtyFrom = q;
       q++; filled = Math.max(filled, q);
       if (q >= MAXQ) { flush(); q = 0; dirtyFrom = -1; }
@@ -456,10 +489,11 @@
       const n = q - dirtyFrom;
       pa.updateRange.offset = dirtyFrom * 18; pa.updateRange.count = n * 18; pa.needsUpdate = true;
       ua.updateRange.offset = dirtyFrom * 12; ua.updateRange.count = n * 12; ua.needsUpdate = true;
+      ba.updateRange.offset = dirtyFrom * 6; ba.updateRange.count = n * 6; ba.needsUpdate = true;
       g.setDrawRange(0, filled * 6); dirtyFrom = -1;
     }
     function update(R, t) {
-      if (t < lastT) clear(); lastT = t;
+      if (t < lastT) clear(); lastT = t; now = t; mat.uniforms.ahora.value = t;
       const p = { x: R.x, z: R.z, h: R.heading };
       if (!last) { last = p; return; }
       const d = Math.hypot(p.x - last.x, p.z - last.z);
@@ -470,14 +504,15 @@
         const f = i / n, x = last.x + (p.x - last.x) * f, z = last.z + (p.z - last.z) * f, h = last.h + dh * f;
         const lx = -Math.sin(h), lz = Math.cos(h);                      // perpendicular a la marcha
         for (let s = 0; s < 2; s++) {
-          const sg = s ? 1 : -1, c = { x: x + lx * OFFSET * sg, z: z + lz * OFFSET * sg };
+          const wob = 0.03 * (vnoise(dist[s] / 3.1, s * 7.3, 91) - 0.5) * 2;   // la rueda no sigue una línea perfecta
+          const sg = s ? 1 : -1, c = { x: x + lx * (OFFSET * sg + wob), z: z + lz * (OFFSET * sg + wob) };
           if (prev[s]) quad(prev[s], c, s);
           prev[s] = c;
         }
       }
       last = p; flush();
     }
-    return { update, clear, mesh };
+    return { update, clear, mesh, setLife(s) { mat.uniforms.vida.value = s; } };
   }
 
   window.IceEnv = { sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };

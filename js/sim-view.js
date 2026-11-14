@@ -295,7 +295,7 @@
     }
     lichen.count = 0; bio.add(lichen);
     scene.add(g);
-    Object.assign(ST, { g, glow, frost, water, flowCurve, flowDots, tank }); Object.assign(BIO, { bio, dper, pext, lichen, lamp, ring, worldPos: () => bio.getWorldPosition(new THREE.Vector3()) });
+    Object.assign(ST, { g, glow, frost, water, flowCurve, flowDots, tank }); Object.assign(BIO, { bio, dper, pext, lichen, lamp, ring, rock, worldPos: () => bio.getWorldPosition(new THREE.Vector3()) });
     addLabel('Biofiltro: microorganismos que limpian el agua', () => BIO.worldPos().add(new THREE.Vector3(0, 3.4, 0)), 'near');
     addLabel('Horno → trampa fría → biofiltro → tanque', () => new THREE.Vector3(st.x, y0, st.z).add(new THREE.Vector3(3.4, 2.2, 2.6)), 'near');
   }
@@ -374,7 +374,7 @@
           if (drills.length) { R3.auger = drills[0]; R3.augerBase = drills[0].position.y; }
           setupRoverAnim(scn);
         },
-        station: (scn) => { hide(ST.g, [ST.glow, ST.frost, ST.water, ...ST.flowDots, BIO.bio]); ST.g.add(scn); },
+        station: (scn) => { hide(ST.g, [...ST.flowDots, BIO.lichen, BIO.rock]); ST.g.add(scn); setupStationAnim(scn); },   // se conservan las bacterias, el liquen y la roca del biofiltro
         colony: (scn) => { hide(COL.g, [COL.water]); COL.g.add(scn); },
         biofilter: (scn) => { hide(BIO.bio, [BIO.lichen]); BIO.bio.add(scn); }
       };
@@ -489,6 +489,154 @@
     RA.leds.forEach(m => { m.emissiveIntensity = alive ? (dark ? 1 : 0.4) : 0.05; });
     const busy = Math.abs(R.speed) > 0.005 || task === 'drill' || RA.seq;
     RA.beacon.forEach(m => { m.emissiveIntensity = !alive ? 0 : busy ? (Math.sin(t * 6) > 0 ? 1.2 : 0.15) : 0.6; });
+  }
+
+  // ---------- Animación de la estación de Blender ----------
+  // Cada pieza reacciona al estado real de la planta (S.plant): al descargar el rover se abre la tolva y las muestras
+  // viajan por la cinta; el tambor del horno gira y brilla según su temperatura; el vapor viaja a la trampa fría, donde
+  // crece la escarcha; al fundirse, el agua pasa por el biofiltro, los filtros (adsorbente + UV) y llega al depósito.
+  const AX_X = new THREE.Vector3(1, 0, 0);
+  const STA = { on: false };
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  function setupStationAnim(scn) {
+    scn.updateMatrixWorld(true);
+    const get = n => scn.getObjectByName(n);
+    const piv = n => { const o = get(n); if (o) { o.userData.q0 = o.quaternion.clone(); o.userData.p0 = o.position.clone(); o.userData.s0 = o.scale.clone(); } return o; };
+    const pathOf = prefix => {
+      const pts = [];
+      for (let i = 0; i < 99; i++) { const o = get(prefix + String(i).padStart(2, '0')); if (!o) break; pts.push(o.getWorldPosition(new THREE.Vector3())); }
+      return pts.length > 1 ? new THREE.CatmullRomCurve3(pts) : null;
+    };
+    const mats = {}; scn.traverse(o => { if (o.isMesh) [].concat(o.material).forEach(m => { mats[m.name] = m; }); });
+    Object.assign(STA, {
+      drum: piv('piv_horno_tambor'), lid: piv('piv_tolva_tapa'), pump: piv('piv_bomba'), npump: piv('piv_bomba_nutrientes'),
+      valves: [['piv_valvula_vapor', 'vapor'], ['piv_valvula_agua', 'agua'], ['piv_valvula_deposito', 'agua']].map(([n, k]) => ({ o: piv(n), k, a: 0 })).filter(v => v.o),
+      solar: ['piv_solar_A', 'piv_solar_B'].map(piv).filter(Boolean), ant: piv('piv_antena'),
+      frost: piv('trampa_escarcha'), tankWater: piv('deposito_agua'), gauge: piv('deposito_indicador'), piston: piv('trampa_crio_piston'),
+      ads: [0, 1, 2].map(k => piv('filtro_nivel_' + k)).filter(Boolean),
+      mGlow: mats.EST_brillo_horno, mUV: mats.EST_uv, mLed: mats.EST_led_cultivo,
+      belt: pathOf('cinta_'), vapor: pathOf('flujo_vapor_'), waterPath: pathOf('flujo_agua_'),
+      drumA: 0, lidA: 0, pumpA: 0, npA: 0, ads0: Math.max(0.001, S.plant.adsorbent), reg: S.totals.reg, transfer: -1
+    });
+    [[STA.mGlow, 0xff6b1f], [STA.mUV, 0x8c4dff], [STA.mLed, 0xffc8f0]].forEach(([m, c]) => { if (m) { m.emissive = new THREE.Color(c); m.emissiveIntensity = 0; } });
+    // cápsulas de muestra en la cinta y bocanadas de vapor
+    const capM = new THREE.MeshStandardMaterial({ color: 0xc9ccd6, metalness: 0.6, roughness: 0.35 });
+    STA.caps = Array.from({ length: 6 }, () => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.2, 14), capM); c.visible = false; c.castShadow = true; scene.add(c); return c; });
+    const pm = new THREE.MeshBasicMaterial({ color: 0xeef2ff, transparent: true, opacity: 0.7, depthWrite: false });
+    STA.puffs = Array.from({ length: 18 }, () => { const s = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), pm); s.visible = false; s.renderOrder = 6; scene.add(s); return s; });
+    if (STA.waterPath) ST.flowCurve = STA.waterPath;   // las gotas de agua siguen ahora la tubería real del modelo
+    // paneles solares hacia el Sol y antena hacia la Tierra
+    const sd = W.sunDir; STA.solar.forEach(o => rotTo(o, AX_Z, Math.atan2(-sd.z, sd.x)));
+    if (STA.ant && sky) {
+      const e = sky.earthDir; STA.ant.quaternion.copy(STA.ant.userData.q0).multiply(_q.setFromAxisAngle(AX_Z, Math.atan2(-e.z, e.x)))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(AX_Y, -Math.asin(e.y)));
+    }
+    // --- Ventanas al interior del proceso ---
+    const B2T = (x, y, z) => scn.localToWorld(new THREE.Vector3(x, z, -y));      // coordenadas de Blender → mundo
+    Object.assign(STA, {
+      bed: piv('piv_horno_lecho'), dist: piv('piv_bio_distribuidor'), basin: piv('bio_agua'),
+      ind: [0, 1, 2].map(k => piv('piv_indicador_' + k)).filter(Boolean), indA: [0, 0, 0],
+      ovenC: B2T(4.62, -2.3, 0.95), trapC: B2T(5.6, -2.6, 0.0), bioC: B2T(7.35, -2.6, 0.0)
+    });
+    if (STA.basin) { STA.basin.material = STA.basin.material.clone(); STA.basinMat = STA.basin.material; }
+    STA.frostCoil = get('trampa_escarcha_serpentin');
+    if (STA.frostCoil) { STA.frostCoil.material = STA.frostCoil.material.clone(); STA.frostCoil.material.transparent = true; STA.frostCoil.material.depthWrite = false; }
+    const dot = (color, r, op) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); m.visible = false; m.renderOrder = 6; scene.add(m); return m; };
+    STA.ovenPuffs = Array.from({ length: 12 }, () => dot(0xf4f6ff, 0.045, 0.75));     // vapor saliendo del regolito caliente
+    STA.trapPuffs = Array.from({ length: 24 }, () => dot(0xe6eeff, 0.055, 0.75));   // vapor que gira y se congela en el serpentín
+    STA.trapDrips = Array.from({ length: 10 }, () => dot(0x8fb0ff, 0.03, 0.95));      // gotas al fundirse la escarcha
+    STA.bioDrips = Array.from({ length: 24 }, () => dot(0xb08a55, 0.026, 0.9));    // agua que riega el lecho de microorganismos
+    STA.bioDirt = Array.from({ length: 40 }, () => dot(0x8a6a3a, 0.02, 0.95));      // contaminantes que las bacterias van consumiendo
+    const rr = Ice.rng(77); STA.dirtPos = STA.bioDirt.map(() => { const a = rr() * 6.283, r = Math.sqrt(rr()) * 0.85; return [Math.cos(a) * r, 0.42 + rr() * 0.16, Math.sin(a) * r]; });
+    STA.on = true;
+  }
+  function updateStationAnim(t, dt) {
+    const Pl = S.plant, hot = Pl.state === 'calentando' || Pl.state === 'sublimando', sub = Pl.state === 'sublimando';
+    const flowing = S.t - Pl.flowT < 5400;
+    // 1) Descarga del rover: se abre la tapa de la tolva y las cápsulas viajan por la cinta hasta el horno
+    if (S.totals.reg < STA.reg) STA.reg = S.totals.reg;
+    if (S.totals.reg > STA.reg + 1e-6) { STA.reg = S.totals.reg; STA.transfer = 0; }
+    let lidOpen = false;
+    if (STA.transfer >= 0) {
+      const tt = (STA.transfer += dt); lidOpen = tt < 6.5;
+      const k = clamp01((tt - 1.0) / 5.5);
+      STA.caps.forEach((c, i) => {
+        const u = k * 1.3 - i * 0.06; c.visible = !!STA.belt && u > 0 && u < 1;
+        if (c.visible) { c.position.copy(STA.belt.getPointAt(u)); c.quaternion.setFromUnitVectors(UP, STA.belt.getTangentAt(u)); }
+      });
+      if (tt > 8) STA.transfer = -1;
+    } else STA.caps.forEach(c => { c.visible = false; });
+    STA.lidA = approach(STA.lidA, lidOpen ? -1.25 : 0, 1.6, dt); rotTo(STA.lid, AX_Y, STA.lidA);
+    // 2) Horno: el tambor gira mientras calienta; la mirilla y la junta brillan según la temperatura real
+    if (hot) STA.drumA += dt * 0.8; rotTo(STA.drum, AX_X, STA.drumA);
+    if (STA.mGlow) STA.mGlow.emissiveIntensity = (hot ? clamp01((Pl.T - 60) / 190) * 2.4 : 0) * (0.92 + 0.08 * Math.sin(t * 7));
+    // 3) Vapor del horno a la trampa fría (solo mientras el hielo se sublima)
+    STA.puffs.forEach((s, i) => {
+      s.visible = sub && !!STA.vapor;
+      if (s.visible) { const u = (t * 0.35 + i / STA.puffs.length) % 1, p = STA.vapor.getPointAt(u); s.position.set(p.x + Math.sin(t * 5 + i) * 0.02, p.y, p.z + Math.cos(t * 4 + i) * 0.02); s.scale.setScalar(0.6 + 0.8 * u); }
+    });
+    // 4) Trampa fría: la escarcha crece con el hielo capturado; el pistón del criorrefrigerador late
+    if (STA.frost) STA.frost.scale.y = Math.max(0.001, Math.min(1, Pl.frost / 2.2));
+    if (STA.piston) STA.piston.position.y = STA.piston.userData.p0.y + (sub || Pl.frost > 0 ? 0.015 * Math.sin(t * 9) : 0);
+    // 5) Biofiltro: luces de cultivo y bomba de nutrientes
+    if (STA.mLed) STA.mLed.emissiveIntensity = BIO.lamp.intensity > 0 ? 1.8 : 0.12;
+    if (S.bio.power > 0) STA.npA += dt * 2.5; rotTo(STA.npump, AX_Y, STA.npA);
+    // 6) Filtros: el adsorbente baja con el uso; la lámpara UV se enciende cuando pasa agua
+    const adsL = clamp01(Pl.adsorbent / STA.ads0); STA.ads.forEach(o => { o.scale.y = Math.max(0.001, adsL); });
+    if (STA.mUV) STA.mUV.emissiveIntensity = flowing ? 2.6 + 0.3 * Math.sin(t * 13) : 0;
+    // 7) Depósito: nivel de agua e indicador exterior; la bomba gira al enviar agua a la colonia
+    const lvl = Math.min(1, Pl.tank / 30);
+    if (STA.tankWater) STA.tankWater.scale.y = Math.max(0.001, lvl * 1.55);
+    if (STA.gauge) STA.gauge.position.y = STA.gauge.userData.p0.y + lvl * 1.4;
+    if (S.t - S.colony.flowT < 600) STA.pumpA += dt * 7; rotTo(STA.pump, AX_Y, STA.pumpA);
+    // 8) Válvulas: el volante gira al abrirse
+    STA.valves.forEach(v => { v.a = approach(v.a, (v.k === 'vapor' ? sub : flowing) ? 2.6 : 0, 2.0, dt); rotTo(v.o, AX_Z, v.a); });
+    // ===== Ventanas =====
+    const up = STA.ovenC.clone().sub(STA.trapC).set(0, 1, 0);
+    // Horno: el regolito se voltea con el tambor y, al sublimarse el hielo, suben hilos de vapor
+    if (STA.bed) rotTo(STA.bed, AX_X, hot ? 0.12 * Math.sin(t * 1.6) : 0);
+    STA.ovenPuffs.forEach((m, i) => {
+      m.visible = sub; if (!sub) return;
+      const u = (t * 0.5 + i / STA.ovenPuffs.length) % 1;
+      m.position.set(STA.ovenC.x - 0.1 + 0.2 * ((i * 0.37) % 1) + 0.02 * Math.sin(t * 3 + i), STA.ovenC.y - 0.1 + 0.25 * u, STA.ovenC.z + 0.05 * Math.cos(i));
+      m.material.opacity = 0.5 * (1 - u); m.scale.setScalar(0.6 + u);
+    });
+    // Trampa fría: el vapor entra girando y se congela sobre el serpentín (las bolitas encogen al volverse escarcha)
+    STA.trapPuffs.forEach((m, i) => {
+      m.visible = sub; if (!sub) return;
+      const u = (t * 0.22 + i / STA.trapPuffs.length) % 1, a = t * 2.2 + i * 1.7, r = 0.28 - 0.12 * u;
+      m.position.set(STA.trapC.x + Math.cos(a) * r, STA.trapC.y + 1.45 - 0.75 * u, STA.trapC.z + Math.sin(a) * r);
+      m.scale.setScalar(1.2 - u); m.material.opacity = 0.55 * (1 - u * 0.7);
+    });
+    // La escarcha se forma primero sobre el serpentín frío y luego se acumula en el fondo
+    if (STA.frostCoil) { const f = clamp01(Pl.frost / 1.0); STA.frostCoil.visible = f > 0.02; STA.frostCoil.material.opacity = 0.15 + 0.8 * f; }
+    // Al fundirse la escarcha caen gotas hacia la salida
+    const melting = flowing && S.t - Pl.flowT < 1800;
+    STA.trapDrips.forEach((m, i) => {
+      m.visible = melting; if (!melting) return;
+      const u = (t * 0.9 + i / STA.trapDrips.length) % 1;
+      m.position.set(STA.trapC.x + 0.2 * Math.cos(i * 2.4), STA.trapC.y + 1.3 - 0.75 * u, STA.trapC.z + 0.2 * Math.sin(i * 2.4) - 0.05);
+    });
+    // Biofiltro: el distribuidor gira y riega el lecho; el agua entra turbia y se aclara mientras trabajan los microorganismos
+    if (flowing) STA.distA = (STA.distA || 0) + dt * 1.4; rotTo(STA.dist, AX_Z, STA.distA || 0);
+    const since = S.t - Pl.flowT, q = Pl.quality, after = q ? q.after : 100;
+    const clean = flowing ? Math.min(1, since / 3600) * (1 - after / 100) : (q ? 1 - after / 100 : 0);
+    if (STA.basinMat) STA.basinMat.color.setRGB(0.45 + (0.12 - 0.45) * clean, 0.38 + (0.30 - 0.38) * clean, 0.22 + (0.75 - 0.22) * clean);
+    if (STA.basin) STA.basin.scale.y = STA.basin.userData.s0.y * (0.6 + 0.9 * clamp01(S.bio.V / 200));
+    STA.bioDrips.forEach((m, i) => {
+      m.visible = flowing && !!STA.dist; if (!m.visible) return;
+      const k = i % 12, side = k < 6 ? 1 : -1, d = side * (0.18 + (k % 6) * 0.12), u = (t * 1.6 + i * 0.37) % 1;
+      const p = STA.dist.localToWorld(new THREE.Vector3(d, -0.04, 0)); p.y -= 0.8 * u; m.position.copy(p);
+      m.material.color.setRGB(0.69 - 0.3 * clean, 0.54 - 0.1 * clean, 0.33 + 0.5 * clean);
+    });
+    STA.bioDirt.forEach((m, i) => {
+      const left = flowing ? 1 - clean : 0, show = (i / STA.bioDirt.length) < left;
+      m.visible = show; if (!show) return;
+      const [x, y, z] = STA.dirtPos[i]; m.position.set(STA.bioC.x + x + 0.01 * Math.sin(t * 2 + i), STA.bioC.y + y, STA.bioC.z + z);
+    });
+    // Indicadores de flujo: la ruedita gira cuando pasa agua (el último, cuando sale hacia la colonia)
+    const colonyFlow = S.t - S.colony.flowT < 600;
+    STA.ind.forEach((o, k) => { if (k < 2 ? flowing : colonyFlow) STA.indA[k] += dt * 9; rotTo(o, AX_X, STA.indA[k]); });
   }
 
   function buildMarkers() {
@@ -732,7 +880,7 @@
     if (tracks) tracks.update(S.rover, S.t);
     if (!visible) return;
     const t = now / 1000;
-    updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); updateColony(t); updateCamera();
+    updateRover(t); if (RA.on) updateRoverAnim(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
     renderer.render(scene, camera);
     updateLabels();
@@ -978,7 +1126,7 @@
     new ResizeObserver(resize).observe(host);
     new IntersectionObserver(es => { visible = es[0].isIntersecting; }, { threshold: 0.01 }).observe(host);
     requestAnimationFrame(frame);
-    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; } };
+    window.IceSimView = { sim, setCam, toggleRun, openTab, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; }, get stationAnim() { return STA; } };
   }
   window.IceSimViewInit = init;
 })();
