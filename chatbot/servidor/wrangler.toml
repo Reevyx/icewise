@@ -1,0 +1,25 @@
+# Configuración del Worker de ASTRA (Cloudflare).
+# IA por defecto: Workers AI (gratis, sin clave). Opcional: Claude con una clave de pago, que NUNCA va
+# aquí: se guarda como secreto con  npx wrangler secret put ANTHROPIC_API_KEY
+name = "astra-icewise"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Webs que pueden usar este servidor (separadas por comas). La primera es la de GitHub Pages;
+# las otras dos son para probar en local con Live Server.
+ALLOWED_ORIGINS = "https://reevyx.github.io,http://127.0.0.1:5500,http://localhost:5500"
+
+# Workers AI: la IA gratuita de Cloudflare (cuota diaria, sin clave)
+[ai]
+binding = "AI"
+
+# Límite de mensajes por IP: 15 por minuto
+[[ratelimits]]
+name = "LIMITE"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 15
+  period = 60

@@ -1,0 +1,255 @@
+/* =========================================================================
+   ASTRA — ventana del chat con el sistema visual de ICEWISE (Mercury):
+   oscuro, monocromo, cobalto como único acento.
+   Funciona sola (chatbot/index.html) o incrustada en la web (clase .embed).
+   ========================================================================= */
+:root {
+    --onyx: #171721;
+    --graphite: #1e1e2a;
+    --obsidian: #272735;
+    --slate: #70707d;
+    --ash: #c3c3cc;
+    --ivory: #ededf3;
+    --cobalt: #5266eb;
+    --line-soft: rgba(226, 227, 237, 0.10);
+    --line-mid: rgba(226, 227, 237, 0.22);
+    --font: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font);
+}
+
+::selection { background: var(--cobalt); color: #fff; }
+
+body {
+    background-color: var(--onyx);
+    color: var(--ivory);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+.chatbot-container {
+    width: 100%;
+    max-width: 520px;
+    height: 85vh;
+    background-color: var(--graphite);
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--line-soft);
+}
+
+/* Incrustado en la web: ocupa todo el panel y deja que el panel ponga el borde y la sombra */
+.embed, .embed body { height: 100%; background: transparent; }
+.embed body { display: block; }
+.embed .chatbot-container { max-width: none; height: 100%; border-radius: 0; border: 0; box-shadow: none; background: transparent; }
+
+.chatbot-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.header-title h1 {
+    font-size: 15px;
+    font-weight: 480;
+    letter-spacing: 0.01em;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--cobalt);
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(82, 102, 235, 0.22);
+}
+
+.timezone-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ash);
+}
+
+.timezone-selector select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--obsidian) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='12' height='12' fill='none' stroke='%23c3c3cc' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;
+    color: var(--ivory);
+    border: 1px solid var(--line-mid);
+    border-radius: 40px;
+    padding: 5px 26px 5px 11px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.timezone-selector select:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+
+.reloj-badge {
+    background-color: var(--obsidian);
+    padding: 5px 10px;
+    border-radius: 40px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 480;
+    color: var(--ivory);
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 18px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(237, 237, 243, 0.2) transparent;
+}
+
+.message {
+    max-width: 84%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    line-height: 1.5;
+    font-size: 14px;
+    word-wrap: break-word;
+    animation: entrar 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message.bot {
+    background-color: var(--obsidian);
+    color: var(--ivory);
+    align-self: flex-start;
+    border-bottom-left-radius: 5px;
+}
+
+.message.bot strong { font-weight: 600; }
+.message.bot code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: rgba(237, 237, 243, 0.08); }
+
+.message.user {
+    background-color: var(--cobalt);
+    color: #ffffff;
+    align-self: flex-end;
+    border-bottom-right-radius: 5px;
+}
+
+.chatbot-input-area {
+    padding: 12px 14px;
+    border-top: 1px solid var(--line-soft);
+    display: flex;
+    gap: 8px;
+}
+
+#input-chat {
+    flex: 1;
+    min-width: 0;
+    background-color: var(--obsidian);
+    border: 1px solid var(--line-mid);
+    color: var(--ivory);
+    padding: 10px 16px;
+    border-radius: 40px;
+    outline: none;
+    font-size: 14px;
+    caret-color: var(--cobalt);
+    transition: border-color 0.15s;
+}
+
+#input-chat::placeholder { color: #9a9aa6; }
+
+#input-chat:focus {
+    border-color: rgba(237, 237, 243, 0.55);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 40px;
+    padding: 10px 18px;
+    font-weight: 480;
+    font-size: 14px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+button:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+
+#btn-voz {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    padding: 0;
+    flex: none;
+    background-color: var(--obsidian);
+    color: var(--ivory);
+    border: 1px solid var(--line-mid);
+}
+
+#btn-voz:hover { border-color: rgba(237, 237, 243, 0.5); }
+#btn-voz .ic-stop { display: none; }
+
+#btn-voz.escuchando {
+    background-color: var(--ivory);
+    color: var(--onyx);
+    animation: pulse 1.2s infinite;
+}
+
+#btn-voz.escuchando .ic-mic, #btn-voz.conversando .ic-mic { display: none; }
+#btn-voz.escuchando .ic-stop, #btn-voz.conversando .ic-stop { display: block; }
+/* Conversación activa mientras ASTRA habla: botón resaltado sin pulso */
+#btn-voz.conversando { background-color: rgba(237, 237, 243, 0.14); border-color: rgba(237, 237, 243, 0.6); }
+
+/* ASTRA está pensando */
+.message.pensando { padding: 12px 16px; }
+.puntos { display: inline-flex; gap: 5px; align-items: center; }
+.puntos i { width: 6px; height: 6px; border-radius: 50%; background: var(--ash); opacity: 0.35; animation: punto 1.1s infinite ease-in-out; }
+.puntos i:nth-child(2) { animation-delay: 0.15s; }
+.puntos i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes punto { 0%, 80%, 100% { opacity: 0.35; transform: none; } 40% { opacity: 1; transform: translateY(-3px); } }
+
+#btn-enviar {
+    background-color: var(--cobalt);
+    color: white;
+    flex: none;
+}
+
+#btn-enviar:hover {
+    background-color: #4357d6;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(237, 237, 243, 0.45); }
+    70% { box-shadow: 0 0 0 9px rgba(237, 237, 243, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(237, 237, 243, 0); }
+}
+
+@keyframes entrar {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .message, #btn-voz.escuchando, .puntos i { animation: none; }
+}
+
+@media (max-width: 420px) {
+    .chatbot-header { padding: 12px 14px; }
+    .timezone-selector label { display: none; }
+}

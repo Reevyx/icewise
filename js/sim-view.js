@@ -15,8 +15,28 @@
     media: { pr: 1, msaa: 0, smaa: true, gtao: false, bloom: true, shadow: 2048, detail: true, grains: false },
     baja: { pr: 0.75, msaa: 0, smaa: false, gtao: false, bloom: false, shadow: 1024, detail: false, grains: false }
   };
-  let qName = (() => { try { const v = localStorage.getItem('icewise-calidad'); if (QUALITY[v]) return v; } catch (_) {} return 'maxima'; })();
+  const Q_ORDER = ['maxima', 'alta', 'media', 'baja'];
+  // Calidad: si la persona eligió una a mano se respeta; si no (o eligió "Auto"), se estima según la tarjeta gráfica
+  // al iniciar (guessQuality) y se baja un nivel sola si el equipo no llega a ~26 fps (autoQuality).
+  let qName = (() => { try { const v = localStorage.getItem('icewise-calidad'); if (QUALITY[v]) return v; } catch (_) {} return 'alta'; })();
+  let qAuto = !(() => { try { return QUALITY[localStorage.getItem('icewise-calidad')]; } catch (_) { return false; } })();
   let Q = QUALITY[qName];
+  function guessQuality(gl) {
+    let gpu = '';
+    try { const ext = gl.getExtension('WEBGL_debug_renderer_info'); gpu = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || ''); } catch (_) {}
+    const mobile = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
+    let q;
+    if (/SwiftShader|llvmpipe|softpipe|Software|Basic Render|Microsoft Basic/i.test(gpu)) q = 'baja';             // sin tarjeta gráfica
+    else if (mobile) q = /Apple|Adreno \(TM\) (6[5-9]|7)\d|Mali-G7[1-9]|Mali-G[7-9]\d\d|Immortalis/i.test(gpu) ? 'media' : 'baja';
+    else if (/NVIDIA|GeForce|RTX|GTX|Quadro|Radeon (RX|Pro)|Radeon\(TM\) RX|Arc\(TM\)|Intel\(R\) Arc|Apple M\d (Pro|Max|Ultra)/i.test(gpu)) q = 'maxima';   // tarjeta dedicada
+    else if (/Apple M\d|Apple GPU/i.test(gpu)) q = 'alta';
+    else if (/Intel|UHD|HD Graphics|Iris|Radeon\(TM\) Graphics|Radeon Vega|Vega \d+|Mali|PowerVR|Adreno/i.test(gpu)) q = 'media';   // gráfica integrada
+    else q = 'alta';                                                                                          // desconocida
+    const cores = navigator.hardwareConcurrency || 8, mem = navigator.deviceMemory || 8;
+    if ((cores <= 4 || mem <= 4) && Q_ORDER.indexOf(q) < 2) q = 'media';                                     // pocos núcleos o poca memoria
+    console.info(`Calidad automática: ${q} (GPU: ${gpu || 'desconocida'}, ${cores} núcleos)`);
+    return q;
+  }
   const chase = { yaw: 0, pitch: 0.3, dist: 9, drag: false, lastDrag: 0 };   // cámara en 3ª persona
   const rcam = { yaw: 0, pitch: 0, zoom: 1, drag: false, dist: 0, aim: new THREE.Vector3() };   // cámara del mástil
   const tele = { yaw: 0, pitch: 0, fov: 6.5, drag: false };   // Vista Tierra: teleobjetivo desde la estación
@@ -82,8 +102,10 @@
   function buildScene(host) {
     THREE.ColorManagement.enabled = false;   // los colores en hexadecimal se usan tal cual (como en la versión anterior)
     renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
+    renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1)); IceEnv.renderer = renderer;
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.info.autoReset = false;
+    renderer.shadowMap.autoUpdate = false;                                  // el mapa de sombras se recalcula solo cuando algo cambia (ver frame)                                        // estadísticas del fotograma completo (escena + sombras + efectos)
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
     host.appendChild(renderer.domElement);
     scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
@@ -136,7 +158,7 @@
 
     buildCrystals(); buildBoulders(); updNearRocks = IceEnv.nearRocks(W, scene);
     IceEnv.loadScanned(W, scene, location.protocol === 'file:');   // rocas y regolito escaneados (Poly Haven, CC0)
-    buildRover(); buildStation(); buildColony(); buildMarkers(); loadCustomModels(); buildDrillFX();
+    buildRover(); buildStation(); buildColony(); refreshObstacles(); buildMarkers(); loadCustomModels(); buildDrillFX();
     IceEnv.patchTree(scene, SV);
     addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
     addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
@@ -188,9 +210,32 @@
       const k = Math.pow(Math.random(), 3) * 1.8 + 0.15;
       e.set(Math.random() * 3, Math.random() * 6.3, Math.random() * 3); q.setFromEuler(e); s.set(k * (0.8 + Math.random() * 0.5), k * 0.6, k * (0.8 + Math.random() * 0.5));
       p.set(x, W.hAt(x, z) + k * 0.15, z); m4.compose(p, q, s); rocks.setMatrixAt(n++, m4);
+      if (k > 0.6) BOULDER_OBS.push({ t: 'c', x, z, r: (s.x + s.z) / 2 * 0.85 });   // las más bajas (< ~30 cm) se pueden pasar por encima
     }
     rocks.count = n; rocks.castShadow = true; rocks.receiveShadow = true; scene.add(rocks);
     IceEnv.registerRocks(rocks, scene, 0.1);
+  }
+
+  // ---------- Colisiones: cada pieza visible de la estación y la colonia, las rocas grandes y la tubería ----------
+  // Se ignoran las piezas a ras de suelo (< 35 cm: plataformas, cables) y las que quedan por encima del rover (> 2,9 m).
+  const BOULDER_OBS = [];
+  function refreshObstacles() {
+    const list = BOULDER_OBS.slice(), box = new THREE.Box3();
+    const shown = o => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+    for (const g of [ST.g, COL.g]) {
+      if (!g) continue;
+      g.updateMatrixWorld(true);
+      g.traverse(o => {
+        if (!o.isMesh || o.isInstancedMesh || !shown(o)) return;
+        box.setFromObject(o); if (box.isEmpty()) return;
+        const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2, gy = W.hAt(cx, cz);
+        if (box.max.y - gy < 0.35 || box.min.y - gy > 2.9) return;
+        list.push({ t: 'b', x0: box.min.x, z0: box.min.z, x1: box.max.x, z1: box.max.z });
+      });
+    }
+    if (COL.curve) { const pts = COL.curve.getPoints(Math.max(24, Math.round(COL.curve.getLength() / 3)));
+      for (let k = 1; k < pts.length; k++) list.push({ t: 's', ax: pts[k - 1].x, az: pts[k - 1].z, bx: pts[k].x, bz: pts[k].z, r: 0.2 }); }
+    sim.cmd.setObstacles(list);
   }
 
   // ---------- Rover ----------
@@ -407,7 +452,7 @@
       };
       (Array.isArray(list) ? list : []).forEach(name => {
         if (!targets[name]) return;
-        const onLoad = g => { prep(g.scene); targets[name](g.scene); IceEnv.patchTree(g.scene, SV); loadAdd('modelos'); console.info(`Modelo de Blender cargado: ${name}.glb`); };
+        const onLoad = g => { prep(g.scene); targets[name](g.scene); IceEnv.patchTree(g.scene, SV); if (name !== 'rover') refreshObstacles(); loadAdd('modelos'); console.info(`Modelo de Blender cargado: ${name}.glb`); };
         const onErr = e => { loadAdd('modelos'); console.warn(`No se pudo cargar el modelo ${name}; se usa el modelo procedural.`, e || ''); };
         if (local) { try { loader.parse(b64ToBuf(window.ICE_EMBED[name]), '', onLoad, onErr); } catch (e) { onErr(e); } }
         else loader.load(`assets/models/${name}.glb`, onLoad, undefined, onErr);
@@ -858,7 +903,7 @@
     if (camMode === 'tierra') IceEnv.updateSun(sun, W, camera.position, 120);
     else if (camMode === 'rovercam') { const vis = 2 * rcam.dist * Math.tan(camera.fov * Math.PI / 360); IceEnv.updateSun(sun, W, controls.target, Math.max(vis * 1.6, 2.5), rcam.zoom > 3 ? 2.5 : 16); }   // con zoom: sombras concentradas en lo que se ve
     else IceEnv.updateSun(sun, W, controls.target, camera.position.distanceTo(controls.target));
-    updNearRocks(controls.target.x, controls.target.z);
+    updNearRocks(controls.target.x, controls.target.z); IceEnv.updateRockLOD(camera);
     sky.update(camera, cdt, S.t);
   }
 
@@ -867,8 +912,8 @@
     labels.forEach(l => {
       const wp = l.posFn(), p = wp.clone().project(camera), dist = camera.position.distanceTo(wp);
       const hide = p.z > 1 || (l.cls === 'ov' && camMode !== 'overview') || (l.cls === 'mid' && dist > 700) || (l.cls === 'near' && dist > 45) || (l.cls === 'far' && dist < 90) || (l.cls === 'rover' && dist < 25);
-      l.el.style.display = hide ? 'none' : 'block';
-      if (!hide) l.el.style.transform = `translate(${(p.x * 0.5 + 0.5) * w}px, ${(-p.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
+      const disp = hide ? 'none' : 'block'; if (l.disp !== disp) { l.el.style.display = disp; l.disp = disp; }
+      if (!hide) { const tf = `translate(${Math.round((p.x * 0.5 + 0.5) * w)}px, ${Math.round((-p.y * 0.5 + 0.5) * h)}px) translate(-50%, -100%)`; if (l.tf !== tf) { l.el.style.transform = tf; l.tf = tf; } }
     });
   }
 
@@ -976,7 +1021,7 @@
       tip.hidden = true;
       pop.innerHTML = `${describe(p.x, p.z)}<div class="row" style="margin-top:12px;gap:8px"><button class="btn btn--primary btn--sm" data-go>Enviar el rover aquí</button><button class="btn btn--sm btn--quiet" data-close>Cancelar</button></div>`;
       pop.hidden = false; pop.style.left = Math.min(r.width - 290, ev.clientX - r.left + 10) + 'px'; pop.style.top = Math.min(r.height - 190, Math.max(50, ev.clientY - r.top - 20)) + 'px';
-      pop.querySelector('[data-go]').onclick = () => { sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); setDestMode(false); hideIntro(); toast('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.'); };
+      pop.querySelector('[data-go]').onclick = () => { sim.cmd.stopRoute(); sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); setDestMode(false); hideIntro(); toast('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.'); };
       pop.querySelector('[data-close]').onclick = () => { pop.hidden = true; pickMarker.visible = false; };
     });
     $('#sim-dest-btn').addEventListener('click', () => setDestMode(!destMode));
@@ -997,6 +1042,7 @@
     if (mode !== 'despiece') { if (EXP.on) { EXP.prev = null; setExplode(false); } else if (EXP.k > 0) EXP.prev = null; }   // otra cámara: se cierra el despiece sin volver a la anterior
     camMode = mode;
     $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.c === mode)));
+    const cur = $(`#sim-cam button[data-c="${mode}"]`); if (cur) set('sim-cam-cur', cur.textContent);
     setCamLens(mode);
     if (mode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 });
     if (mode === 'tierra') Object.assign(tele, { yaw: 0, pitch: 0, fov: 6.5 });
@@ -1313,7 +1359,7 @@
 
   // ---------- Mapa: relieve real, rastro, perforaciones y ruta con puntos de paso ----------
   const ROUTE = { pts: [], active: false, i: 0, sent: -1, marks: [] };
-  const MAP = { base: null };
+  const MAP = { base: null, mode: 'ruta' };
   function mapBase() {                                                       // relieve sombreado (luz cartográfica del NO) + sombra permanente
     if (MAP.base) return MAP.base;
     const N = W.N, c = document.createElement('canvas'); c.width = c.height = N;
@@ -1353,6 +1399,15 @@
       g.fillStyle = done ? 'rgba(82,102,235,.35)' : '#5266eb'; g.beginPath(); g.arc(X(p.x), Y(p.z), 10, 0, 6.283); g.fill();
       g.fillStyle = '#fff'; g.font = '700 12px Inter, sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), X(p.x), Y(p.z) + 4); g.textAlign = 'left';
     });
+    // medición A → B
+    if (MAP.mode === 'medir' && MEAS.a) {
+      const pa = MEAS.a, pb = MEAS.b;
+      if (pb) { g.setLineDash([]); g.strokeStyle = '#ededf3'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(X(pa.x), Y(pa.z)); g.lineTo(X(pb.x), Y(pb.z)); g.stroke();
+        if (MEAS.res) { const mx = (X(pa.x) + X(pb.x)) / 2, my = (Y(pa.z) + Y(pb.z)) / 2, txt = fmtDist(MEAS.res.d3); g.font = '700 15px Inter, sans-serif'; const tw = g.measureText(txt).width;
+          g.fillStyle = 'rgba(23,23,33,.85)'; g.fillRect(mx - tw / 2 - 6, my - 24, tw + 12, 22); g.fillStyle = '#fff'; g.fillText(txt, mx - tw / 2, my - 8); } }
+      [[pa, 'A'], [pb, 'B']].forEach(([p, l]) => { if (!p) return; g.fillStyle = '#ededf3'; g.beginPath(); g.arc(X(p.x), Y(p.z), 10, 0, 6.283); g.fill();
+        g.fillStyle = '#171721'; g.font = '700 12px Inter, sans-serif'; g.textAlign = 'center'; g.fillText(l, X(p.x), Y(p.z) + 4); g.textAlign = 'left'; });
+    }
     // rover: triángulo blanco con su rumbo
     g.save(); g.translate(X(R.x), Y(R.z)); g.rotate(R.heading); g.fillStyle = '#fff'; g.strokeStyle = '#171721'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(11, 0); g.lineTo(-7, 7); g.lineTo(-4, 0); g.lineTo(-7, -7); g.closePath(); g.stroke(); g.fill(); g.restore();
@@ -1373,20 +1428,147 @@
     ROUTE.marks.forEach((m, i) => { const p = ROUTE.pts[i]; m.visible = !!p && !(ROUTE.active && i < ROUTE.i);
       if (p) m.position.set(p.x, W.hAt(p.x, p.z), p.z); });
   }
+  // El motor lleva la ruta (R.route, R.routeI); aquí solo se refleja su avance en el mapa y en los postes
   function routeTick() {
     if (!ROUTE.active) return;
-    const R = S.rover, p = ROUTE.pts[ROUTE.i];
-    if (!p) { ROUTE.active = false; routeMarks(); setRouteUI(); toast('Ruta completada: el rover pasó por todos los puntos.'); return; }
-    if (R.task === 'dead') { ROUTE.active = false; setRouteUI(); return; }
-    if (ROUTE.sent !== ROUTE.i) { sim.cmd.goTo(p.x, p.z); ROUTE.sent = ROUTE.i; return; }
-    if (['goto', 'characterize', 'decide', 'drill', 'reposition'].includes(R.task)) return;   // va al punto, mide y decide si perfora
-    if (R.task === 'return' || R.task === 'idle') { ROUTE.active = false; setRouteUI(); toast('Ruta en pausa: el rover vuelve a la estación (batería o bodega). Pulsa «Seguir ruta» para continuar.'); return; }
-    ROUTE.i++; routeMarks();                                                 // punto terminado: al siguiente
+    const R = S.rover;
+    if (!R.route) {
+      ROUTE.active = false;
+      if (R.routeDone) { ROUTE.i = ROUTE.pts.length; finishRun(); toast('Ruta completada: el rover pasó por todos los puntos.'); }
+      routeMarks(); setRouteUI(); return;
+    }
+    if (R.routeI !== ROUTE.i) { ROUTE.i = R.routeI; routeMarks(); setRouteUI(); }
+    if ((R.task === 'return' || R.task === 'idle') && !ROUTE.paused) { ROUTE.paused = true; toast('El rover vuelve a la estación (batería o bodega); al recargar seguirá la ruta.'); }
+    if (R.task !== 'return' && R.task !== 'idle') ROUTE.paused = false;
+  }
+  function finishRun() {
+    const r = ROUTE.run; if (!r || r.done) return;
+    const e = S.rover.routeEnd || { t: S.t, d3: ODO.d3, holes: S.totals.holes };   // lo apuntó el motor al terminar la ruta
+    Object.assign(r, { done: true, d3: e.d3 - r.d30, dt: e.t - r.t0, drills: e.holes - r.h0 });
+    const sv = SAVED.list.find(x => x.id === ROUTE.savedId);
+    if (sv) { sv.run = { d3: r.d3, dt: r.dt, drills: r.drills }; storeSaved(); renderSaved(); }
   }
   function setRouteUI() {
     const go = $('#sm-go'); if (go) { go.textContent = ROUTE.active ? 'Detener ruta' : (ROUTE.i > 0 && ROUTE.i < ROUTE.pts.length ? 'Seguir ruta' : 'Recorrer ruta'); go.disabled = !ROUTE.pts.length; }
     set('sm-count', ROUTE.pts.length ? `${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}` : 'Sin puntos de paso');
+    set('sm-est', routeEstimateHTML()); const sb = $('#sm-save'); if (sb) sb.disabled = !ROUTE.pts.length;
     drawMap();
+  }
+
+  // ---------- Distancias: odómetro sobre el relieve, medición A → B y estimación de recorridos ----------
+  // El tiempo estimado usa el MISMO modelo de conducción que el motor (driveToward): velocidad máxima P.vmax, la mitad en
+  // subidas de más de 15° (pendiente 0,27), bloqueado por encima de 24° (0,45), giro a 0,12 rad/s. Al llegar a cada punto de
+  // paso mide 20 min. La energía usa la misma fórmula con la que el rover decide cuándo volver.
+  // El motor suma en cada paso la distancia sobre el relieve (S.totals.dist3): exacta a cualquier velocidad del tiempo.
+  const ODO = { d3: 0, trip: 0, trip0: 0, lastTask: null };
+  function updateOdometry() {
+    const R = S.rover, d3 = S.totals.dist3 || 0;
+    if (d3 < ODO.d3 - 1e-6) ODO.trip0 = 0;                                    // «Reiniciar todo»
+    if (ODO.lastTask === 'idle' && R.task !== 'idle') ODO.trip0 = d3;         // sale de la estación: empieza una salida nueva
+    ODO.lastTask = R.task; ODO.d3 = d3; ODO.trip = d3 - ODO.trip0;
+  }
+  function estimateLeg(ax, az, bx, bz, prof) {                               // tramo recto sobre el relieve, cada ~3 m
+    const d2 = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d2 / 3)), ds = d2 / n, vmax = Math.max(0.005, P.vmax);
+    let d3 = 0, t = 0, up = 0, down = 0, maxG = 0, blocked = 0, h0 = W.hAt(ax, az);
+    if (prof) prof.push([0, h0]);
+    for (let i = 1; i <= n; i++) {
+      const f = i / n, h1 = W.hAt(ax + (bx - ax) * f, az + (bz - az) * f), dh = h1 - h0, g = dh / Math.max(ds, 1e-6);
+      d3 += Math.hypot(ds, dh); if (dh > 0) up += dh; else down -= dh; maxG = Math.max(maxG, Math.abs(g));
+      if (g > 0.45) blocked += ds;                                           // > 24° cuesta arriba: el rover tendría que rodear
+      t += ds / (g > 0.27 ? vmax * 0.5 : vmax);                              // el motor avanza en horizontal a esa velocidad
+      if (prof) prof.push([d2 * f, h1]); h0 = h1;
+    }
+    return { d2, d3, t, up, down, maxSlope: Math.atan(maxG) * 180 / Math.PI, blocked };
+  }
+  const energyWh = t => t / 3600 * (sim.ROVER.base + 160 + 40) * 1.4;
+  function drillHours() {                                                     // una perforación de P.drillDepth con hielo en el umbral
+    const r0 = 1.2 * (P.drillPower / 150), dry = 0.2;
+    return dry / r0 + Math.max(0, P.drillDepth - dry) / (r0 / (1 + P.iceThreshold / 3));
+  }
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return `${sec} s`;
+    const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+    return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`;
+  }
+  const fmtDist = d => d >= 1000 ? `${fmt(d / 1000, 2)} km` : `${fmt(d, 0)} m`;
+  function estimateRoute(pts, fromX, fromZ, heading) {
+    let px = fromX, pz = fromZ, hd = heading;
+    const E = { d2: 0, d3: 0, drive: 0, turn: 0, blocked: 0, up: 0, n: pts.length };
+    pts.forEach(p => {
+      let da = Math.atan2(p.z - pz, p.x - px) - hd; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      E.turn += Math.abs(da) / 0.12; hd += da;
+      const L = estimateLeg(px, pz, p.x, p.z); E.d2 += L.d2; E.d3 += L.d3; E.drive += L.t; E.blocked += L.blocked; E.up += L.up;
+      px = p.x; pz = p.z;
+    });
+    E.meas = pts.length * 1200; E.total = E.drive + E.turn + E.meas; E.wh = energyWh(E.drive + E.turn);
+    return E;
+  }
+  // Medir A → B en el mapa
+  const MEAS = { a: null, b: null, res: null, prof: [] };
+  function measure() {
+    MEAS.res = null; MEAS.prof = [];
+    if (MEAS.a && MEAS.b) MEAS.res = estimateLeg(MEAS.a.x, MEAS.a.z, MEAS.b.x, MEAS.b.z, MEAS.prof);
+    setMeasureUI();
+  }
+  function setMeasureUI() {
+    set('sm-mcount', !MEAS.a ? 'Haz clic en el mapa para marcar el punto A' : !MEAS.b ? 'Ahora haz clic en el punto B' : 'A → B medido · otro clic empieza de nuevo');
+    const M = MEAS.res, el = $('#sm-mest');
+    if (el) el.innerHTML = !M ? '' :
+      `<div class="sm-kv"><span>Línea recta</span><b>${fmtDist(M.d2)}</b></div>` +
+      `<div class="sm-kv"><span>Sobre el terreno</span><b>${fmtDist(M.d3)}</b></div>` +
+      `<div class="sm-kv"><span>Desnivel</span><b>+${fmt(M.up, 0)} m / −${fmt(M.down, 0)} m</b></div>` +
+      `<div class="sm-kv"><span>Pendiente máxima</span><b>${fmt(M.maxSlope, 0)}°</b></div>` +
+      `<div class="sm-kv"><span>Tiempo del rover</span><b>${fmtDur(M.t)}</b></div>` +
+      `<div class="sm-kv"><span>Energía de la marcha</span><b>${fmt(energyWh(M.t), 0)} Wh</b></div>` +
+      (M.blocked > 0 ? `<p class="sm-warn">${fmtDist(M.blocked)} con subidas de más de 24°: el rover no puede ir en línea recta y tendría que rodear.</p>` : '') +
+      `<p class="sm-hint">${fmtDur(M.t / warp)} reales a la velocidad actual (${warp}×).</p>`;
+    drawProfile(); drawMap();
+  }
+  function drawProfile() {
+    const cv = $('#sm-prof'); if (!cv) return;
+    const g = cv.getContext('2d'), Wc = cv.width, Hc = cv.height, pr = MEAS.prof; g.clearRect(0, 0, Wc, Hc);
+    cv.hidden = pr.length < 2; if (pr.length < 2) return;
+    let lo = Infinity, hi = -Infinity; pr.forEach(([, h]) => { lo = Math.min(lo, h); hi = Math.max(hi, h); });
+    const pad = Math.max(2, (hi - lo) * 0.15); lo -= pad; hi += pad;
+    const X = d => 34 + d / pr[pr.length - 1][0] * (Wc - 44), Y = h => 10 + (1 - (h - lo) / (hi - lo)) * (Hc - 34);
+    g.beginPath(); g.moveTo(X(0), Hc - 24); pr.forEach(([d, h]) => g.lineTo(X(d), Y(h))); g.lineTo(X(pr[pr.length - 1][0]), Hc - 24); g.closePath();
+    g.fillStyle = 'rgba(237,237,243,.12)'; g.fill();
+    g.beginPath(); pr.forEach(([d, h], i) => i ? g.lineTo(X(d), Y(h)) : g.moveTo(X(d), Y(h))); g.strokeStyle = '#ededf3'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#c3c3cc'; g.font = '600 18px Inter, sans-serif';
+    const base = W.meta ? W.meta.base : 0; g.fillText(`${fmt(hi - pad + base, 0)} m`, 2, 24); g.fillText(`${fmt(lo + pad + base, 0)} m`, 2, Hc - 30);
+    g.fillText('A', X(0) - 4, Hc - 4); g.fillText('B', X(pr[pr.length - 1][0]) - 8, Hc - 4);
+    g.fillText(`perfil · ${fmtDist(pr[pr.length - 1][0])}`, Wc / 2 - 70, Hc - 4);
+  }
+  // Rutas guardadas (en este navegador): estimación al guardarlas y lo medido cuando el rover las recorre
+  const SAVED = { list: [] };
+  function loadSaved() { try { SAVED.list = JSON.parse(localStorage.getItem('icewise-rutas') || '[]') || []; } catch (_) { SAVED.list = []; } }
+  function storeSaved() { try { localStorage.setItem('icewise-rutas', JSON.stringify(SAVED.list)); } catch (_) {} }
+  function renderSaved() {
+    const box = $('#sm-saved'); if (!box) return;
+    if (!SAVED.list.length) { box.innerHTML = '<p class="sm-hint">Aún no hay rutas guardadas.</p>'; return; }
+    box.innerHTML = SAVED.list.map((r, i) => {
+      const E = r.est, run = r.run;
+      return `<div class="sm-route${ROUTE.savedId === r.id ? ' is-on' : ''}"><div class="sm-rt"><b>${r.name}</b><span>${r.pts.length} pts · ${fmtDist(E.d3)} · ≈ ${fmtDur(E.total)}</span>` +
+        (run ? `<span class="sm-run">Medido: ${fmtDist(run.d3)} en ${fmtDur(run.dt)}${run.drills ? ` (con ${run.drills} perforaci${run.drills > 1 ? 'ones' : 'ón'})` : ''}</span>` : '') +
+        `</div><span class="sm-rb"><button type="button" class="btn btn--sm" data-load="${i}">Cargar</button><button type="button" class="sm-x" data-del="${i}" aria-label="Borrar ${r.name}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`;
+    }).join('');
+    box.querySelectorAll('[data-load]').forEach(b => b.addEventListener('click', () => { const r = SAVED.list[+b.dataset.load];
+      ROUTE.pts = r.pts.map(p => ({ x: p.x, z: p.z })); ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; ROUTE.savedId = r.id; routeMarks(); setRouteUI(); toast(`${r.name} cargada.`); }));
+    box.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { const r = SAVED.list[+b.dataset.del];
+      SAVED.list.splice(+b.dataset.del, 1); if (ROUTE.savedId === r.id) ROUTE.savedId = null; storeSaved(); renderSaved(); }));
+  }
+  function routeEstimateHTML() {
+    if (!ROUTE.pts.length) return '';
+    const R = S.rover, pend = ROUTE.pts.slice(ROUTE.active ? ROUTE.i : 0), E = estimateRoute(pend, R.x, R.z, R.heading);
+    let h = `<div class="sm-kv"><span>${ROUTE.active ? 'Falta recorrer' : 'Recorrido desde el rover'}</span><b>${fmtDist(E.d3)}</b></div>` +
+      `<div class="sm-kv"><span>Conducción</span><b>${fmtDur(E.drive + E.turn)}</b></div>` +
+      `<div class="sm-kv"><span>Mediciones (20 min por punto)</span><b>${fmtDur(E.meas)}</b></div>` +
+      `<div class="sm-kv sm-tot"><span>Duración estimada</span><b>${fmtDur(E.total)}</b></div>` +
+      `<p class="sm-hint">Energía de la marcha ≈ ${fmt(E.wh, 0)} Wh. Si perfora en un punto, +${fmtDur(drillHours() * 3600)} por perforación. A ${warp}× son ${fmtDur(E.total / warp)} reales.</p>`;
+    if (E.blocked > 0) h += `<p class="sm-warn">${fmtDist(E.blocked)} con subidas de más de 24°: el rover tendrá que rodear y tardará más.</p>`;
+    if (ROUTE.run && ROUTE.run.done) { const r = ROUTE.run; h += `<p class="sm-run">Último recorrido medido: ${fmtDist(r.d3)} en ${fmtDur(r.dt)} (estimado ${fmtDur(r.estTotal)})${r.drills ? ` · ${r.drills} perforaci${r.drills > 1 ? 'ones' : 'ón'}` : ''}.</p>`; }
+    return h;
   }
 
   // ---------- Centro de control: telemetría del rover (valores del modelo de la simulación) ----------
@@ -1402,25 +1584,33 @@
     set('sc-bat', `${fmt(bat * 100, 0)} %`); bar('sc-bat-bar', bat); set('sc-bat-s', `gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`);
     set('sc-temp', `${fmt(R.sysT - 273.15, 0)} °C`); bar('sc-temp-bar', (R.sysT - 233) / 80); set('sc-temp-s', `interior · exterior ${fmt(R.Tenv || 0, 0)} K (${fmt((R.Tenv || 0) - 273.15, 0)} °C)`);
     set('sc-slope', `${fmt(slope, 0)}°`); bar('sc-slope-bar', slope / 25); set('sc-slope-s', slope > 15 ? 'más de 15°: no perfora aquí' : 'límite para perforar: 15°');
-    set('sc-speed', `${fmt(kmh, 1)} km/h`); bar('sc-speed-bar', Math.abs(R.speed) / Math.max(0.01, P.vmax)); set('sc-speed-s', `máxima ${fmt(P.vmax * 3.6, 1)} km/h · recorrido ${fmt(S.totals.dist / 1000, 2)} km`);
+    set('sc-speed', `${fmt(kmh, 1)} km/h`); bar('sc-speed-bar', Math.abs(R.speed) / Math.max(0.01, P.vmax)); set('sc-speed-s', `máxima ${fmt(P.vmax * 3.6, 1)} km/h`);
     set('sc-drill', `${fmt(R.drillDepth, 2)} m`); bar('sc-drill-bar', R.drillDepth / Math.max(0.01, P.drillDepth)); set('sc-drill-s', `de ${fmt(P.drillDepth, 2)} m · ${S.totals.holes} perforaciones`);
     set('sc-cargo', `${fmt(cargo, 1)} kg`); bar('sc-cargo-bar', cargo / P.cargoCap); set('sc-cargo-s', `de ${fmt(P.cargoCap, 0)} kg · hielo ${fmt(R.cargoIce, 2)} kg`);
     set('sc-link', los ? 'Directa' : 'Bloqueada'); bar('sc-link-bar', los ? 1 : 0); set('sc-link-s', `${los ? 'línea de vista con la estación' : 'el relieve tapa la antena de la estación'} · ${fmt(dSt, 0)} m`);
     $('#sc-link').classList.toggle('warn', !los); $('#sc-slope').classList.toggle('warn', slope > 15); $('#sc-bat').classList.toggle('warn', bat < P.reserve / 100 + 0.05);
     set('sc-task', TASKS[R.task] || R.task);
+    set('sc-odo', fmtDist(ODO.d3)); set('sc-odo-s', `esta salida ${fmtDist(ODO.trip)} · ruedas (horizontal) ${fmtDist(S.totals.dist)} · a la estación ${fmtDist(dSt)} en línea recta`);
   }
   function updateSpeedBadge() {
     const el = $('#sim-speed'); if (!el) return;
-    el.hidden = camMode !== 'rover' || EXP.on;
-    if (!el.hidden) { set('sim-speed-v', fmt(Math.abs(S.rover.speed) * 3.6, 1)); el.style.bottom = ($('#sim-cam').offsetHeight + 20) + 'px'; }   // encima de la barra de cámaras
+    el.hidden = camMode !== 'rover' || EXP.on || (S.rover.mode !== 'manual' && Math.abs(S.rover.speed) < 0.005);   // solo conduciendo o en marcha
+    if (!el.hidden) { set('sim-speed-v', fmt(Math.abs(S.rover.speed) * 3.6, 1)); set('sim-speed-d', fmtDist(ODO.d3)); el.style.bottom = ($('#sim-dock').offsetHeight + 20) + 'px'; }   // encima de los botones de cámara
   }
 
   // ---------- Botones y teclas de las herramientas ----------
+  // Paneles que abre cada herramienta (el despiece y la pantalla completa no son paneles)
+  const TOOL_PANEL = { mapa: '#sim-map', control: '#sim-ctrl', capas: '#sim-layers', ayuda: '#sim-keys' };
   function setToolUI() {
-    $$('#sim-tools button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === 'mapa' ? !$('#sim-map').hidden : b.dataset.t === 'control' ? !$('#sim-ctrl').hidden : b.dataset.t === 'pantalla' ? !!fsElement() : EXP.on)));
-    $('#sim-core').hidden = camMode !== 'rover' || EXP.on;
-    $('#sim-legend').hidden = EXP.on || !$('#sim-ctrl').hidden;           // la leyenda cede su sitio al panel de control
+    $$('#sim-tools button').forEach(b => { const t = b.dataset.t;
+      b.setAttribute('aria-pressed', String(TOOL_PANEL[t] ? !$(TOOL_PANEL[t]).hidden : t === 'pantalla' ? !!fsElement() : EXP.on)); });
+    updateCoreVis();
     $('#sim-view').classList.toggle('is-exp', EXP.on);
+  }
+  // El corte del subsuelo solo aparece cuando aporta: siguiendo al rover mientras caracteriza, decide o perfora
+  function updateCoreVis() {
+    const el = $('#sim-core'); if (!el) return;
+    el.hidden = camMode !== 'rover' || EXP.on || !['characterize', 'decide', 'drill'].includes(S.rover.task);
   }
   // Pantalla completa: todo el escenario (vista 3D + barra de controles + etapas del proceso)
   const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -1439,39 +1629,108 @@
   function toggleTool(t) {
     if (t === 'pantalla') { toggleFullscreen(); return; }
     if (t === 'despiece') { setExplode(!EXP.on); return; }
-    const el = $(t === 'mapa' ? '#sim-map' : '#sim-ctrl'); el.hidden = !el.hidden;
-    if (t === 'mapa') drawMap(); else updateControl();
+    const el = $(TOOL_PANEL[t]); if (!el) return; el.hidden = !el.hidden;
+    if (t === 'capas' || t === 'ayuda') { const other = $(TOOL_PANEL[t === 'capas' ? 'ayuda' : 'capas']); if (!el.hidden) other.hidden = true; }   // uno a la vez en esa columna
+    if (t === 'mapa') drawMap(); else if (t === 'control') updateControl();
     setToolUI();
   }
+  // ---------- Paneles como ventanas: se arrastran por la cabecera y cambian de tamaño desde la esquina ----------
+  // Al moverlos por primera vez salen de su columna y flotan sobre la vista 3D. Doble clic en la cabecera: vuelven a su sitio.
+  const WIN = { z: 0, list: [] };
+  function makeWindow(el, minW = 210, minH = 120) {
+    const view = $('#sim-view'), head = el.querySelector('.sm-head'); if (!head) return;
+    const home = { parent: el.parentNode, next: el.nextSibling };
+    const grip = document.createElement('span'); grip.className = 'win-grip'; grip.setAttribute('aria-hidden', 'true');
+    grip.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M11 5L5 11M11 8.5L8.5 11"/></svg>';
+    el.appendChild(grip); el.classList.add('win'); head.title = 'Arrastra para mover · doble clic para devolverlo a su sitio';
+    const front = () => { el.style.zIndex = String(5 + (++WIN.z % 50)); };
+    const float = () => {
+      if (el.classList.contains('is-float')) return;
+      const vr = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+      view.appendChild(el); el.classList.add('is-float');
+      Object.assign(el.style, { left: (r.left - vr.left) + 'px', top: (r.top - vr.top) + 'px', width: r.width + 'px' });
+    };
+    const drag = (target, onMove) => target.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || (target === head && e.target.closest('button, input, a, select'))) return;
+      e.preventDefault(); float(); front();
+      const s = { x: e.clientX, y: e.clientY, l: el.offsetLeft, t: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+      try { target.setPointerCapture(e.pointerId); } catch (_) {} el.classList.add('is-moving');
+      const move = ev => onMove(ev.clientX - s.x, ev.clientY - s.y, s);
+      const up = () => { target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); target.removeEventListener('pointercancel', up); el.classList.remove('is-moving'); };
+      target.addEventListener('pointermove', move); target.addEventListener('pointerup', up); target.addEventListener('pointercancel', up);
+    });
+    const clampPos = () => {
+      if (!el.classList.contains('is-float')) return;
+      el.style.left = Math.max(0, Math.min(view.clientWidth - el.offsetWidth, el.offsetLeft)) + 'px';
+      el.style.top = Math.max(0, Math.min(view.clientHeight - Math.min(el.offsetHeight, 48), el.offsetTop)) + 'px';
+    };
+    drag(head, (dx, dy, s) => {
+      el.style.left = Math.max(0, Math.min(view.clientWidth - el.offsetWidth, s.l + dx)) + 'px';
+      el.style.top = Math.max(0, Math.min(view.clientHeight - 48, s.t + dy)) + 'px';
+    });
+    drag(grip, (dx, dy, s) => {
+      el.style.width = Math.max(minW, Math.min(view.clientWidth - el.offsetLeft, s.w + dx)) + 'px';
+      el.style.height = Math.max(minH, Math.min(view.clientHeight - el.offsetTop, s.h + dy)) + 'px';
+      el.classList.add('is-sized'); if (el.id === 'sim-map') drawMap();
+    });
+    head.addEventListener('dblclick', e => {
+      if (e.target.closest('button') || !el.classList.contains('is-float')) return;
+      home.parent.insertBefore(el, home.next && home.next.parentNode === home.parent ? home.next : null);
+      el.classList.remove('is-float', 'is-sized'); ['left', 'top', 'width', 'height', 'zIndex'].forEach(k => { el.style[k] = ''; });
+    });
+    el.addEventListener('pointerdown', front);
+    WIN.list.push(clampPos);
+  }
+  function clampWindows() { WIN.list.forEach(f => f()); }
   function bindTools() {
+    ['#sim-map', '#sim-ctrl', '#sim-layers', '#sim-keys'].forEach(s => makeWindow($(s)));
+    makeWindow($('#sim-exp'), 240, 140);
     $$('#sim-tools button').forEach(b => b.addEventListener('click', () => toggleTool(b.dataset.t)));
-    $$('#sim-map [data-close], #sim-ctrl [data-close]').forEach(b => b.addEventListener('click', () => toggleTool(b.closest('#sim-map') ? 'mapa' : 'control')));
+    Object.entries(TOOL_PANEL).forEach(([t, sel]) => { const x = $(`${sel} [data-close]`); if (x) x.addEventListener('click', () => toggleTool(t)); });
     $('#sim-exp [data-close]').addEventListener('click', () => setExplode(false));
     $('#se-amt').addEventListener('input', e => { EXP.amt = +e.target.value; });
     // mapa: clic = añadir punto de paso, clic derecho = quitar el último
     const cv = $('#sim-map canvas');
     cv.addEventListener('click', ev => {
       const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * W.SIZE - W.HALF, z = (ev.clientY - r.top) / r.height * W.SIZE - W.HALF;
+      if (MAP.mode === 'medir') { if (!MEAS.a || MEAS.b) { MEAS.a = { x, z }; MEAS.b = null; } else MEAS.b = { x, z }; measure(); return; }
       if (ROUTE.pts.length >= 12) { toast('Máximo 12 puntos de paso.'); return; }
       if (ROUTE.active && ROUTE.i >= ROUTE.pts.length) { ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; }
-      ROUTE.pts.push({ x, z }); routeMarks(); setRouteUI();
+      ROUTE.pts.push({ x, z }); if (ROUTE.active && S.rover.route) S.rover.route.push({ x, z }); routeMarks(); setRouteUI();
     });
-    cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (ROUTE.pts.length > (ROUTE.active ? ROUTE.i + 1 : 0)) { ROUTE.pts.pop(); routeMarks(); setRouteUI(); } });
+    cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (MAP.mode === 'medir') { MEAS.a = MEAS.b = null; measure(); return; } if (ROUTE.pts.length > (ROUTE.active ? ROUTE.i + 1 : 0)) { ROUTE.pts.pop(); if (ROUTE.active && S.rover.route && S.rover.route.length > S.rover.routeI + 1) S.rover.route.pop(); routeMarks(); setRouteUI(); } });
     $('#sm-go').addEventListener('click', () => {
-      if (ROUTE.active) { ROUTE.active = false; setRouteUI(); return; }
+      if (ROUTE.active) { ROUTE.active = false; sim.cmd.stopRoute(); setRouteUI(); return; }
       if (!ROUTE.pts.length) return;
       if (ROUTE.i >= ROUTE.pts.length) ROUTE.i = 0;
-      ROUTE.active = true; ROUTE.sent = -1; setModeUI('auto'); hideIntro(); if (!S.running) toggleRun();
+      if (ROUTE.i === 0) ROUTE.run = { done: false, d30: ODO.d3, odo0: S.totals.dist, t0: S.t, h0: S.totals.holes, estTotal: estimateRoute(ROUTE.pts, S.rover.x, S.rover.z, S.rover.heading).total };
+      ROUTE.active = true; ROUTE.paused = false; sim.cmd.followRoute(ROUTE.pts, ROUTE.i); setModeUI('auto'); hideIntro(); if (!S.running) toggleRun();
       routeMarks(); setRouteUI(); toast('El rover recorre la ruta: en cada punto mide el hielo y decide si perforar.');
     });
-    $('#sm-clear').addEventListener('click', () => { ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; routeMarks(); setRouteUI(); });
+    $('#sm-clear').addEventListener('click', () => { if (ROUTE.active) sim.cmd.stopRoute(); ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; ROUTE.savedId = null; ROUTE.run = null; routeMarks(); setRouteUI(); renderSaved(); });
+    // pestañas del mapa: Ruta / Medir A → B
+    $$('#sm-tabs button').forEach(b => b.addEventListener('click', () => { MAP.mode = b.dataset.mm;
+      $$('#sm-tabs button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $$('#sim-map [data-pane]').forEach(p => { p.hidden = p.dataset.pane !== MAP.mode; }); drawMap(); }));
+    $('#sm-mrover').addEventListener('click', () => { MEAS.a = { x: S.rover.x, z: S.rover.z }; MEAS.b = null; measure(); });
+    $('#sm-mstation').addEventListener('click', () => { if (!MEAS.a) MEAS.a = { x: W.station.x, z: W.station.z }; else MEAS.b = { x: W.station.x, z: W.station.z }; measure(); });
+    $('#sm-mclear').addEventListener('click', () => { MEAS.a = MEAS.b = null; measure(); });
+    $('#sm-save').addEventListener('click', () => {                           // guardar: estimación desde la estación
+      if (!ROUTE.pts.length) return; const st = W.station, n = SAVED.list.reduce((m, r) => Math.max(m, +((/\d+$/.exec(r.name) || [0])[0])), 0) + 1;
+      const id = 'r' + Date.now().toString(36), e = estimateRoute(ROUTE.pts, st.x + 10, st.z + 8, 0.9);
+      SAVED.list.push({ id, name: `Ruta ${n}`, pts: ROUTE.pts.map(p => ({ x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 })), est: { d3: e.d3, total: e.total } });
+      ROUTE.savedId = id; storeSaved(); renderSaved(); toast(`Ruta ${n} guardada en este navegador.`);
+    });
+    loadSaved(); renderSaved(); setMeasureUI();
     window.addEventListener('keydown', e => {
       if (!visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       if (e.code === 'KeyM') { toggleTool('mapa'); e.preventDefault(); }
       else if (e.code === 'KeyG') { toggleTool('control'); e.preventDefault(); }
       else if (e.code === 'KeyX') { toggleTool('despiece'); e.preventDefault(); }
+      else if (e.code === 'KeyL') { toggleTool('capas'); e.preventDefault(); }
+      else if (e.code === 'KeyH') { toggleTool('ayuda'); e.preventDefault(); }
       else if (e.code === 'KeyF') { toggleFullscreen(); e.preventDefault(); }
       else if (e.code === 'Escape' && EXP.on) setExplode(false);
+      else if (e.code === 'Escape') ['capas', 'ayuda'].forEach(t => { if (!$(TOOL_PANEL[t]).hidden) toggleTool(t); });   // Esc cierra capas y controles
     });
     const st = $('#sim-stage'); if (!(st.requestFullscreen || st.webkitRequestFullscreen)) $('#sim-tools [data-t="pantalla"]').hidden = true;   // p. ej., iPhone
     document.addEventListener('fullscreenchange', onFullscreen); document.addEventListener('webkitfullscreenchange', onFullscreen);
@@ -1482,6 +1741,23 @@
   // BUCLE
   // =====================================================================
   let last = performance.now();
+  const FST = { calls: 0, tris: 0, n: 0 };
+  const OPT = { cp: new THREE.Vector3(), cq: new THREE.Quaternion(), fov: 0, busyT: 0, lastR: 0, input: 0, shT: 0, ft: [], prT: 0, pr: 0, qT: 0, bad: 0, sx: 0, sz: 0, sh: 0 };
+  ['pointerdown', 'pointermove', 'wheel', 'keydown'].forEach(ev => window.addEventListener(ev, () => { OPT.input = performance.now(); }, { passive: true }));
+  // Resolución adaptativa: si el equipo no llega a ~30 fps, baja un poco la resolución interna (nunca por debajo de la de la
+  // pantalla en Máxima/Alta) y la recupera cuando sobra potencia. En un equipo capaz no cambia nada.
+  function adaptResolution(now, busy) {
+    if (!busy) { OPT.ft.length = 0; return; }
+    OPT.ft.push(now); while (OPT.ft.length && now - OPT.ft[0] > 2000) OPT.ft.shift();
+    if (OPT.ft.length < 10 || now - OPT.prT < 3000) return;
+    const fps = (OPT.ft.length - 1) / ((now - OPT.ft[0]) / 1000), maxPr = Math.min(Q.pr, window.devicePixelRatio || 1), minPr = Math.min(maxPr, Q.pr >= 1.5 ? 1 : Q.pr);
+    let pr = renderer.getPixelRatio();
+    const qBefore = qName; autoQuality(now, fps, pr <= minPr + 0.01);
+    if (qName !== qBefore) { OPT.prT = now; OPT.ft.length = 0; return; }           // acaba de bajar de nivel: medir de nuevo
+    if (fps < 30 && pr > minPr + 0.01) pr = Math.max(minPr, pr * 0.85); else if (fps > 55 && pr < maxPr - 0.01) pr = Math.min(maxPr, pr / 0.85); else return;
+    OPT.prT = now; renderer.setPixelRatio(pr); resize(); if (sky) sky.U.pr.value = pr; renderer.shadowMap.needsUpdate = true;
+    set('sim-qres', pr < maxPr - 0.01 ? `Resolución adaptada a tu equipo: ${Math.round(pr / maxPr * 100)} %` : '');
+  }
   function frame(now) {
     requestAnimationFrame(frame);
     const dt = Math.min(0.25, (now - last) / 1000); last = now;
@@ -1493,17 +1769,35 @@
       frame.vis = now; const r = renderer.domElement.getBoundingClientRect();
       visible = !document.hidden && r.bottom > 0 && r.top < window.innerHeight && r.width > 0;
     }
+    updateOdometry(); routeTick();
     if (!visible) return;
     const t = now / 1000;
     if (iceL) iceL.update(t, camera);
     if (!EXP.on && EXP.k === 0) { updateRover(t); if (RA.on) updateRoverAnim(t, dt); }
     updateExplode(dt); updateDrillFX(t, dt); updateStation(t); if (STA.on) updateStationAnim(t, dt); updateColony(t); updateCamera();
     if (now - lastTex > 400) { lastTex = now; updateDetection(); updateTrail(); }
+    // Reposo: en pausa y con la cámara quieta la imagen no cambia → se dibuja a 20 fps (mismo aspecto, menos trabajo)
+    const camMoved = !OPT.cp.equals(camera.position) || !OPT.cq.equals(camera.quaternion) || OPT.fov !== camera.fov;
+    OPT.cp.copy(camera.position); OPT.cq.copy(camera.quaternion); OPT.fov = camera.fov;
+    const busy = camMoved || S.running || EXP.on || EXP.k > 0 || DR.act || now - OPT.input < 1500;
+    if (busy) OPT.busyT = now;
+    if (now - OPT.busyT > 1500 && now - OPT.lastR < 48) return;
+    OPT.lastR = now;
+    // Sombras (el Sol no se mueve): se recalculan al instante si se movió la zona de sombra o el rover avanzó/giró;
+    // si solo hay piezas animadas (mástil, brazo, taladro, estación) ~15 veces por segundo; si no, cada segundo
+    const R = S.rover, roverMoved = Math.abs(R.x - OPT.sx) + Math.abs(R.z - OPT.sz) > 0.03 || Math.abs(R.heading - OPT.sh) > 0.005;
+    const animated = DR.act || RA.on || STA.on;
+    if (sun.userData.moved || roverMoved || EXP.k > 0 || animated && now - OPT.shT > 66 || now - OPT.shT > 1000) {
+      renderer.shadowMap.needsUpdate = true; sun.userData.moved = false; OPT.shT = now; OPT.sx = R.x; OPT.sz = R.z; OPT.sh = R.heading;
+    }
+    adaptResolution(now, busy);
+    renderer.info.reset();
     if (composer) { grade.uniforms.time.value = t; grade.uniforms.roverCam.value = camMode === 'rovercam' ? 1 : 0; composer.render(dt); }
     else renderer.render(scene, camera);
+    FST.calls = renderer.info.render.calls; FST.tris = renderer.info.render.triangles; FST.n++;
     if (camMode === 'rovercam' && now - (frame.hud || 0) > 150) { frame.hud = now; updateRoverHUD(); }
     updateLabels();
-    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); routeTick(); updateControl(); updateSpeedBadge(); if (now - (frame.map || 0) > 400) { frame.map = now; drawMap(); } }
+    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); updateControl(); updateSpeedBadge(); if (now - (frame.map || 0) > 400) { frame.map = now; drawMap(); } if (!$('#sim-map').hidden && ROUTE.pts.length && now - (frame.est || 0) > 1000) { frame.est = now; set('sm-est', routeEstimateHTML()); set('sm-count', ROUTE.pts.length ? `${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}` : 'Sin puntos de paso'); } }
     if (now - lastChart > 1200) { lastChart = now; updateCharts(); }
   }
   // Postprocesado: escena HDR (antialiasing de 4 muestras) → oclusión ambiental (GTAO) → brillo (bloom) → acabado de cámara
@@ -1524,20 +1818,39 @@
     grade = new THREE.ShaderPass(IceEnv.GradeShader); composer.addPass(grade);
     if (Q.smaa) composer.addPass(new THREE.SMAAPass(w * pr, h * pr));
   }
-  function applyQuality(name) {
+  // auto = true: cambio hecho por la calidad automática (no se guarda como elección de la persona)
+  function applyQuality(name, auto = false) {
     if (!QUALITY[name]) return;
-    qName = name; Q = QUALITY[name];
-    try { localStorage.setItem('icewise-calidad', name); } catch (_) {}
+    qName = name; Q = QUALITY[name]; qAuto = auto;
+    try { localStorage.setItem('icewise-calidad', auto ? 'auto' : name); } catch (_) {}
+    OPT.qT = performance.now(); OPT.bad = 0;
     renderer.setPixelRatio(Math.min(Q.pr, window.devicePixelRatio || 1));
-    sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } sun.userData.moved = true;
     buildComposer(); resize();
     if (sky) { sky.U.pr.value = renderer.getPixelRatio(); if (Q.pr >= 1.5) sky.loadHiRes(); }   // estrellas a escala de píxel; Máxima y Alta: Tierra en 8K desde el inicio
-    $$('#sim-quality button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.q === name)));
+    qualityUI();
+  }
+  function qualityUI() {
+    const stage = $('#sim-stage'); if (stage) stage.classList.toggle('is-lowq', qName === 'baja');   // Baja: vidrio sin desenfoque (más ligero)
+    $$('#sim-quality button').forEach(b => b.setAttribute('aria-pressed', String(qAuto ? b.dataset.q === 'auto' : b.dataset.q === qName)));
+    const lbl = { maxima: 'Máxima', alta: 'Alta', media: 'Media', baja: 'Baja' }[qName];
+    set('sim-qauto', qAuto ? `Automática: ahora en ${lbl}. Baja sola si tu equipo va lento.` : '');
+  }
+  // Calidad automática: si tras bajar la resolución al mínimo del nivel sigue por debajo de ~26 fps durante dos
+  // mediciones seguidas (~6 s), baja un nivel. Nunca sube sola (evita saltos de calidad); la persona puede elegir.
+  function autoQuality(now, fps, prAtMin) {
+    if (!qAuto || !$('#sim-loader').classList.contains('is-done') || now - (OPT.qT || 0) < 6000) return;
+    if (fps >= 26 || !prAtMin) { OPT.bad = 0; return; }
+    if (++OPT.bad < 2) return;
+    const next = Q_ORDER[Q_ORDER.indexOf(qName) + 1]; if (!next) return;
+    applyQuality(next, true);
+    toast(`Calidad bajada a ${{ alta: 'Alta', media: 'Media', baja: 'Baja' }[next]} para que la simulación vaya fluida.`);
   }
   function resize() {
     const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight;
     renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
     if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); grade.uniforms.res.value.set(w, h); }
+    clampWindows();                                                         // las ventanas movidas siguen dentro de la vista
   }
   // Visor de la cámara del mástil: rumbo, inclinación del cabezal, batería y tarea
   function updateRoverHUD() {
@@ -1570,7 +1883,7 @@
     const ex = IceExplain.explain(key, before, after, { P, world: W, rover: sim.ROVER, species: sim.SPECIES });
     if (!ex) return;
     const box = $('#sim-effect');
-    box.innerHTML = `<div class="eff-head"><span class="eyebrow">Qué cambia</span><button class="eff-x" aria-label="Cerrar">×</button></div>
+    box.innerHTML = `<div class="eff-head"><span class="eyebrow">Qué cambia</span><button class="eff-x" aria-label="Cerrar"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <h4>${ex.title}: ${FMT[key](before)} → <span class="hl">${FMT[key](after)}</span></h4>
       <p>${ex.text}</p>
       <table class="eff-table"><tbody>${ex.rows.map(r => `<tr><td>${r[0]}</td><td class="b">${r[1]}</td><td class="arr">→</td><td class="a">${r[2]}</td></tr>`).join('')}</tbody></table>`;
@@ -1598,7 +1911,7 @@
   function syncSliders() {
     $$('#sim-panel input[type=range][data-p]').forEach(inp => { const k = inp.dataset.p; inp.value = k === 'dose' ? sliderFromDose(P[k]) : P[k]; const out = $(`output[for="${inp.id}"]`); if (out) out.textContent = FMT[k](P[k]); inp.style.setProperty('--fill', ((inp.value - inp.min) / (inp.max - inp.min) * 100) + '%'); });
     $$('#bio-mode button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.v === P.chamber)));
-    $('#bio-inside-controls').classList.toggle('is-disabled', P.chamber === 'outside'); $('#bio-light').checked = P.light; $('#bio-purif').checked = P.bioPurif;
+    $('#bio-inside-controls').classList.toggle('is-disabled', P.chamber === 'outside'); $('#bio-light').checked = P.light; $('#bio-purif').checked = P.bioPurif; $('#p-regen').checked = P.adsRegen;
   }
 
   function openTab(id) {
@@ -1617,7 +1930,7 @@
     { t: '¿Y si sacamos los microbios al exterior?', d: 'Vacío, −40 °C, radiación lunar', apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
     { t: '¿Y si los irradiamos fuerte?', d: 'Fuente de 100 Gy/h en la cámara', apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
     { t: '¿Y si apagamos el biofiltro?', d: 'Solo filtros químicos traídos de la Tierra', apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
-    { t: '¿Y si lo conduzco yo?', d: 'Flechas para conducir · Espacio perfora · WASD mueve la cámara', apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
+    { t: '¿Y si lo conduzco yo?', d: 'W A S D para conducir · Espacio para perforar', apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
   ];
 
   function bindUI() {
@@ -1627,19 +1940,36 @@
     $('#sim-intro-skip').addEventListener('click', () => { hideIntro(); setCam('overview'); });
     $('#sim-reset').addEventListener('click', () => { sim.cmd.resetAll(); Object.assign(P, IceSim.DEFAULT_P); syncSliders(); setModeUI('auto'); setCam(camMode); lastChart = 0; updateUI(); toggleRunLabel(); toast('Simulación y valores restablecidos.'); });
     $$('#sim-warp button').forEach(b => b.addEventListener('click', () => { warp = +b.dataset.w; $$('#sim-warp button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
-    $$('#sim-cam button[data-c]').forEach(b => b.addEventListener('click', () => setCam(b.dataset.c)));
+    // Selector de cámara: un botón muestra la vista actual y abre la lista
+    const camBtn = $('#sim-cam-btn'), camMenu = $('#sim-cam');
+    const camOpen = on => { camMenu.hidden = !on; camBtn.setAttribute('aria-expanded', String(on)); };
+    camBtn.addEventListener('click', e => {
+      camOpen(camMenu.hidden);
+      if (!camMenu.hidden && e.detail === 0) (camMenu.querySelector('[aria-pressed="true"]') || camMenu.querySelector('button')).focus();   // abierto con teclado: foco en la vista actual
+    });
+    document.addEventListener('click', e => { if (!camMenu.hidden && !e.target.closest('.sim-camwrap')) camOpen(false); });
+    camMenu.addEventListener('keydown', e => {
+      const items = [...camMenu.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+      if (e.key === 'Escape') { camOpen(false); camBtn.focus(); e.stopPropagation(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); }
+    });
+    $$('#sim-cam button[data-c]').forEach(b => b.addEventListener('click', () => { setCam(b.dataset.c); camOpen(false); }));
     $$('#sim-mode button').forEach(b => b.addEventListener('click', () => {
       sim.cmd.setMode(b.dataset.m); setModeUI(b.dataset.m); hideIntro();
       if (b.dataset.m === 'manual') { if (!S.running) toggleRun(); setCam('rover'); $('#sim-view').focus(); }
     }));
-    const layer = (id, meshes, legendKey) => $(id).addEventListener('change', e => { meshes.forEach(m => { m.visible = e.target.checked; }); const lg = $(`#sim-legend [data-l="${legendKey}"]`); if (lg) lg.hidden = !e.target.checked; });
+    const layer = (id, meshes) => $(id).addEventListener('change', e => { meshes.forEach(m => { m.visible = e.target.checked; }); });
     $('#ov-fill').addEventListener('change', e => { fill.visible = e.target.checked; });
     $('#ov-cine').addEventListener('change', e => { sky.setCine(e.target.checked); });
     const qbtn = $('#sim-qbtn'), qpop = $('#sim-qpop');
     qbtn.addEventListener('click', () => { qpop.hidden = !qpop.hidden; qbtn.setAttribute('aria-expanded', String(!qpop.hidden)); });
     document.addEventListener('click', e => { if (!qpop.hidden && !e.target.closest('.sim-qwrap')) { qpop.hidden = true; qbtn.setAttribute('aria-expanded', 'false'); } });
-    $$('#sim-quality button').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.q === qName)); b.addEventListener('click', () => { applyQuality(b.dataset.q); toast('Calidad gráfica: ' + b.textContent + '.'); }); });
-    layer('#ov-ice', [iceMesh, crystals], 'ice'); layer('#ov-det', [detMesh], 'det'); layer('#ov-psr', [psrMesh], 'psr'); layer('#ov-trail', [trail, holesGroup], 'trail');
+    $$('#sim-quality button').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.q === 'auto') { applyQuality(guessQuality(renderer.getContext()), true); toast('Calidad gráfica automática: se ajusta a tu equipo.'); }
+      else { applyQuality(b.dataset.q); toast('Calidad gráfica: ' + b.textContent + '.'); }
+    }));
+    qualityUI();
+    layer('#ov-ice', [iceMesh, crystals]); layer('#ov-det', [detMesh]); layer('#ov-psr', [psrMesh]); layer('#ov-trail', [trail, holesGroup]);
     $('#sim-drill').addEventListener('click', () => sim.cmd.drillHere());
     $('#sim-home').addEventListener('click', () => { sim.cmd.goHome(); setModeUI('auto'); });
     $$('#sim-pad [data-k]').forEach(b => {
@@ -1657,28 +1987,32 @@
     $$('#bio-mode button').forEach(b => b.addEventListener('click', () => { const before = P.chamber; P.chamber = b.dataset.v; syncSliders(); showEffect('chamber', before, P.chamber); }));
     $('#bio-light').addEventListener('change', e => { P.light = e.target.checked; });
     $('#bio-purif').addEventListener('change', e => { const b = P.bioPurif; P.bioPurif = e.target.checked; showEffect('bioPurif', b, P.bioPurif); });
+    $('#p-regen').addEventListener('change', e => { P.adsRegen = e.target.checked; toast(P.adsRegen ? 'El horno regenerará el filtro químico cuando esté libre (hipótesis).' : 'Sin regeneración: el filtro químico se gasta y, al acabarse, el agua sale contaminada.'); });
     $('#bio-inoc').addEventListener('click', () => { sim.cmd.inoculate(); toast('Cámara re-inoculada con las tres especies.'); });
     $('#bio-spe').addEventListener('click', () => { sim.cmd.solarEvent(); toast('Evento solar: +0,05 Gy/h durante 10 h.'); });
-    // Teclado: flechas = conducir el rover (modo manual); W A S D = mover la cámara por el mapa (Shift = rápido)
+    // Teclado: modo manual → W A S D conduce el rover y las flechas mueven la cámara;
+    // modo autónomo → W A S D (o las flechas) mueven la cámara por el mapa (Shift = rápido)
     const host = $('#sim-view');
-    const kmap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
-    const cmap = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ShiftLeft: 'shift', ShiftRight: 'shift' };
+    const kmap = { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
+    const cmap = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd', ShiftLeft: 'shift', ShiftRight: 'shift' };
     const typing = () => /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     window.addEventListener('keydown', e => {
       if (!visible || typing() || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (cmap[e.code]) { camKeys[cmap[e.code]] = true; if (cmap[e.code] !== 'shift') e.preventDefault(); }
-      if (S.rover.mode !== 'manual') return;
-      if (kmap[e.code]) { keys[kmap[e.code]] = true; e.preventDefault(); }
-      if (e.code === 'Space' && document.activeElement === host) { sim.cmd.drillHere(); e.preventDefault(); }
+      const manual = S.rover.mode === 'manual';
+      if (manual && kmap[e.code]) { keys[kmap[e.code]] = true; e.preventDefault(); }
+      else if (cmap[e.code]) { camKeys[cmap[e.code]] = true; if (cmap[e.code] !== 'shift') e.preventDefault(); }
+      if (manual && e.code === 'Space' && document.activeElement === host) { sim.cmd.drillHere(); e.preventDefault(); }
     });
     window.addEventListener('keyup', e => { if (kmap[e.code]) keys[kmap[e.code]] = false; if (cmap[e.code]) camKeys[cmap[e.code]] = false; });
-    window.addEventListener('blur', () => { Object.keys(camKeys).forEach(k => { camKeys[k] = false; }); });
+    window.addEventListener('blur', () => { Object.keys(camKeys).forEach(k => { camKeys[k] = false; }); Object.keys(keys).forEach(k => { keys[k] = false; }); });
     document.addEventListener('icewise:startMission', () => { hideIntro(); if (!S.running) toggleRun(); });
   }
   function applyKeys() {
     if (!S || S.rover.mode !== 'manual') return;
     S.manual.throttle = (keys.up ? 1 : 0) - (keys.down ? 0.6 : 0);
     S.manual.steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    S.manual.turnScale = 1 / warp;                                               // el giro manual va a ritmo real con cualquier velocidad del tiempo
+    $$('#sim-pad [data-k]').forEach(b => b.classList.toggle('is-on', !!keys[b.dataset.k]));   // el botón W/A/S/D se ilumina al pulsar la tecla
   }
   function toggleRun() { if (S.running) sim.cmd.pause(); else sim.cmd.start(); toggleRunLabel(); }
   function toggleRunLabel() {
@@ -1692,13 +2026,13 @@
   function updateUI() {
     const R = S.rover, Pl = S.plant, B = S.bio;
     const taskTxt = (TASKS[R.task] || R.task) + (R.task === 'drill' ? ` · ${fmt(R.drillDepth, 2)} de ${fmt(P.drillDepth, 2)} m` : R.task === 'characterize' ? ` · ${Math.round(R.charT / 12)} %` : '');
-    set('hud-clock', clockStr(S.t)); set('hud-task', taskTxt);
+    set('hud-clock', clockStr(S.t)); set('hud-task', taskTxt); updateCoreVis();
     set('hud-bat', `Batería ${fmt(R.battery / sim.ROVER.cap * 100, 0)} %`); set('hud-temp', `Exterior ${fmt(R.Tenv || 0, 0)} K · rover ${fmt(R.sysT - 273.15, 0)} °C`);
-    set('hud-water', `Agua limpia ${fmt(S.totals.water, 2)} kg · en la colonia ${fmt(S.colony.water, 2)} kg${S.totals.rejected > 0 ? ` · contaminada ${fmt(S.totals.rejected, 2)} kg` : ''}`);
+    set('hud-water', `Agua limpia ${fmt(S.totals.water, 2)} L · en la colonia ${fmt(S.colony.water, 2)} L${S.totals.rejected > 0 ? ` · contaminada ${fmt(S.totals.rejected, 2)} L` : ''}`);
     const hb = $('#hud-bat'); if (hb) hb.classList.toggle('warn', R.battery / sim.ROVER.cap < P.reserve / 100 + 0.05);
-    set('m-water', `${fmt(S.totals.water, 2)}<small>kg</small>`); set('m-ice', `${fmt(S.colony.water, 2)}<small>kg</small>`); set('m-ice-l', `En la colonia · ${fmt(S.colony.water / sim.COLONY.demandKgDay, 1)} días de reserva`);
+    set('m-water', `${fmt(S.totals.water, 2)}<small>L</small>`); set('m-ice', `${fmt(S.colony.water, 2)}<small>L</small>`); set('m-ice-l', `En la colonia · ${fmt(S.colony.water / sim.COLONY.demandKgDay, 1)} días de reserva`);
     set('m-holes', `${S.totals.holes}`); set('m-dist', `${fmt(S.totals.dist / 1000, 2)}<small>km</small>`);
-    set('m-spec', S.totals.water > 0 ? `${fmt(S.totals.kWhPlant / S.totals.water, 1)}<small>kWh/kg</small>` : '—');
+    set('m-spec', S.totals.water > 0 ? `${fmt(S.totals.kWhPlant / S.totals.water, 1)}<small>kWh/L</small>` : '—');
     const known = S.know.n.reduce((a, n) => a + (n > 0 ? 1 : 0), 0); set('m-cov', `${fmt(known / (W.KG * W.KG) * 100, 0)}<small>%</small>`);
     set('r-task', taskTxt); set('r-bat', `${fmt(R.battery, 0)} / ${sim.ROVER.cap} Wh`); bar('r-bat-bar', R.battery / sim.ROVER.cap);
     set('r-pow', `gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`);
@@ -1706,9 +2040,9 @@
     set('r-cargo', `${fmt(R.cargoReg + R.cargoIce, 1)} / ${fmt(P.cargoCap, 0)} kg (hielo ${fmt(R.cargoIce, 2)} kg)`); bar('r-cargo-bar', (R.cargoReg + R.cargoIce) / P.cargoCap);
     set('r-sensor', R.lastReading != null ? `${fmt(R.lastReading, 1)} % de hielo equivalente` : '—');
     const stTxt = { 'vacío': 'Vacío: esperando muestras', calentando: 'Calentando las muestras', sublimando: 'El hielo se convierte en vapor', completado: 'Lote terminado' }[Pl.state] || Pl.state;
-    set('p-state', stTxt + (Pl.queue.length ? ` · ${Pl.queue.length} en cola` : ''));
+    set('p-state', (Pl.regen ? 'Regenerando el filtro químico' : stTxt) + (Pl.queue.length ? ` · ${Pl.queue.length} en cola` : ''));
     set('p-T', `${fmt(Pl.T, 0)} K (${fmt(Pl.T - 273.15, 0)} °C)`); bar('p-T-bar', (Pl.T - 40) / 220);
-    set('p-ice', `${fmt(Pl.ice, 2)} kg`); set('p-cap', `${fmt(Pl.captured, 2)} kg`); set('p-tank', `${fmt(Pl.tank, 2)} kg`); bar('p-tank-bar', Pl.tank / 30);
+    set('p-ice', `${fmt(Pl.ice, 2)} kg`); set('p-cap', `${fmt(Pl.captured, 2)} kg`); set('p-tank', `${fmt(Pl.tank, 2)} L`); bar('p-tank-bar', Pl.tank / 30);
     set('p-power', `Reparto de energía solar (${fmt(P.solarW, 0)} W): horno ${fmt(Pl.heater, 0)} W · carga del rover ${fmt(R.charge || 0, 0)} W · cámara bio ${fmt(B.power, 0)} W`);
     const q = Pl.quality, act = i => sim.bioActivity(i);
     [['dper', 0], ['pext', 1]].forEach(([id, i]) => { bar(`act-${id}`, P.bioPurif ? act(i) : 0); set(`act-${id}-v`, P.bioPurif ? `${fmt(act(i) * 100, 0)} %` : 'apagado'); });
@@ -1716,7 +2050,7 @@
     set('q-flow', q ? `100 → <strong>${fmt(q.after, 0)}</strong> → <strong>${fmt(q.final, 1)}</strong>` : 'Aún no se ha tratado ningún lote');
     set('q-ok', q ? (q.ok ? 'Apta para uso técnico' : 'Contaminada: se reprocesa') : '—');
     const qe = document.getElementById('q-ok'); if (qe) qe.className = 'verdict ' + (q ? (q.ok ? 'pass' : 'fail') : '');
-    set('q-ads', `${fmt(Pl.adsorbent, 2)} kg restantes · ${fmt(Pl.adsSaved, 2)} kg ahorrados`); bar('q-ads-bar', Pl.adsorbent / 3);
+    set('q-ads', P.adsRegen ? `${fmt(Pl.adsorbent, 2)} kg listos · ${fmt(Pl.adsSpent, 2)} por regenerar · ${fmt(Pl.adsLost, 2)} perdidos` : `${fmt(Pl.adsorbent, 2)} kg restantes · ${fmt(Pl.adsSaved, 2)} kg ahorrados`); bar('q-ads-bar', Pl.adsorbent / 3);
     set('q-rem', q && q.bio ? `NH₃ ${fmt(q.rN * 100, 0)} % · azufre y orgánicos ${fmt(q.rS * 100, 0)} % · mercurio ${fmt(q.rHg * 100, 0)} %` : q ? 'Biofiltro apagado: 0 %' : '—');
     set('p-quality', q ? `Último lote: contaminantes 100 → ${fmt(q.final, 1)} · ${q.ok ? 'apta para uso técnico' : 'contaminada'} · adsorbente ${fmt(Pl.adsorbent, 2)} kg` : 'Aún no se ha tratado ningún lote');
     set('b-T', `${fmt(B.T, 1)} °C`); set('b-V', `${fmt(B.V, 1)} mL`); set('b-S', `${fmt(B.S * 100, 0)} %`);
@@ -1762,8 +2096,8 @@
       trap: `${fmt(Pl.captured, 2)} kg hielo`,
       bio: !P.bioPurif ? 'apagado' : q ? `100 → ${fmt(q.after, 0)}` : '—',
       filter: q ? `→ ${fmt(q.final, 1)}` : '—',
-      tank: `${fmt(Pl.tank, 2)} kg`,
-      colony: `${fmt(C.water, 1)} kg`
+      tank: `${fmt(Pl.tank, 2)} L`,
+      colony: `${fmt(C.water, 1)} L`
     };
     STEPS.forEach(st => {
       const b = el.querySelector(`[data-s="${st.id}"]`); b.classList.toggle('is-on', !!active[st.id]);
@@ -1820,17 +2154,41 @@
       if (!pend.length || timeout) {
         LOAD.finished = true; loadSet('shaders', 0.3);
         const end = () => { loadSet('shaders', 1); setTimeout(() => $('#sim-loader').classList.add('is-done'), 350); };
-        (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve()).then(end, end);
+        warmUp().then(end, end);
         return;
       }
       setTimeout(tick, 200);
     };
     tick();
   }
+  // Precalentamiento (detrás de la pantalla de carga), para que no haya tirones la primera vez que aparece algo:
+  //  1) se compilan los shaders de TODO, también de lo que está oculto al empezar (taladro en corte, marcadores,
+  //     cartuchos, efectos), haciéndolo visible un instante; 2) se suben a la tarjeta gráfica todas las texturas;
+  //  3) se dibuja un fotograma completo con sombras y posprocesado.
+  async function warmUp() {
+    const hidden = [], texs = new Set();
+    scene.traverse(o => {
+      if (!o.visible && !o.isLight) { hidden.push(o); o.visible = true; }       // las luces no: cambiaría la cuenta de luces
+      [].concat(o.material || []).forEach(m => {
+        for (const k in m) { const v = m[k]; if (v && v.isTexture) texs.add(v); }
+        if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) texs.add(v); }
+      });
+    });
+    try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); else renderer.compile(scene, camera); }
+    catch (e) { console.warn('Precompilación incompleta', e); }
+    finally { hidden.forEach(o => { o.visible = false; }); }
+    texs.forEach(t => { try { if (t.image && !t.isRenderTargetTexture && !t.isDepthTexture) renderer.initTexture(t); } catch (_) {} });
+    renderer.shadowMap.needsUpdate = true;
+    if (composer) composer.render(0.016); else renderer.render(scene, camera);
+  }
   function init() {
     const host = $('#sim-view'); if (!host) return;
     if (!window.THREE || !THREE.OrbitControls) { host.innerHTML = '<p class="sim-fallback">No se pudo cargar el motor 3D (Three.js).</p>'; return; }
-    try { const c = document.createElement('canvas'); if (!c.getContext('webgl2')) throw 0; }
+    try {
+      const c = document.createElement('canvas'), gl = c.getContext('webgl2'); if (!gl) throw 0;
+      if (qAuto) { qName = guessQuality(gl); Q = QUALITY[qName]; }
+      const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();   // liberar el contexto de prueba
+    }
     catch (_) { host.innerHTML = '<p class="sim-fallback">Tu navegador no admite WebGL 2, necesario para la simulación 3D.</p>'; return; }
     LOAD.t0 = performance.now(); renderLoader();
     IceEnv.onAsset = cat => { if (LOAD.done[cat] != null) loadAdd(cat); };
@@ -1846,7 +2204,7 @@
     }, 30));
   }
   function exposeAPI() {
-    window.IceSimView = { sim, setCam, toggleRun, openTab, applyQuality, get quality() { return qName; }, get renderInfo() { return { frame: renderer.info.render.frame, calls: renderer.info.render.calls, visible, composer: !!composer }; }, get loaded() { return LOAD.finished && $('#sim-loader').classList.contains('is-done'); }, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; }, get stationAnim() { return STA; }, get drillFX() { return DR; } };
+    window.IceSimView = { sim, setCam, toggleRun, openTab, applyQuality, get quality() { return qName; }, get renderInfo() { return { frame: FST.n, calls: FST.calls, tris: FST.tris, pr: renderer.getPixelRatio(), visible, composer: !!composer }; }, get loaded() { return LOAD.finished && $('#sim-loader').classList.contains('is-done'); }, get warp() { return warp; }, get roverAnim() { return { RA, ARM, AX_Y, AX_Z }; }, get view() { return { camera, controls }; }, get stationAnim() { return STA; }, get drillFX() { return DR; } };
   }
   window.IceSimViewInit = init;
 })();

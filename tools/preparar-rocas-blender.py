@@ -36,6 +36,14 @@ for i in range(1, 8):
     tris1 = sum(len(p.vertices) - 2 for p in o.data.polygons)
     print(n, 'triángulos', tris0, '→', tris1, 'alto/ancho', round((mx.z - mn.z) * s, 2))
     names.append(n)
+    # niveles de detalle (LOD) para la web: misma forma, menos triángulos para las rocas lejanas o diminutas
+    for lod, target in (('L1', 500), ('L2', 120)):
+        o2 = o.copy(); o2.data = o.data.copy(); o2.name = n + '_' + lod; o2.data.name = o2.name
+        bpy.context.collection.objects.link(o2); o2.location = (i * 2.0, 2.0 if lod == 'L1' else 4.0, 0)
+        bpy.ops.object.select_all(action='DESELECT'); o2.select_set(True); bpy.context.view_layer.objects.active = o2
+        m = o2.modifiers.new('Reducir', 'DECIMATE'); m.ratio = target / max(tris1, 1)
+        bpy.ops.object.modifier_apply(modifier=m.name)
+        print('  ', o2.name, sum(len(p.vertices) - 2 for p in o2.data.polygons), 'triángulos')
 # texturas a 1024 px
 for img in bpy.data.images:
     if img.size[0] > 1024: img.scale(1024, 1024)

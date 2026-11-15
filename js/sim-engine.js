@@ -147,17 +147,23 @@
   // =====================================================================
   const DEFAULT_P = {
     // Rover
-    vmax: 0.2, iceThreshold: 3.0, drillDepth: 1.0, cargoCap: 40, reserve: 30, drillPower: 150, autoLoop: true,
+    // vmax: 1 m/s = 3,6 km/h (SUPUESTO de diseño; el rover VIPER de NASA va a ~0,2 m/s)
+    // drillPower 300 W: taladro reforzado para abastecer a 10 colonos (SUPUESTO de diseño)
+    vmax: 1.0, iceThreshold: 3.0, drillDepth: 1.0, cargoCap: 40, reserve: 30, drillPower: 300, autoLoop: true,
     // Planta
-    heaterW: 600, etaH: 0.5, etaCap: 0.85, solarW: 2000,
+    heaterW: 600, etaH: 0.5, etaCap: 0.85, solarW: 2000, adsRegen: true,
     // Biología
     chamber: 'inside', Tc: 22, feed: 1.0, dose: 0.00001, nutrients: 1.0, light: true, bioPurif: true
   };
-  // Colonia (SUPUESTOS): 4 personas, ~2,5 kg de agua/persona/día y 90 % de reciclaje → ~1 kg/día de agua nueva
-  const COLONY = { crew: 4, demandKgDay: 4 * 2.5 * 0.1, pumpKgH: 2 };
+  // Colonia (SUPUESTOS): 10 personas, ~2,5 L de agua/persona/día y 90 % de reciclaje → ~2,5 L/día de agua nueva (1 kg de agua ≈ 1 L)
+  const COLONY = { crew: 10, demandKgDay: 10 * 2.5 * 0.1, pumpKgH: 2 };
   const RAW = { N: 40, S: 35, Hg: 25 };   // índice ilustrativo de contaminantes del condensado
   const ADS_STOCK = 3, ADS_PER_KG = 0.25;   // kg de adsorbente en la estación; kg por kg de agua con carga 100 (supuestos)
-  const ROVER = { cap: 5000, panelW: 300, base: 55, Ccap: 25000, G: 0.22, setT: 263, heaterMax: 160, area: Math.PI * 0.05 * 0.05, chargeW: 450 };
+  // Regeneración del adsorbente en el horno (HIPÓTESIS): calentarlo libera lo retenido y se reutiliza.
+  // Energía útil por kg y fracción que se recupera en cada ciclo (el resto se pierde: mercurio difícil de liberar, desgaste).
+  const ADS_REGEN = { kWhPerKg: 0.5, recover: 0.9 };
+  // chargeW 1200 W: cargador rápido en la estación (SUPUESTO de diseño; antes 450 W: el rover pasaba ~40 % del tiempo cargando)
+  const ROVER = { cap: 5000, panelW: 300, base: 55, Ccap: 25000, G: 0.22, setT: 263, heaterMax: 160, area: Math.PI * 0.05 * 0.05, chargeW: 1200 };
 
   // =====================================================================
   // ESPECIES (parámetros aproximados para demostración)
@@ -187,14 +193,14 @@
       rover: null, plant: null, bio: null,
       know: { sum: new Float32Array(KG * KG), n: new Uint16Array(KG * KG), rejected: new Uint8Array(KG * KG), drilled: new Uint8Array(KG * KG) },
       holes: [], trail: [], log: [], hist: { t: [], bat: [], T: [], tank: [], bio: SPECIES.map(() => []) },
-      manual: { throttle: 0, steer: 0 }, totals: { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, holes: 0, rejected: 0 }
+      manual: { throttle: 0, steer: 0 }, totals: { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, dist3: 0, holes: 0, rejected: 0 }
     };
 
     function resetRover() {
       S.rover = { x: st.x + 10, z: st.z + 8, heading: 0.9, speed: 0, mode: 'auto', task: 'idle', battery: ROVER.cap, sysT: 288, heater: 0, power: 0, solar: 0,
         odo: 0, cargoReg: 0, cargoIce: 0, Tenv: world.envT(st.x + 10, st.z + 8), wp: null, cand: null, timer: 0, drillDepth: 0, drilling: false, lastSense: 0, charT: 0, wheel: 0, lastWpPick: 0, stuckT: 0 };
     }
-    function resetPlant() { S.plant = { reg: 0, ice: 0, T: 50, state: 'vacío', released: 0, captured: 0, tank: 0, queue: [], heater: 0, avail: P.solarW, energyJ: 0, frost: 0, adsorbent: ADS_STOCK, adsUsed: 0, adsSaved: 0, quality: null, lastResidual: 0, rejected: 0, flowT: -1e9 }; }
+    function resetPlant() { S.plant = { reg: 0, ice: 0, T: 50, state: 'vacío', released: 0, captured: 0, tank: 0, queue: [], heater: 0, avail: P.solarW, energyJ: 0, frost: 0, adsorbent: ADS_STOCK, adsUsed: 0, adsSaved: 0, adsSpent: 0, adsLost: 0, adsRegenKg: 0, regen: false, quality: null, lastResidual: 0, rejected: 0, flowT: -1e9 }; }
     function resetColony() { S.colony = { water: 0, received: 0, crew: COLONY.crew, flowT: -1e9 }; }
     function resetBio() { S.bio = { T: 20, V: 50, S: 1, N: SPECIES.map(s => s.N0), status: SPECIES.map(() => '—'), power: 0, spe: 0 }; }
     resetRover(); resetPlant(); resetBio(); resetColony();
@@ -246,7 +252,18 @@
     function driveToward(tx, tz, dt) {
       const R = S.rover; const dx = tx - R.x, dz = tz - R.z, d = Math.hypot(dx, dz);
       if (d < 2) { R.speed = 0; return true; }
-      const want = Math.atan2(dz, dx); let da = want - R.heading; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      // Maniobra de escape tras chocar varias veces: retrocede girando unos segundos
+      if (R.escapeT > 0) {
+        R.escapeT -= dt; R.heading += R.escapeDir * 0.2 * dt;
+        R.speed += clamp(-0.1 - R.speed, -0.05 * dt, 0.05 * dt); move(dt); return false;
+      }
+      let want = Math.atan2(dz, dx);
+      // Evasión de obstáculos: si hay algo a 2,5 m en la dirección deseada, prueba direcciones cada vez más abiertas
+      if (OB.size && d > 3) {
+        const free = a => !blockedAt(R.x + Math.cos(a) * 2.5, R.z + Math.sin(a) * 2.5, ROVER_R * 0.9);
+        if (!free(want)) for (const off of [0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, 2.2, -2.2]) if (free(want + off)) { want += off; break; }
+      }
+      let da = want - R.heading; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
       R.heading += clamp(da, -0.12 * dt, 0.12 * dt);
       const ax = R.x + Math.cos(R.heading) * 3, az = R.z + Math.sin(R.heading) * 3;
       const grade = (world.hAt(ax, az) - world.hAt(R.x, R.z)) / 3;           // subida en la dirección de avance
@@ -254,13 +271,75 @@
       if (grade > 0.45) { R.speed = 0; R.stuckT += dt; R.heading += 0.3 * dt; return 'blocked'; }   // > 24° cuesta arriba: girar
       R.speed += clamp(target - R.speed, -0.05 * dt, 0.05 * dt);
       move(dt);
+      if (R.bump && Math.abs(R.speed) < 0.02) {                               // empujando contra un obstáculo
+        R.stuckT += dt; R.bumpT = (R.bumpT || 0) + dt;
+        if (R.bumpT > 15) { R.bumpT = 0; R.escapeT = 8 + r() * 8; R.escapeDir = r() < 0.5 ? -1 : 1; }
+        return 'blocked';
+      }
       return false;
     }
+    // ---------- Colisiones con los objetos modelados (rocas grandes, estación, colonia, tubería) ----------
+    // La vista registra los obstáculos con cmd.setObstacles(). El rover se trata como un círculo de 1,2 m de radio:
+    // al chocar se desliza por el borde del obstáculo y pierde la velocidad que iba contra él.
+    const ROVER_R = 1.2, OB_CELL = 8, OB = new Map();
+    const obKey = (i, j) => i * 100003 + j;
+    function obAdd(o) {
+      const i0 = Math.floor(o.x0 / OB_CELL), i1 = Math.floor(o.x1 / OB_CELL), j0 = Math.floor(o.z0 / OB_CELL), j1 = Math.floor(o.z1 / OB_CELL);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = obKey(i, j); let a = OB.get(k); if (!a) OB.set(k, a = []); a.push(o); }
+    }
+    function obNear(x, z, rad, fn) {
+      const seen = new Set();
+      for (let i = Math.floor((x - rad) / OB_CELL); i <= Math.floor((x + rad) / OB_CELL); i++)
+        for (let j = Math.floor((z - rad) / OB_CELL); j <= Math.floor((z + rad) / OB_CELL); j++) {
+          const a = OB.get(obKey(i, j)); if (!a) continue;
+          for (const o of a) if (!seen.has(o)) { seen.add(o); fn(o); }
+        }
+    }
+    // Punto del obstáculo más cercano a (x, z) y su "radio" extra (0 para cajas)
+    function obClosest(o, x, z) {
+      if (o.t === 'c') return { x: o.x, z: o.z, r: o.r };
+      if (o.t === 'b') return { x: clamp(x, o.bx0, o.bx1), z: clamp(z, o.bz0, o.bz1), r: 0 };
+      const vx = o.bx - o.ax, vz = o.bz - o.az, t = clamp(((x - o.ax) * vx + (z - o.az) * vz) / (vx * vx + vz * vz || 1), 0, 1);
+      return { x: o.ax + vx * t, z: o.az + vz * t, r: o.r };
+    }
+    function blockedAt(x, z, rad = ROVER_R) {
+      let hit = false;
+      obNear(x, z, rad + 3, o => { if (hit) return; const c = obClosest(o, x, z); if (Math.hypot(x - c.x, z - c.z) < rad + c.r) hit = true; });
+      return hit;
+    }
+    function pushOut(x, z) {
+      let hit = false;
+      for (let it = 0; it < 4; it++) {
+        let moved = false;
+        obNear(x, z, ROVER_R + 3, o => {
+          const c = obClosest(o, x, z), dx = x - c.x, dz = z - c.z, d = Math.hypot(dx, dz), need = ROVER_R + c.r;
+          if (d >= need) return;
+          hit = moved = true;
+          if (d > 1e-6) { x = c.x + dx / d * need; z = c.z + dz / d * need; }
+          else { x += need; }                                                 // centro justo encima: empuje arbitrario
+        });
+        if (!moved) break;
+      }
+      return { x, z, hit };
+    }
+
     function move(dt) {
       const R = S.rover; const ds = R.speed * dt;
-      const nx = clamp(R.x + Math.cos(R.heading) * ds, -world.HALF + 5, world.HALF - 5), nz = clamp(R.z + Math.sin(R.heading) * ds, -world.HALF + 5, world.HALF - 5);
-      R.climb = (world.hAt(nx, nz) - world.hAt(R.x, R.z)) / Math.max(ds, 1e-6);
-      R.x = nx; R.z = nz; R.odo += Math.abs(ds); R.wheel += ds / 0.35; S.totals.dist += Math.abs(ds);
+      let nx = clamp(R.x + Math.cos(R.heading) * ds, -world.HALF + 5, world.HALF - 5), nz = clamp(R.z + Math.sin(R.heading) * ds, -world.HALF + 5, world.HALF - 5);
+      R.bump = false;
+      if (OB.size && ds !== 0) {
+        const p = pushOut(nx, nz);
+        if (p.hit) {
+          R.bump = true; nx = p.x; nz = p.z;
+          const fwd = ((nx - R.x) * Math.cos(R.heading) + (nz - R.z) * Math.sin(R.heading)) / ds;   // fracción del avance que sí se logró
+          R.speed *= clamp(fwd, 0, 1);
+        }
+      }
+      const step = Math.hypot(nx - R.x, nz - R.z), sd = ds < 0 ? -step : step;
+      const dh = world.hAt(nx, nz) - world.hAt(R.x, R.z);
+      R.climb = step > 1e-4 ? dh / step : 0;                                  // subida por metro recorrido (igual hacia delante que en reversa)
+      R.x = nx; R.z = nz; R.odo += step; R.wheel += sd / 0.35; S.totals.dist += step;
+      S.totals.dist3 += Math.hypot(step, dh);                                // recorrido sobre el relieve real (con subidas y bajadas)
       const tr = S.trail, last = tr[tr.length - 1];
       if (!last || Math.hypot(last[0] - R.x, last[1] - R.z) > 2) { tr.push([R.x, R.z]); if (tr.length > 4000) tr.shift(); }
     }
@@ -277,7 +356,7 @@
         if (R.task === 'drill') { /* sigue perforando */ }
         else {
           R.task = m.throttle || m.steer ? 'manual' : (atStation ? 'idle' : 'manual');
-          R.heading += m.steer * 0.25 * dt;
+          R.heading += m.steer * (25 * Math.PI / 180) * (m.turnScale ?? 1) * dt;   // 25°/s; turnScale = 1/aceleración del tiempo: gira a ritmo real
           const sg = Math.sign(m.throttle || 1);
           const grade = (world.hAt(R.x + Math.cos(R.heading) * 3 * sg, R.z + Math.sin(R.heading) * 3 * sg) - world.hAt(R.x, R.z)) / 3;
           const target = grade > 0.45 ? 0 : m.throttle * P.vmax;
@@ -296,6 +375,15 @@
           }
           break;
         case 'explore': {
+          // Ruta del operador: al terminar en un punto (medido, decidido y perforado si tocaba) va directo al siguiente
+          if (R.route) {
+            if (R.routeI < R.route.length - 1) {
+              R.routeI++; const p = R.route[R.routeI];
+              R.target = { x: p.x, z: p.z }; R.cand = ki(p.x, p.z); R.task = 'goto'; R.stuckT = 0;
+              log(`Ruta: hacia el punto ${R.routeI + 1} de ${R.route.length}.`); break;
+            }
+            R.route = null; R.routeDone = true; R.routeEnd = { t: S.t, d3: S.totals.dist3, holes: S.totals.holes }; log('Ruta completada.', 'key');   // instante exacto del final, para medir el recorrido
+          }
           if (!R.wp || S.t - R.lastWpPick > 1800) { R.wp = pickWaypoint(); R.lastWpPick = S.t; if (!R.wp) { log('Zona explorada por completo. Regreso a la estación.'); R.task = 'return'; break; } }
           const res = driveToward(R.wp.x, R.wp.z, dt);
           if (res === true) R.wp = null;
@@ -357,9 +445,11 @@
           }
           break;
         }
-        case 'reposition':
-          if (driveToward(R.wp.x, R.wp.z, dt) === true) R.task = 'drill';
+        case 'reposition': {
+          const res = driveToward(R.wp.x, R.wp.z, dt);
+          if (res === true || (res === 'blocked' && R.stuckT > 60)) { R.task = 'drill'; R.stuckT = 0; }   // punto ocupado por un obstáculo: perfora donde está
           break;
+        }
         case 'return':
           if (driveToward(st.x + 10, st.z + 8, dt) === true || distSt() < 12) { R.speed = 0; unload(); R.task = 'idle'; }
           if (S.t - R.lastSense > 4) { R.lastSense = S.t; sense(1.2); }
@@ -406,11 +496,25 @@
       const Pl = S.plant, R = S.rover;
       const roverDraw = R.charge || 0, bioDraw = S.bio.power;
       Pl.avail = Math.max(0, P.solarW - roverDraw - bioDraw);
-      if (Pl.state === 'vacío' && Pl.queue.length) {
+      const adsLow = P.adsRegen && Pl.adsSpent > 1e-4 && Pl.adsorbent < 0.5;   // poco adsorbente: el horno lo regenera antes del siguiente lote
+      if (Pl.state === 'vacío' && Pl.queue.length && !adsLow) {
         const b = Pl.queue.shift(); Pl.reg = b.reg; Pl.ice = b.ice; Pl.T = 55; Pl.released = 0; Pl.captured = 0; Pl.state = 'calentando'; Pl.batchIce = b.ice; Pl.batchE = 0;
         log(`Horno: lote de ${b.reg.toFixed(1)} kg en proceso.`);
       }
-      if (Pl.state === 'vacío' || Pl.state === 'completado') { Pl.heater = 0; if (Pl.state === 'completado' && !Pl.queue.length) Pl.state = 'vacío'; else if (Pl.state === 'completado') Pl.state = 'vacío'; return; }
+      if (Pl.state === 'vacío' || Pl.state === 'completado') {
+        Pl.heater = 0; if (Pl.state === 'completado') Pl.state = 'vacío';
+        // Horno libre: regenera el adsorbente gastado (HIPÓTESIS) — calentarlo libera lo retenido y vuelve a servir
+        Pl.regen = P.adsRegen && Pl.adsSpent > 1e-4;
+        if (Pl.regen) {
+          Pl.heater = Math.min(P.heaterW, Pl.avail);
+          const dm = Math.min(Pl.adsSpent, Pl.heater * P.etaH * dt / (ADS_REGEN.kWhPerKg * 3.6e6));
+          Pl.adsSpent -= dm; Pl.adsorbent += dm * ADS_REGEN.recover; Pl.adsLost += dm * (1 - ADS_REGEN.recover); Pl.adsRegenKg += dm;
+          Pl.energyJ += Pl.heater * dt; S.totals.kWhPlant = Pl.energyJ / 3.6e6;
+          if (Pl.adsorbent > 0.05) Pl.adsWarned = false;
+        }
+        return;
+      }
+      Pl.regen = false;
       Pl.heater = Math.min(P.heaterW, Pl.avail);
       const Q = Pl.heater * P.etaH * dt;
       Pl.energyJ += Pl.heater * dt; Pl.batchE += Pl.heater * dt;
@@ -422,7 +526,7 @@
         const C = Pl.reg * M.regolithCp(Pl.T) + Pl.ice * (7.49 * Pl.T + 90);
         Pl.T += Q / Math.max(C, 1);
         if (Pl.ice <= 1e-6 && Pl.T >= 250) {
-          log(`Trampa fría: se funde la escarcha (${Pl.captured.toFixed(2)} kg) y el agua pasa al biofiltro.`);
+          log(`Trampa fría: se funde la escarcha (${Pl.captured.toFixed(2)} L de agua) y pasa al biofiltro.`);
           purify(Pl.captured, Pl.batchE / 3.6e6); Pl.frost = 0;
           Pl.state = 'completado'; Pl.reg = 0;
         }
@@ -449,6 +553,7 @@
       const water = captured * 0.92 * (use ? 0.97 : 1);                     // el biofiltro retiene ~3 % (biomasa)
       const need = water * ADS_PER_KG * after / 100;                         // kg de adsorbente necesarios
       const used = Math.min(need, Pl.adsorbent); Pl.adsorbent -= used; Pl.adsUsed += used;
+      if (P.adsRegen) Pl.adsSpent += used;                                    // queda para regenerar en el horno
       if (use) Pl.adsSaved += water * ADS_PER_KG * (1 - after / 100);
       const cov = need > 0 ? used / need : 1;
       const final = after * (1 - (0.96 * cov + 0.3 * (1 - cov)));            // membrana + UV retiran además los microbios
@@ -459,8 +564,8 @@
       if (ok) { Pl.tank += water; S.totals.water += water; }
       else { Pl.rejected += water; S.totals.rejected += water; }
       log(ok
-        ? `Lote limpio: ${water.toFixed(2)} kg de agua apta para uso técnico (${(kwh / Math.max(water, 1e-6)).toFixed(1)} kWh/kg). Contaminantes 100 → ${after.toFixed(0)} (biofiltro) → ${final.toFixed(1)} (final).`
-        : `Agua contaminada (${final.toFixed(1)} > 5): ${Pl.adsorbent <= 0 ? 'no queda adsorbente' : 'el biofiltro no limpió lo suficiente'}. ${water.toFixed(2)} kg apartados para reprocesar.`, ok ? 'key' : 'warn');
+        ? `Lote limpio: ${water.toFixed(2)} L de agua apta para uso técnico (${(kwh / Math.max(water, 1e-6)).toFixed(1)} kWh/L). Contaminantes 100 → ${after.toFixed(0)} (biofiltro) → ${final.toFixed(1)} (final).`
+        : `Agua contaminada (${final.toFixed(1)} > 5): ${Pl.adsorbent <= 0 ? 'no queda adsorbente' : 'el biofiltro no limpió lo suficiente'}. ${water.toFixed(2)} L apartados para reprocesar.`, ok ? 'key' : 'warn');
       if (!ok && Pl.adsorbent <= 0 && !Pl.adsWarned) { Pl.adsWarned = true; log('Sin adsorbente: solo el biofiltro puede alargar la vida de los filtros que vienen de la Tierra.', 'warn'); }
     }
 
@@ -533,18 +638,32 @@
     const cmd = {
       start() { S.running = true; if (S.rover.task === 'dead') return; log('Simulación en marcha.'); },
       pause() { S.running = false; },
-      setMode(m) { S.rover.mode = m; S.manual.throttle = 0; S.manual.steer = 0; if (m === 'auto') { S.rover.task = distSt() < 16 ? 'idle' : 'return'; } else { if (S.rover.task !== 'dead') S.rover.task = 'manual'; } log(m === 'auto' ? 'Modo autónomo.' : 'Modo manual: flechas ↑ ↓ avanzar, ← → girar, Espacio perforar. W A S D mueve la cámara.'); },
+      setMode(m) { S.rover.mode = m; if (m === 'manual') S.rover.route = null; S.manual.throttle = 0; S.manual.steer = 0; if (m === 'auto') { S.rover.task = distSt() < 16 ? 'idle' : 'return'; } else { if (S.rover.task !== 'dead') S.rover.task = 'manual'; } log(m === 'auto' ? 'Modo autónomo.' : 'Modo manual: W avanzar, S retroceder, A D girar, Espacio perforar. Las flechas mueven la cámara.'); },
+      // Obstáculos: { t: 'c', x, z, r } círculo · { t: 'b', x0, z0, x1, z1 } caja · { t: 's', ax, az, bx, bz, r } tramo de tubo
+      setObstacles(list) {
+        OB.clear();
+        for (const o of list || []) {
+          if (o.t === 'c') obAdd({ ...o, x0: o.x - o.r, x1: o.x + o.r, z0: o.z - o.r, z1: o.z + o.r });
+          else if (o.t === 'b') obAdd({ t: 'b', bx0: o.x0, bz0: o.z0, bx1: o.x1, bz1: o.z1, x0: o.x0, x1: o.x1, z0: o.z0, z1: o.z1 });
+          else if (o.t === 's') obAdd({ ...o, x0: Math.min(o.ax, o.bx) - o.r, x1: Math.max(o.ax, o.bx) + o.r, z0: Math.min(o.az, o.bz) - o.r, z1: Math.max(o.az, o.bz) + o.r });
+        }
+      },
       drillHere() { const R = S.rover; if (R.task === 'dead' || R.task === 'drill') return; R.speed = 0; R.cand = ki(R.x, R.z); R.task = 'drill'; R.drillDepth = 0; log('Perforación manual iniciada.', 'key'); },
       goTo(x, z) {
         const R = S.rover; if (R.task === 'dead') return;
         R.mode = 'auto'; R.target = { x, z }; R.cand = ki(x, z); R.task = 'goto'; R.stuckT = 0;
         log(`Orden del operador: ir a (${x.toFixed(0)}, ${z.toFixed(0)}) y evaluar el hielo.`, 'key');
       },
+      followRoute(pts, from = 0) {                                            // recorrer puntos de paso en orden
+        const R = S.rover; if (R.task === 'dead' || !pts.length || from >= pts.length) return;
+        cmd.goTo(pts[from].x, pts[from].z); R.route = pts.map(p => ({ x: p.x, z: p.z })); R.routeI = from; R.routeDone = false;
+      },
+      stopRoute() { S.rover.route = null; S.rover.routeDone = false; },
       goHome() { if (S.rover.task !== 'dead') { S.rover.mode = 'auto'; S.rover.task = 'return'; log('Orden: volver a la estación.'); } },
       inoculate() { S.bio.N = SPECIES.map(s => s.N0); S.bio.S = 1; S.bio.V = Math.max(S.bio.V, 50); log('Cámara biológica re-inoculada.'); },
       solarEvent() { S.bio.spe = 10; log('Evento de partículas solares: +0,05 Gy/h durante 10 h en la cámara.', 'warn'); },
       resetAll() { resetRover(); resetPlant(); resetBio(); resetColony(); S.t = 0; S.know.sum.fill(0); S.know.n.fill(0); S.know.rejected.fill(0); S.know.drilled.fill(0); S.holes.length = 0; S.trail.length = 0; S.log.length = 0;
-        S.hist = { t: [], bat: [], T: [], tank: [], bio: SPECIES.map(() => []) }; S.totals = { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, holes: 0, rejected: 0 }; S.running = false; log('Simulación reiniciada.'); }
+        S.hist = { t: [], bat: [], T: [], tank: [], bio: SPECIES.map(() => []) }; S.totals = { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, dist3: 0, holes: 0, rejected: 0 }; S.running = false; log('Simulación reiniciada.'); }
     };
 
     return { S, P, world, step, cmd, est, ki, cellCenter, ROVER, SPECIES, bioActivity, RAW, ADS_PER_KG, COLONY };

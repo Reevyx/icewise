@@ -1,0 +1,16 @@
+{
+  "name": "astra-icewise-servidor",
+  "private": true,
+  "type": "module",
+  "description": "Servidor intermedio de ASTRA: guarda la clave de la API como secreto y llama a la IA.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.162.0"
+  }
+}

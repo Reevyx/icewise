@@ -104,9 +104,13 @@
     L.load(base ? base.color : 'assets/terrain/regolito_color_2k.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; REGO.color.value = rep(t); REGO.on.value = 1; done(); }, undefined, done);
     L.load(base ? base.normal : 'assets/terrain/regolito_normal_2k.jpg', t => { REGO.normal.value = rep(t); done(); }, undefined, done);
     const parse = (gl) => {
-      const types = [];
-      gl.scene.traverse(o => { if (o.isMesh) { o.material.envMapIntensity = 0.3; o.material.color.setScalar(0.42); types.push({ geo: o.geometry, mat: o.material }); } });   // albedo lunar (~0,12)
-      ROCKS.types = types; ROCKS.sets.forEach(syncRocks); done();
+      // 7 rocas, cada una con 3 niveles de detalle (moon_rock_0N, _L1, _L2): 2500, 500 y 120 triángulos
+      const byBase = {};
+      gl.scene.traverse(o => { if (!o.isMesh) return; o.material.envMapIntensity = 0.3; o.material.color.setScalar(0.42);   // albedo lunar (~0,12)
+        const mm = /^(.*?)(?:_L([12]))?$/.exec(o.name || 'roca'), base = mm[1], l = mm[2] ? +mm[2] : 0;
+        (byBase[base] = byBase[base] || [])[l] = { geo: o.geometry, mat: o.material }; });
+      ROCKS.types = Object.keys(byBase).sort().map(k => ({ lods: byBase[k].filter(Boolean) }));
+      ROCKS.sets.forEach(syncRocks); done();
     };
     const gl = new THREE.GLTFLoader(); const draco = new THREE.DRACOLoader(); draco.setDecoderPath('assets/vendor/draco170/'); gl.setDRACOLoader(draco);
     if (base) {                                                          // doble clic: el decodificador llega con modelos-locales.js
@@ -121,18 +125,30 @@
   }
   // Las rocas se colocan en un InstancedMesh "plantilla" (forma procedural). Al cargar las escaneadas, cada instancia pasa a
   // uno de los 7 tipos: misma posición y tamaño, solo giro horizontal (la base escaneada es plana y va apoyada en el suelo).
-  const ROCKS = { types: null, sets: [] };
+  const ROCKS = { types: null, sets: [], ref: new THREE.Vector3(), zoom: 1, fwd: new THREE.Vector3(0, 0, -1), cosV: -2 };
+  const _cf = new THREE.Vector3();
+  // Al moverse la cámara (o cambiar el zoom) se reparten de nuevo las rocas entre los niveles de detalle
+  function updateRockLOD(camera) {
+    const z = 46 / camera.fov; camera.getWorldDirection(_cf);
+    // con zoom (cámara del rover) solo cuentan las rocas dentro del cono de visión; las demás van al nivel más ligero
+    const zoomed = z > 2, turned = zoomed && _cf.dot(ROCKS.fwd) < Math.cos(camera.fov * Math.PI / 180 * 0.3);
+    if (!turned && camera.position.distanceTo(ROCKS.ref) < 10 / Math.max(1, z / 4) && Math.abs(Math.log(z / ROCKS.zoom)) < 0.35) return;
+    ROCKS.ref.copy(camera.position); ROCKS.zoom = z; ROCKS.fwd.copy(_cf);
+    ROCKS.cosV = zoomed ? Math.cos(Math.min(Math.PI / 2, camera.fov * Math.PI / 180 * (0.5 * Math.max(1, camera.aspect) + 0.35))) : -2;
+    ROCKS.sets.forEach(syncRocks);
+  }
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _qy = new THREE.Quaternion();
   function registerRocks(proc, scene, sink = 0.1) { const set = { proc, scene, sink, typed: null }; ROCKS.sets.push(set); proc.userData.rockSet = set; syncRocks(set); return set; }
   function syncRocks(set) {
     if (!ROCKS.types) return;
-    const T = ROCKS.types, proc = set.proc;
+    const T = ROCKS.types, proc = set.proc, NL = 3;
     if (!set.typed) {
-      set.typed = T.map(t => { const m = new THREE.InstancedMesh(t.geo, t.mat, proc.instanceMatrix.count);   // capacidad completa: el reparto por posición no es exacto
-        m.castShadow = proc.castShadow; m.receiveShadow = true; m.frustumCulled = false; set.scene.add(m); return m; });
+      set.typed = [];
+      T.forEach((t, k) => t.lods.forEach((L, l) => { const m = new THREE.InstancedMesh(L.geo, L.mat, proc.instanceMatrix.count);   // capacidad completa: el reparto no es exacto
+        m.castShadow = proc.castShadow && l < 2; m.receiveShadow = true; m.frustumCulled = false; m.count = 0; set.scene.add(m); set.typed[k * NL + l] = m; }));
       patchTree(set.scene, SVref.sv);
     }
-    const cnt = T.map(() => 0);
+    const cnt = new Array(T.length * NL).fill(0), ref = ROCKS.ref, zk = ROCKS.zoom;
     for (let i = 0; i < proc.count; i++) {
       proc.getMatrixAt(i, _m); _m.decompose(_p, _q, _s);
       // forma, giro y altura según la POSICIÓN de la roca (no según su número en la lista): al regenerarse las rocas
@@ -141,9 +157,14 @@
       _qy.setFromAxisAngle(UPV, (hsh % 6283) / 1000);
       const size = (_s.x + _s.z) * 1.05, k = (hsh >>> 13) % T.length;                    // ancho similar al de la roca procedural
       _p.y -= size * set.sink; _s.set(size, size * (0.8 + 0.4 * ((hsh >>> 7) % 10) / 10), size);
-      _m.compose(_p, _qy, _s); if (cnt[k] < set.typed[k].instanceMatrix.count) set.typed[k].setMatrixAt(cnt[k]++, _m);
+      // nivel de detalle según el tamaño en pantalla (incluye el zoom de la cámara): ~26 px o más = malla completa
+      const rx = _p.x - ref.x, ry = _p.y - ref.y, rz = _p.z - ref.z, dist = Math.max(1, Math.hypot(rx, ry, rz));
+      const inView = ROCKS.cosV < -1 || (rx * ROCKS.fwd.x + ry * ROCKS.fwd.y + rz * ROCKS.fwd.z) / dist > ROCKS.cosV;
+      const ang = inView ? size * zk / dist : 0;
+      const l = Math.min(ang > 0.022 ? 0 : ang > 0.006 ? 1 : 2, T[k].lods.length - 1), j = k * NL + l;
+      _m.compose(_p, _qy, _s); if (cnt[j] < set.typed[j].instanceMatrix.count) set.typed[j].setMatrixAt(cnt[j]++, _m);
     }
-    set.typed.forEach((m, k) => { m.count = cnt[k]; m.instanceMatrix.needsUpdate = true; });
+    set.typed.forEach((m, j) => { if (!m) return; m.count = cnt[j]; m.instanceMatrix.needsUpdate = true; });
     proc.visible = false;
   }
   const SVref = { sv: null }, UPV = new THREE.Vector3(0, 1, 0);
@@ -650,7 +671,9 @@
     let hiRes = false;
     function loadHiRes() {
       if (hiRes || local) return; hiRes = true;
-      texLoader.load('assets/sky/tierra_dia_8k.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; earthU.day.value = t; });
+      texLoader.load('assets/sky/tierra_dia_8k.jpg', t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+        if (IceEnv.renderer) IceEnv.renderer.initTexture(t);                   // se sube a la tarjeta gráfica ya, no al aparecer en pantalla
+        earthU.day.value = t; });
     }
     // 5) Destellos de lente: fantasmas de colores en la línea Sol–centro y raya horizontal (anamórfica)
     const ghostTex = radialTex([[0, 'rgba(255,255,255,0.0)'], [0.55, 'rgba(255,255,255,0.12)'], [0.75, 'rgba(255,255,255,0.35)'], [0.85, 'rgba(255,255,255,0.08)'], [1, 'rgba(255,255,255,0)']]);
@@ -659,13 +682,13 @@
     const mk = (map, c) => { const o = new THREE.Sprite(new THREE.SpriteMaterial({ map, color: c, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0 })); o.renderOrder = 20; o.frustumCulled = false; scene.add(o); return o; };
     const ghosts = ghostDef.map(([f, s, c, m]) => { const o = mk(m, c); o.userData = { f, s }; return o; });
     const streak = mk(radialTex([[0, 'rgba(255,255,255,0.9)'], [0.15, 'rgba(255,225,190,0.3)'], [1, 'rgba(255,210,170,0)']]), 0xffe2c0);
-    const tmp = new THREE.Vector3(), shl = Math.hypot(sd.x, sd.z), tanE = sd.y / shl;
+    const tmp = new THREE.Vector3(), _gp = new THREE.Vector3(), _spin = new THREE.Vector3(0, 1, 0), shl = Math.hypot(sd.x, sd.z), tanE = sd.y / shl;
     let flare = 0;
     return { group: grp, earthDir, placeEarth, U, loadHiRes, setCine(on) { U.cine.value = on ? 1 : 0; },
       update(camera, dt = 0.016, simT = 0) {
         grp.position.copy(camera.position);
         atmU.center.value.copy(earth.position).add(grp.position);
-        qSpin.setFromAxisAngle(new THREE.Vector3(0, 1, 0), simT / 86164 * Math.PI * 2 + 2.2); earth.quaternion.copy(qAlign).multiply(qSpin);
+        qSpin.setFromAxisAngle(_spin, simT / 86164 * Math.PI * 2 + 2.2); earth.quaternion.copy(qAlign).multiply(qSpin);
         if (camera.fov < 14) loadHiRes();
         dome.material.uniforms.fovK.value = 0.12 + 0.88 * Math.pow(Math.min(1, Math.max(0, (camera.fov - 1) / 12)), 0.7);   // con zoom, el fondo no muestra el grano del JPG
         tmp.copy(camera.position).addScaledVector(sd, 1000).project(camera);
@@ -673,9 +696,9 @@
         if (vis) for (const t of [15, 40, 90, 200, 450, 1000, 2200]) { const x = camera.position.x + sd.x / shl * t, z = camera.position.z + sd.z / shl * t; if (W.hAt(x, z) > camera.position.y + tanE * t) { vis = false; break; } }
         flare += ((vis ? 1 : 0) - flare) * Math.min(1, dt * 6);
         const sx = tmp.x, sy = tmp.y, fov = Math.tan(camera.fov * Math.PI / 360) * 2 * 10, k = flare * (0.35 + 0.65 * U.cine.value);
-        ghosts.forEach(o => { const p = new THREE.Vector3(sx * o.userData.f, sy * o.userData.f, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
+        ghosts.forEach(o => { const p = _gp.set(sx * o.userData.f, sy * o.userData.f, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
           o.position.copy(p); o.scale.setScalar(o.userData.s * fov); o.material.opacity = 0.22 * k; o.visible = k > 0.02; });
-        const ps = new THREE.Vector3(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
+        const ps = _gp.set(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(10).add(camera.position);
         streak.position.copy(ps); streak.scale.set(fov * 0.55, fov * 0.008, 1); streak.material.opacity = 0.3 * k; streak.visible = k > 0.02;
       } };
   }
@@ -716,11 +739,14 @@
     _snapD.set(sd.x, sd.y, sd.z).normalize(); _snapR.crossVectors(_snapUp, _snapD).normalize(); _snapU.crossVectors(_snapD, _snapR);
     const a = Math.round(f.dot(_snapR) / tu) * tu, b = Math.round(f.dot(_snapU) / tv) * tv, w = f.dot(_snapD);
     f.copy(_snapR).multiplyScalar(a).addScaledVector(_snapU, b).addScaledVector(_snapD, w);
+    let moved = !sun.target.position.equals(f);
     sun.position.set(f.x + sd.x * D, f.y + sd.y * D, f.z + sd.z * D); sun.target.position.copy(f); sun.target.updateMatrixWorld();
     if (Math.abs(c.right - half) > half * 0.06 || c.far !== D * 2) {
+      moved = true;
       Object.assign(c, { left: -half, right: half, top: vh, bottom: -vh, near: 1, far: D * 2 }); c.updateProjectionMatrix();
       sun.shadow.normalBias = 0.03 + half * 0.002; sun.shadow.bias = -0.0004;   // Sol rasante (1,2°): más margen contra el autosombreado
     }
+    if (moved) sun.userData.moved = true;
   }
 
   // ---------- huellas de las ruedas ----------
@@ -917,16 +943,40 @@
     const mesh = new THREE.Mesh(g, terrainMaterial(W, SV, false)); mesh.receiveShadow = true; mesh.castShadow = false; mesh.visible = false; mesh.userData.skipSunVis = true;
     mesh.frustumCulled = false; scene.add(mesh);
     let cur = null, lastRegen = 0;
+    // Rejilla alineada con el mundo (paso 0,5 m; el centro avanza de 10 en 10 m): al moverse se reaprovecha lo ya calculado
+    // y solo se calcula la franja nueva. Las normales salen de la propia rejilla (sin recorrer los triángulos).
+    const S1 = SEG + 1, STP2 = SZ / SEG, kOf = new Int32Array(S1 * S1);
+    for (let k = 0; k < nV; k++) kOf[Math.round((local[k * 3 + 2] + HP) / STP2) * S1 + Math.round((local[k * 3] + HP) / STP2)] = k;
+    let cM = new Float32Array(S1 * S1), cD = new Float32Array(S1 * S1), cH = new Float32Array(S1 * S1), cC = new Float32Array(S1 * S1 * 3);
+    let nM = new Float32Array(S1 * S1), nD = new Float32Array(S1 * S1), nH = new Float32Array(S1 * S1), nC = new Float32Array(S1 * S1 * 3);
+    const Y = new Float32Array(S1 * S1), nrm = g.attributes.normal;
+    let pcx = null, pcz = null;
     function regen(cx, cz) {
-      for (let k = 0; k < nV; k++) {
-        const x = cx + local[k * 3], z = cz + local[k * 3 + 2], e = Math.max(Math.abs(local[k * 3]), Math.abs(local[k * 3 + 2]));
-        const fade = sm(clamp((HP - e) / 14, 0, 1)), [m, dark] = micro(x, z);
-        pos.setXYZ(k, x, tri(H, 1, 0, x, z) + m * fade, z);
-        const dk = 1 - dark * fade;
-        col[k * 3] = tri(BC, 3, 0, x, z) * dk; col[k * 3 + 1] = tri(BC, 3, 1, x, z) * dk; col[k * 3 + 2] = tri(BC, 3, 2, x, z) * dk;
+      const si = pcx === null ? 1e9 : Math.round((cx - pcx) / STP2), sj = pcx === null ? 1e9 : Math.round((cz - pcz) / STP2);
+      for (let iz = 0; iz < S1; iz++) for (let ix = 0; ix < S1; ix++) {
+        const gi = iz * S1 + ix, ox = ix + si, oz = iz + sj;
+        if (ox >= 0 && ox < S1 && oz >= 0 && oz < S1) {                       // ya calculado en la posición anterior
+          const og = oz * S1 + ox; nM[gi] = cM[og]; nD[gi] = cD[og]; nH[gi] = cH[og]; nC[gi * 3] = cC[og * 3]; nC[gi * 3 + 1] = cC[og * 3 + 1]; nC[gi * 3 + 2] = cC[og * 3 + 2];
+        } else {
+          const x = cx - HP + ix * STP2, z = cz - HP + iz * STP2, [m, dark] = micro(x, z);
+          nM[gi] = m; nD[gi] = dark; nH[gi] = tri(H, 1, 0, x, z);
+          nC[gi * 3] = tri(BC, 3, 0, x, z); nC[gi * 3 + 1] = tri(BC, 3, 1, x, z); nC[gi * 3 + 2] = tri(BC, 3, 2, x, z);
+        }
+      }
+      [cM, nM] = [nM, cM]; [cD, nD] = [nD, cD]; [cH, nH] = [nH, cH]; [cC, nC] = [nC, cC]; pcx = cx; pcz = cz;
+      for (let iz = 0; iz < S1; iz++) for (let ix = 0; ix < S1; ix++) {
+        const gi = iz * S1 + ix, k = kOf[gi], lx = ix * STP2 - HP, lz = iz * STP2 - HP, x = cx + lx, z = cz + lz;
+        const fade = sm(clamp((HP - Math.max(Math.abs(lx), Math.abs(lz))) / 14, 0, 1)), y = cH[gi] + cM[gi] * fade, dk = 1 - cD[gi] * fade;
+        Y[gi] = y; pos.setXYZ(k, x, y, z);
+        col[k * 3] = cC[gi * 3] * dk; col[k * 3 + 1] = cC[gi * 3 + 1] * dk; col[k * 3 + 2] = cC[gi * 3 + 2] * dk;
         uv.setXY(k, (x + HF) / W.SIZE, (HF - z) / W.SIZE);
       }
-      pos.needsUpdate = true; uv.needsUpdate = true; g.attributes.color.needsUpdate = true; g.computeVertexNormals();
+      for (let iz = 0; iz < S1; iz++) for (let ix = 0; ix < S1; ix++) {
+        const gi = iz * S1 + ix, x0 = ix > 0 ? gi - 1 : gi, x1 = ix < SEG ? gi + 1 : gi, z0 = iz > 0 ? gi - S1 : gi, z1 = iz < SEG ? gi + S1 : gi;
+        const dx = (Y[x1] - Y[x0]) / ((x1 - x0) * STP2), dz = (Y[z1] - Y[z0]) / (((z1 - z0) / S1) * STP2), inv = 1 / Math.sqrt(dx * dx + 1 + dz * dz);
+        nrm.setXYZ(kOf[gi], -dx * inv, inv, -dz * inv);
+      }
+      pos.needsUpdate = true; uv.needsUpdate = true; g.attributes.color.needsUpdate = true; nrm.needsUpdate = true;
       fn.cx = cx; fn.cz = cz; if (fn.onRegen) fn.onRegen(cx, cz, HP);
     }
     const fn = function update(target, camDist) {
@@ -994,5 +1044,5 @@
     };
   }
 
-  window.IceEnv = { REGO, loadScanned, registerRocks, syncRocks, DETAIL, nearGrains, wheelDust, GradeShader, detailTerrain, iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
+  window.IceEnv = { REGO, loadScanned, registerRocks, syncRocks, updateRockLOD, DETAIL, nearGrains, wheelDust, GradeShader, detailTerrain, iceLayer, crystalGeometry, sunVisTexture, patchMaterial, patchTree, terrainMaterial, albedoAt, buildFar, rockGeometry, rockMaterial, nearRocks, buildSky, envMap, updateSun, wheelTracks, SHACK };
 })();

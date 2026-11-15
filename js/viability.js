@@ -22,8 +22,8 @@
     depth: { label: 'Profundidad de extracción (m)', values: range(0.2, 2, 0.05) }
   };
   const METRICS = {
-    specific: { label: 'Energía específica (kWh/kg agua purificada)', get: r => r.specific, fmt: v => `${fmt(v, 1)} kWh/kg`, max: 40 },
-    purified: { label: 'Agua purificada por lote (kg)', get: r => r.mass.purified, fmt: v => `${fmt(v, 1)} kg` },
+    specific: { label: 'Energía específica (kWh por litro de agua purificada)', get: r => r.specific, fmt: v => `${fmt(v, 1)} kWh/L`, max: 40 },
+    purified: { label: 'Agua purificada por lote (L)', get: r => r.mass.purified, fmt: v => `${fmt(v, 1)} L` },
     hours: { label: 'Tiempo de procesamiento (h)', get: r => r.time.hours, fmt: v => `${fmt(v, 0)} h` }
   };
 
@@ -103,13 +103,13 @@
     renderSummary(r);
     const set = (id, v) => { const el = $(id); if (el) el.innerHTML = v; };
     set('#k-ice', `${fmtAuto(r.mass.ice)}<small>kg</small>`);
-    set('#k-pur', `${fmtAuto(r.mass.purified)}<small>kg</small>`);
+    set('#k-pur', `${fmtAuto(r.mass.purified)}<small>L</small>`);
     set('#k-energy', `${fmt(r.kWh.total, 1)}<small>kWh</small>`);
-    set('#k-spec', `${isFinite(r.specific) ? fmt(r.specific, 2) : '—'}<small>kWh/kg</small>`);
+    set('#k-spec', `${isFinite(r.specific) ? fmt(r.specific, 2) : '—'}<small>kWh/L</small>`);
     set('#k-time', fmtDuration(r.time.hours).replace(/ (\S+)$/, '<small>$1</small>'));
     set('#k-rec', `${fmt(r.recoveryOverall * 100, 1)}<small>%</small>`);
     set('#k-mass', `${fmt(r.mass.wet, 0)}<small>kg</small>`);
-    set('#k-thermo', `${isFinite(r.thermoMin) ? fmt(r.thermoMin, 2) : '—'}<small>kWh/kg</small>`);
+    set('#k-thermo', `${isFinite(r.thermoMin) ? fmt(r.thermoMin, 2) : '—'}<small>kWh/L</small>`);
   }
 
   function renderFlow(r) {
@@ -196,7 +196,7 @@
       { legend: $('#legend-scen'), yFmt: v => fmt(v, 0), aria: 'Hielo in situ y agua purificada por escenario' });
     const el2 = $('#chart-scen-e');
     if (el2) charts.groupedBars(el2, res.map(x => ({ label: M.SCENARIOS[x.k].label, values: [x.r.specific] })),
-      [{ name: 'kWh por kg de agua purificada', color: P.cobalt }],
+      [{ name: 'kWh por litro de agua purificada', color: P.cobalt }],
       { legend: $('#legend-scen-e'), yFmt: v => fmt(v, 1), aria: 'Energía específica por escenario' });
     const tb = $('#scen-table');
     if (tb) {
@@ -206,11 +206,11 @@
         row('Capa seca superior', r => `${fmt(r.params.dryLayer, 2)} m`, 'sup'),
         row('Material húmedo procesado', r => `${fmt(r.mass.wet, 0)} kg`, 'sim'),
         row('Hielo in situ', r => `${fmt(r.mass.ice, 1)} kg`, 'sim'),
-        row('Agua recuperada', r => `${fmt(r.mass.recovered, 1)} kg`, 'sim'),
-        row('Agua purificada', r => `${fmt(r.mass.purified, 1)} kg`, 'sim'),
+        row('Agua recuperada', r => `${fmt(r.mass.recovered, 1)} L`, 'sim'),
+        row('Agua purificada', r => `${fmt(r.mass.purified, 1)} L`, 'sim'),
         row('Recuperación global', r => `${fmt(r.recoveryOverall * 100, 0)} %`, 'sim'),
         row('Energía total del lote', r => `${fmt(r.kWh.total, 1)} kWh`, 'sim'),
-        row('Energía específica', r => `${fmt(r.specific, 1)} kWh/kg`, 'sim'),
+        row('Energía específica', r => `${fmt(r.specific, 1)} kWh/L`, 'sim'),
         row('Tiempo de procesamiento', r => fmtDuration(r.time.hours), 'sim')
       ].join('');
     }
@@ -224,7 +224,7 @@
     lines.push([]);
     lines.push(['resultado (SIMULADO)', 'valor', 'unidad']);
     [['Hielo in situ', r.mass.ice, 'kg'], ['Agua recuperada', r.mass.recovered, 'kg'], ['Agua purificada', r.mass.purified, 'kg'],
-     ['Energia total', r.kWh.total, 'kWh'], ['Energia especifica', r.specific, 'kWh/kg'], ['Tiempo de procesamiento', r.time.hours, 'h'],
+     ['Energia total', r.kWh.total, 'kWh'], ['Energia especifica', r.specific, 'kWh/L'], ['Tiempo de procesamiento', r.time.hours, 'h'],
      ['Recuperacion global', r.recoveryOverall * 100, '%']].forEach(x => lines.push([x[0], x[1].toFixed(4), x[2]]));
     return lines.map(l => l.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   }

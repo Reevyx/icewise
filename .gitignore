@@ -17,3 +17,10 @@ discurso.md
 # Copias de seguridad de Blender
 *.blend1
 *.blend2
+
+# Secretos y archivos locales del servidor de ASTRA (la clave de la API nunca se sube)
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+chatbot/servidor/.wrangler/

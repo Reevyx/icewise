@@ -32,7 +32,7 @@
   const DEF = {
     vmax: {
       title: 'Velocidad máxima',
-      help: 'Lo rápido que se mueve el rover. Más rápido = llega antes, pero consume más.',
+      help: 'Lo rápido que se mueve el rover. Más rápido = llega antes, pero consume más. Por defecto 3,6 km/h (supuesto de diseño); como referencia, el rover VIPER de la NASA va a unos 0,8 km/h.',
       rows: (P, v) => [['Consumo conduciendo', `${fmt(55 + 25 + 60 + 420 * v, 0)} W`], ['Tiempo para recorrer 300 m', h(300 / v / 3600)]],
       say: (a, b) => b > a ? 'Llegará antes al hielo, pero gasta más energía por segundo y le queda menos margen para volver.'
         : 'Gasta menos por segundo, pero tarda más: pasa más horas en el frío y la calefacción también consume.'
@@ -46,8 +46,8 @@
         return [['Zonas candidatas que superan el umbral', `${fmt(cand ? ok / cand * 100 : 0, 0)} %`],
           ['Hielo mínimo por perforación', `${fmt(holeIce(P.drillDepth, v), 2)} kg`]];
       },
-      say: (a, b) => b > a ? 'Más exigente: descarta zonas pobres. Perforará menos veces, pero cada muestra traerá más hielo y la energía por kg de agua bajará. Si lo subes demasiado, quizá no encuentre ninguna zona.'
-        : 'Menos exigente: perforará en zonas pobres. Más perforaciones y más regolito que calentar para poca agua: sube la energía por kg.'
+      say: (a, b) => b > a ? 'Más exigente: descarta zonas pobres. Perforará menos veces, pero cada muestra traerá más hielo y la energía por litro de agua bajará. Si lo subes demasiado, quizá no encuentre ninguna zona.'
+        : 'Menos exigente: perforará en zonas pobres. Más perforaciones y más regolito que calentar para poca agua: sube la energía por litro.'
     },
     drillDepth: {
       title: 'Profundidad de perforación',
@@ -82,18 +82,18 @@
       help: 'Calor para convertir el hielo de las muestras en vapor. Limitada por los paneles solares.',
       rows: (P, v) => { const r = batch({ ...P, heaterW: v }); return [['Potencia que llega al horno', `${fmt(Math.min(v, P.solarW), 0)} W`], ['Tiempo para un lote de ~45 kg', h(r.time.hours)]]; },
       say: (a, b, P) => b > P.solarW ? 'La estación no tiene tanta energía solar: el horno no puede pasar de lo que dan los paneles.'
-        : b > a ? 'Los lotes se procesan antes. La energía total por kg de agua es la misma: solo va más rápido.' : 'Más lento: las muestras esperan más en cola.'
+        : b > a ? 'Los lotes se procesan antes. La energía total por litro de agua es la misma: solo va más rápido.' : 'Más lento: las muestras esperan más en cola.'
     },
     etaH: {
       title: 'Eficiencia de calentamiento',
       help: 'Qué parte del calor llega de verdad a la muestra (el resto se pierde por radiación).',
-      rows: (P, v) => { const r = batch({ ...P, etaH: v }); return [['Energía por kg de agua', `${fmt(r.specific, 1)} kWh/kg`], ['Tiempo por lote', h(r.time.hours)]]; },
-      say: (a, b) => b > a ? 'Menos calor desperdiciado: cada kg de agua cuesta menos energía y los lotes van más rápido.' : 'Se pierde más calor: el agua sale más cara en energía.'
+      rows: (P, v) => { const r = batch({ ...P, etaH: v }); return [['Energía por litro de agua', `${fmt(r.specific, 1)} kWh/L`], ['Tiempo por lote', h(r.time.hours)]]; },
+      say: (a, b) => b > a ? 'Menos calor desperdiciado: cada litro de agua cuesta menos energía y los lotes van más rápido.' : 'Se pierde más calor: el agua sale más cara en energía.'
     },
     etaCap: {
       title: 'Captura de vapor',
       help: 'Qué parte del vapor se congela en la trampa fría en vez de escaparse.',
-      rows: (P, v) => [['Agua obtenida por kg de hielo', `${fmt(v * 0.92, 2)} kg`], ['Energía por kg de agua', `${fmt(batch({ ...P, etaCap: v }).specific, 1)} kWh/kg`]],
+      rows: (P, v) => [['Agua obtenida por kg de hielo', `${fmt(v * 0.92, 2)} L`], ['Energía por litro de agua', `${fmt(batch({ ...P, etaCap: v }).specific, 1)} kWh/L`]],
       say: (a, b) => b > a ? 'Se escapa menos vapor: más agua con la misma energía.' : 'Se escapa más vapor: se pierde agua que ya costó energía sublimar.'
     },
     solarW: {
@@ -111,7 +111,7 @@
     feed: {
       title: 'Agua del tanque a la cámara',
       help: 'Agua limpia para mantener húmedo el biofiltro entre lotes. Se resta del tanque.',
-      rows: (P, v) => [['Agua que sale del tanque al día', `${fmt(v * 24 / 1000, 3)} kg`]],
+      rows: (P, v) => [['Agua que sale del tanque al día', `${fmt(v * 24 / 1000, 3)} L`]],
       say: (a, b) => b === 0 ? 'Sin aporte, la cámara se irá secando. P. extremorientalis muere con la sequedad; Deinococcus la resiste mucho mejor.'
         : 'Mantiene vivo el biofiltro entre lotes. Es poca agua comparada con la que ayuda a limpiar.'
     },
@@ -130,7 +130,7 @@
     bioPurif: {
       title: 'Biofiltro',
       help: 'Las bacterias limpian el agua antes de los filtros químicos, que vienen de la Tierra y se gastan.',
-      rows: (P, v) => [['Contaminantes que llegan a los filtros (bacterias activas)', v ? '≈ 20–60 de 100' : '100 de 100'], ['Adsorbente gastado por kg de agua', v ? '≈ 0,05–0,15 kg' : '0,25 kg']],
+      rows: (P, v) => [['Contaminantes que llegan a los filtros (bacterias activas)', v ? '≈ 20–60 de 100' : '100 de 100'], ['Adsorbente gastado por litro de agua', v ? '≈ 0,05–0,15 kg' : '0,25 kg']],
       say: (a, b) => b ? 'Las bacterias se comen el amoníaco y los compuestos orgánicos, y Deinococcus inmoviliza el mercurio. Los filtros químicos duran varias veces más.'
         : 'Sin biofiltro, todo lo limpian los filtros químicos. Se gastan rápido y, cuando se acaban, el agua sale contaminada. Mira el adsorbente restante.'
     },

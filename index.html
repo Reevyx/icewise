@@ -10,8 +10,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,300..600&family=Inter:wght@300..600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="css/sim.css">
+  <link rel="stylesheet" href="css/styles.css?v=20261114j">
+  <link rel="stylesheet" href="css/sim.css?v=20261114j">
+  <link rel="stylesheet" href="chatbot/astra-launcher.css?v=20261114b">
   <link rel="preload" as="image" href="assets/img/hero-artemis2-terminator.jpg">
 </head>
 <body>
@@ -142,20 +143,16 @@
     <div class="section-head reveal" style="margin-bottom:28px">
       <div class="eyebrow"><span class="idx">03</span><span class="bar"></span>Simulación en tiempo real</div>
       <h2>Toma el control de la misión.</h2>
-      <p class="lead">Estás en el borde real del cráter Shackleton. Los cristales azules marcan dónde hay hielo bajo el suelo. El rover no los ve: tiene que descubrirlos con su sensor. Muévete por el mapa con <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, arrastra para girar la cámara y usa la rueda para acercarte; pulsa <kbd>E</kbd> para elegir en el terreno a dónde enviar el rover. En la estación, un biofiltro con microorganismos limpia el agua obtenida.</p>
-      <p class="muted" style="font-size:13px;margin-top:8px">Relieve y sombras reales (LOLA, 3,2 km alrededor de la estación). El resto del cráter que se ve a lo lejos es un modelo aproximado, solo para dar contexto. El cielo es real (mapas de estrellas de NASA con datos de Gaia e Hipparcos) y la Tierra está hecha con imágenes de satélite de NASA, en su dirección y fase reales vistas desde Shackleton. Las rocas y el regolito son escaneos fotográficos (Poly Haven, CC0); con «Vista Tierra» se ve la Tierra con teleobjetivo, como en las fotos reales. Las 62 000 estrellas son reales y la Vía Láctea se ve por su densidad, con un velo azul muy tenue (estético). Con «Cielo de larga exposición» se ven como en una foto de exposición larga; desactívalo para verlo como lo vería el ojo con el suelo iluminado. Al perforar se abre una vista en corte ilustrativa junto a la broca: el espesor de la capa seca y el porcentaje de hielo son los del modelo en ese punto, y las virutas caen con la gravedad lunar. El despiece muestra el diseño propio del rover, y los datos del mapa y del centro de control salen del modelo de la simulación.</p>
+      <p class="lead">Estás en el borde real del cráter Shackleton. Los cristales azules marcan el hielo bajo el suelo: el rover no los ve y tiene que descubrirlos con su sensor.</p>
     </div>
 
     <div class="sim-wrap">
       <div class="sim-stage" id="sim-stage">
-        <div id="sim-view" class="sim-view" tabindex="0" aria-label="Vista 3D de la simulación. Usa W A S D para moverte por el mapa, arrastra para girar la cámara, usa la rueda para acercarte y pulsa E para elegir a dónde enviar el rover.">
+        <div id="sim-view" class="sim-view" tabindex="0" aria-label="Vista 3D de la simulación. Usa W A S D para moverte por el mapa (en modo manual, W A S D conduce el rover y las flechas mueven la cámara), arrastra para girar la cámara, usa la rueda para acercarte y pulsa E para elegir a dónde enviar el rover.">
           <div id="sim-labels" class="sim-labels" aria-hidden="true"></div>
           <div class="sim-hud" aria-live="polite">
-            <span class="chip" id="hud-clock">Día 1 · 00:00</span>
-            <span class="chip chip--strong" id="hud-task">—</span>
-            <span class="chip" id="hud-bat">—</span>
-            <span class="chip" id="hud-temp">—</span>
-            <span class="chip" id="hud-water">—</span>
+            <span class="hud-task" id="hud-task">—</span>
+            <span class="hud-meta"><span id="hud-clock">Día 1 · 00:00</span><span class="hud-sep" aria-hidden="true"></span><span id="hud-bat">—</span></span>
           </div>
           <div class="sim-banner" id="sim-banner" hidden></div>
           <div class="sim-rcam" id="sim-rcam" hidden aria-hidden="true">
@@ -167,46 +164,82 @@
             <div class="rc-hint">Arrastra para mirar · Rueda: zoom · Doble clic: centrar</div>
           </div>
           <div class="sim-dest" id="sim-dest" hidden>Modo destino: haz clic en el terreno para enviar el rover · <kbd>Esc</kbd> para salir</div>
-          <div class="sim-help" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> moverse · Arrastrar: girar · Rueda: acercar · <kbd>E</kbd> enviar rover · <kbd>M</kbd> mapa · <kbd>G</kbd> control · <kbd>X</kbd> despiece · <kbd>F</kbd> pantalla completa</div>
-
-          <div class="sim-legend" id="sim-legend">
-            <div data-l="ice"><span class="lg-ice"></span><span>Hielo bajo el suelo</span><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></div>
-            <div data-l="det"><span class="lg-det"></span><span>Medido por el rover · punto azul = supera el umbral</span></div>
-            <div data-l="psr" hidden><span class="lg-psr"></span><span>Sombra permanente (≈ 40 K)</span></div>
-            <div data-l="trail"><span class="lg-hole"></span><span>Perforación</span></div>
-          </div>
           <div class="sim-tools" id="sim-tools" role="group" aria-label="Herramientas">
-            <button type="button" data-t="mapa" aria-pressed="false" aria-label="Mapa y puntos de paso (tecla M)" title="Mapa y puntos de paso (M)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg><kbd>M</kbd></button>
-            <button type="button" data-t="control" aria-pressed="false" aria-label="Centro de control (tecla G)" title="Centro de control (G)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V4"/></svg><kbd>G</kbd></button>
-            <button type="button" data-t="despiece" aria-pressed="false" aria-label="Despiece del rover (tecla X)" title="Despiece del rover (X)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><kbd>X</kbd></button>
-            <button type="button" data-t="pantalla" aria-pressed="false" aria-label="Pantalla completa (tecla F)" title="Pantalla completa (F)"><svg class="fs-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><svg class="fs-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg><kbd>F</kbd></button>
+            <button type="button" data-t="mapa" aria-pressed="false" aria-label="Mapa y rutas (tecla M)" title="Mapa y rutas · M"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg></button>
+            <button type="button" data-t="control" aria-pressed="false" aria-label="Telemetría del rover (tecla G)" title="Telemetría · G"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V4"/></svg></button>
+            <button type="button" data-t="capas" aria-pressed="false" aria-label="Capas y leyenda (tecla L)" title="Capas y leyenda · L"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></button>
+            <button type="button" data-t="despiece" aria-pressed="false" aria-label="Despiece del rover (tecla X)" title="Despiece del rover · X"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></button>
+            <span class="sim-tools-sep" aria-hidden="true"></span>
+            <button type="button" data-t="ayuda" aria-pressed="false" aria-label="Controles y atajos de teclado (tecla H)" title="Controles · H"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h1M10.5 10h1M14.5 10h1M8 14h8"/></svg></button>
+            <button type="button" data-t="pantalla" aria-pressed="false" aria-label="Pantalla completa (tecla F)" title="Pantalla completa · F"><svg class="fs-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><svg class="fs-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
           </div>
           <div class="sim-side" id="sim-side">
+            <div class="sim-panel2 sim-layers" id="sim-layers" hidden>
+              <div class="sm-head"><span>Capas</span><button type="button" class="sm-x" data-close aria-label="Cerrar las capas"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+              <label class="ly"><input type="checkbox" id="ov-ice" checked><span class="lg-ice"></span><span class="ly-t">Hielo bajo el suelo<small><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></small></span></label>
+              <label class="ly"><input type="checkbox" id="ov-det" checked><span class="lg-det"></span><span class="ly-t">Lo que mide el rover<small>Punto azul: supera el umbral</small></span></label>
+              <label class="ly"><input type="checkbox" id="ov-psr"><span class="lg-psr"></span><span class="ly-t">Sombra permanente<small>≈ 40 K, nunca le da el Sol</small></span></label>
+              <label class="ly"><input type="checkbox" id="ov-trail" checked><span class="lg-hole"></span><span class="ly-t">Rastro y perforaciones</span></label>
+              <div class="ly-sep"></div>
+              <label class="ly ly--plain"><input type="checkbox" id="ov-fill" checked><span class="ly-t">Luz de apoyo<small>Ilumina desde arriba para ver el relieve (no es realista)</small></span></label>
+              <label class="ly ly--plain"><input type="checkbox" id="ov-cine" checked><span class="ly-t">Cielo de larga exposición<small>Realza las estrellas, como una astrofotografía</small></span></label>
+            </div>
+            <div class="sim-panel2 sim-keys" id="sim-keys" hidden>
+              <div class="sm-head"><span>Controles</span><button type="button" class="sm-x" data-close aria-label="Cerrar los controles"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+              <dl class="keys">
+                <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>Mover la cámara · en «Conducir yo», conducir el rover</dd>
+                <dt><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>Mover la cámara</dd>
+                <dt>Arrastrar · rueda</dt><dd>Girar la cámara · acercar</dd>
+                <dt><kbd>Espacio</kbd></dt><dd>Perforar aquí (conduciendo)</dd>
+                <dt><kbd>E</kbd></dt><dd>Elegir a dónde enviar el rover</dd>
+                <dt><kbd>M</kbd> <kbd>G</kbd> <kbd>L</kbd></dt><dd>Mapa · telemetría · capas</dd>
+                <dt><kbd>X</kbd> <kbd>F</kbd></dt><dd>Despiece · pantalla completa</dd>
+              </dl>
+            </div>
             <div class="sim-panel2 sim-map" id="sim-map" hidden>
-              <div class="sm-head"><span>Mapa · ruta y puntos de paso</span><button type="button" class="sm-x" data-close aria-label="Cerrar el mapa">×</button></div>
+              <div class="sm-head"><span>Mapa · rutas y distancias</span><button type="button" class="sm-x" data-close aria-label="Cerrar el mapa"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+              <div class="seg sm-tabs" id="sm-tabs" role="group" aria-label="Herramienta del mapa"><button type="button" data-mm="ruta" aria-pressed="true">Ruta</button><button type="button" data-mm="medir" aria-pressed="false">Medir A → B</button></div>
               <canvas width="440" height="440" aria-label="Mapa de la zona: relieve real, rastro del rover, perforaciones y puntos de paso"></canvas>
               <div class="sm-legend"><span><i class="k-st"></i>Estación</span><span><i class="k-col"></i>Colonia</span><span><i class="k-rov"></i>Rover</span><span><i class="k-wp"></i>Punto de paso</span><span><i class="k-psr"></i>Sombra permanente</span></div>
+              <div class="sm-pane" data-pane="ruta">
               <div class="sm-row"><span id="sm-count" class="muted">Sin puntos de paso</span><span class="sm-btns"><button type="button" class="btn btn--primary btn--sm" id="sm-go" disabled>Recorrer ruta</button><button type="button" class="btn btn--quiet btn--sm" id="sm-clear">Borrar</button></span></div>
+              <div class="sm-est" id="sm-est"></div>
+              <div class="sm-row"><span class="caption">Rutas guardadas</span><button type="button" class="btn btn--quiet btn--sm" id="sm-save" disabled>Guardar ruta</button></div>
+              <div class="sm-saved" id="sm-saved"></div>
               <p class="sm-hint">Clic en el mapa: añadir un punto de paso · clic derecho: quitar el último. En cada punto el rover mide el hielo y decide si perforar.</p>
+
+              </div>
+              <div class="sm-pane" data-pane="medir" hidden>
+                <div class="sm-row"><span id="sm-mcount" class="muted">Haz clic en el mapa para marcar el punto A</span></div>
+                <div class="sm-row"><span class="sm-btns"><button type="button" class="btn btn--sm" id="sm-mrover">A = rover</button><button type="button" class="btn btn--sm" id="sm-mstation">Estación</button><button type="button" class="btn btn--quiet btn--sm" id="sm-mclear">Borrar</button></span></div>
+                <canvas id="sm-prof" width="452" height="130" hidden aria-label="Perfil de alturas entre A y B"></canvas>
+                <div class="sm-est" id="sm-mest"></div>
+                <p class="sm-hint">Distancias sobre el relieve real (LOLA, 10 m por píxel). El tiempo usa el mismo modelo de velocidad del rover: más lento en subidas de más de 15° e imposible por encima de 24°.</p>
+              </div>
             </div>
             <div class="sim-core" id="sim-core"><canvas width="210" height="250" aria-label="Corte del subsuelo bajo el rover"></canvas></div>
           </div>
           <div class="sim-panel2 sim-ctrl" id="sim-ctrl" hidden>
-            <div class="sm-head"><span>Centro de control · telemetría</span><button type="button" class="sm-x" data-close aria-label="Cerrar el centro de control">×</button></div>
+            <div class="sm-head"><span>Centro de control · telemetría</span><button type="button" class="sm-x" data-close aria-label="Cerrar el centro de control"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
             <div class="sc-task" id="sc-task">—</div>
             <div class="sc-row"><span class="k">Energía</span><b id="sc-bat">—</b><div class="sc-bar"><i id="sc-bat-bar"></i></div><small id="sc-bat-s">—</small></div>
             <div class="sc-row"><span class="k">Temperatura</span><b id="sc-temp">—</b><div class="sc-bar"><i id="sc-temp-bar"></i></div><small id="sc-temp-s">—</small></div>
             <div class="sc-row"><span class="k">Pendiente</span><b id="sc-slope">—</b><div class="sc-bar"><i id="sc-slope-bar"></i></div><small id="sc-slope-s">—</small></div>
             <div class="sc-row"><span class="k">Velocidad</span><b id="sc-speed">—</b><div class="sc-bar"><i id="sc-speed-bar"></i></div><small id="sc-speed-s">—</small></div>
+            <div class="sc-row"><span class="k">Recorrido</span><b id="sc-odo">—</b><small id="sc-odo-s">—</small></div>
             <div class="sc-row"><span class="k">Perforación</span><b id="sc-drill">—</b><div class="sc-bar"><i id="sc-drill-bar"></i></div><small id="sc-drill-s">—</small></div>
             <div class="sc-row"><span class="k">Muestra</span><b id="sc-cargo">—</b><div class="sc-bar"><i id="sc-cargo-bar"></i></div><small id="sc-cargo-s">—</small></div>
             <div class="sc-row"><span class="k">Comunicación</span><b id="sc-link">—</b><div class="sc-bar"><i id="sc-link-bar"></i></div><small id="sc-link-s">—</small></div>
             <p class="sm-hint">Valores del modelo de la simulación. La comunicación se calcula con la línea de vista sobre el relieve real.</p>
           </div>
-          <div class="sim-speed" id="sim-speed" hidden aria-hidden="true"><b id="sim-speed-v">0,0</b><span>km/h</span></div>
+          <div class="sim-speed" id="sim-speed" hidden aria-hidden="true">
+            <div class="spd"><b id="sim-speed-v">0,0</b><span>km/h</span></div>
+            <span class="spd-sep"></span>
+            <div class="spd"><b id="sim-speed-d">0 m</b><span>recorrido</span></div>
+          </div>
           <div class="sim-exp-labels" id="sim-exp-labels" hidden></div>
           <div class="sim-exp" id="sim-exp" hidden>
-            <div class="sm-head"><span>Despiece del rover</span><button type="button" class="sm-x" data-close aria-label="Salir del despiece">×</button></div>
+            <div class="sm-head"><span>Despiece del rover</span><button type="button" class="sm-x" data-close aria-label="Salir del despiece"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
             <h4 id="se-name">Elige una pieza</h4>
             <p id="se-desc">Toca una etiqueta o una pieza del rover para ver qué hace.</p>
             <label class="se-range"><span>Separación</span><input type="range" id="se-amt" min="0" max="1.6" step="0.01" value="1"></label>
@@ -215,20 +248,33 @@
           <div class="sim-tip" id="sim-tip" hidden></div>
           <div class="sim-pop" id="sim-pop" hidden></div>
 
-          <div class="sim-cam seg" id="sim-cam" role="group" aria-label="Cámara">
-            <button data-c="rover" aria-pressed="true">3ª persona</button>
-            <button data-c="rovercam" aria-pressed="false">Cámara del rover</button>
-            <button data-c="tierra" aria-pressed="false" title="Teleobjetivo hacia la Tierra desde la estación (rueda: zoom)">Vista Tierra</button>
-            <button data-c="station" aria-pressed="false">Estación</button>
-            <button data-c="colony" aria-pressed="false">Colonia</button>
-            <button data-c="overview" aria-pressed="false">Vista general</button>
-            <button id="sim-dest-btn" class="sim-dest-btn" aria-pressed="false" title="Elegir destino del rover (tecla E)">Enviar rover <kbd>E</kbd></button>
+          <div class="sim-dock" id="sim-dock">
+            <div class="sim-camwrap">
+              <button type="button" class="dock-btn" id="sim-cam-btn" aria-haspopup="true" aria-expanded="false" aria-controls="sim-cam">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2l1.6-2h7.4l1.6 2h2.2A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.4"/></svg>
+                <span id="sim-cam-cur">3ª persona</span>
+                <svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+              </button>
+              <div class="sim-cam" id="sim-cam" role="group" aria-label="Cámara" hidden>
+                <button data-c="rover" aria-pressed="true">3ª persona</button>
+                <button data-c="rovercam" aria-pressed="false">Cámara del rover</button>
+                <button data-c="tierra" aria-pressed="false" title="Teleobjetivo hacia la Tierra desde la estación (rueda: zoom)">Vista Tierra</button>
+                <button data-c="station" aria-pressed="false">Estación</button>
+                <button data-c="colony" aria-pressed="false">Colonia</button>
+                <button data-c="overview" aria-pressed="false">Vista general</button>
+              </div>
+            </div>
+            <button type="button" id="sim-dest-btn" class="dock-btn sim-dest-btn" aria-pressed="false" title="Elegir en el terreno a dónde enviar el rover (tecla E)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+              <span>Enviar rover</span>
+            </button>
           </div>
           <div class="sim-pad" id="sim-pad" hidden>
-            <button data-k="up" aria-label="Avanzar">▲</button>
-            <button data-k="left" aria-label="Girar a la izquierda">◀</button>
-            <button data-k="down" aria-label="Retroceder">▼</button>
-            <button data-k="right" aria-label="Girar a la derecha">▶</button>
+            <button data-k="up" aria-label="Avanzar (tecla W)">W</button>
+            <button data-k="left" aria-label="Girar a la izquierda (tecla A)">A</button>
+            <button data-k="down" aria-label="Retroceder (tecla S)">S</button>
+            <button data-k="right" aria-label="Girar a la derecha (tecla D)">D</button>
+            <p class="sim-pad-hint"><kbd>Espacio</kbd> perforar · <kbd>↑↓←→</kbd> cámara</p>
           </div>
 
           <div class="sim-loader" id="sim-loader" role="status" aria-live="polite">
@@ -262,7 +308,7 @@
             <button data-m="auto" aria-pressed="true">Piloto automático</button>
             <button data-m="manual" aria-pressed="false">Conducir yo</button>
           </div>
-          <div class="speed"><span class="caption">Velocidad del tiempo</span>
+          <div class="speed"><span class="caption">Tiempo</span>
             <div class="seg" id="sim-warp" role="group" aria-label="Velocidad del tiempo">
               <button data-w="1" aria-pressed="false">Real</button>
               <button data-w="30" aria-pressed="false">30×</button>
@@ -272,31 +318,39 @@
             </div>
           </div>
           <span class="sp"></span>
-          <button class="btn btn--quiet btn--sm" id="sim-reset">Reiniciar todo</button>
+          <button class="sim-gear" id="sim-reset" aria-label="Reiniciar la simulación y los valores" title="Reiniciar todo"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg></button>
           <div class="sim-qwrap">
             <button class="sim-gear" id="sim-qbtn" aria-label="Calidad gráfica" aria-expanded="false" title="Calidad gráfica"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
             <div class="sim-qpop" id="sim-qpop" hidden>
               <div class="caption">Calidad gráfica</div>
               <div class="seg" id="sim-quality" role="group" aria-label="Calidad gráfica">
-                <button data-q="maxima" aria-pressed="true">Máxima</button>
+                <button data-q="auto" aria-pressed="true" title="Elige la calidad según tu equipo y la baja sola si va lento">Auto</button>
+                <button data-q="maxima" aria-pressed="false">Máxima</button>
                 <button data-q="alta" aria-pressed="false">Alta</button>
                 <button data-q="media" aria-pressed="false">Media</button>
                 <button data-q="baja" aria-pressed="false">Baja</button>
               </div>
               <p>Máxima: sombras 4K, oclusión ambiental y antialiasing. Baja: para computadores modestos.</p>
+              <p id="sim-qauto" class="sim-qres"></p>
+              <p id="sim-qres" class="sim-qres"></p>
             </div>
           </div>
         </div>
         <div class="sim-process" id="sim-process" aria-label="Etapas del proceso del agua. Pulsa una para ver esa parte."></div>
-        <div class="sim-toggles" aria-label="Capas del mapa">
-          <label><input type="checkbox" id="ov-ice" checked> Hielo real (cristales)</label>
-          <label><input type="checkbox" id="ov-det" checked> Lo que mide el rover</label>
-          <label><input type="checkbox" id="ov-psr"> Sombra permanente</label>
-          <label><input type="checkbox" id="ov-trail" checked> Rastro y perforaciones</label>
-          <label><input type="checkbox" id="ov-fill" checked> Luz de apoyo</label>
-          <label title="Como una astrofotografía: realza estrellas y Vía Láctea. En la realidad, con el suelo iluminado por el Sol, casi no se verían."><input type="checkbox" id="ov-cine" checked> Cielo de larga exposición</label>
-        </div>
-        <p class="caption" style="margin-top:12px">Terreno: topografía real del borde del cráter Shackleton (LOLA/LRO, NASA, 10 m por píxel). Las sombras permanentes se calculan con ese relieve; el hielo dentro de ellas es simulado. En el polo el Sol está a solo ~1° sobre el horizonte: la «luz de apoyo» ilumina desde arriba únicamente para ver mejor el relieve.</p>
+        <details class="sim-notes">
+          <summary>Qué es real y qué es simulado</summary>
+          <ul>
+            <li><strong>Relieve y sombras reales:</strong> topografía del borde del cráter Shackleton (LOLA/LRO, NASA, 10 m por píxel), 3,2 km alrededor de la estación. El resto del cráter que se ve a lo lejos es un modelo aproximado, solo para dar contexto.</li>
+            <li><strong>Hielo simulado:</strong> las sombras permanentes se calculan con el relieve real; el hielo dentro de ellas es simulado.</li>
+            <li><strong>Luz:</strong> en el polo el Sol está a solo ~1° sobre el horizonte. La «luz de apoyo» ilumina desde arriba únicamente para ver mejor el relieve.</li>
+            <li><strong>Cielo real:</strong> 62 000 estrellas de mapas de NASA (datos de Gaia e Hipparcos); la Vía Láctea se ve por su densidad, con un velo azul muy tenue (estético). Con «Cielo de larga exposición» se ven como en una foto de exposición larga; desactívalo para verlo como lo vería el ojo con el suelo iluminado.</li>
+            <li><strong>La Tierra</strong> está hecha con imágenes de satélite de NASA, en su dirección y fase reales vistas desde Shackleton. Con «Vista Tierra» se ve con teleobjetivo, como en las fotos reales.</li>
+            <li><strong>Rocas y regolito:</strong> escaneos fotográficos (Poly Haven, CC0).</li>
+            <li><strong>Perforación:</strong> la vista en corte junto a la broca es ilustrativa; el espesor de la capa seca y el porcentaje de hielo son los del modelo en ese punto, y las virutas caen con la gravedad lunar.</li>
+            <li><strong>Rover:</strong> el despiece muestra el diseño propio del rover. Los datos del mapa y de la telemetría salen del modelo de la simulación.</li>
+            <li><strong>Supuestos de diseño:</strong> la colonia tiene 10 personas que usan ~2,5 L de agua al día cada una y reciclan el 90 % (necesitan ~2,5 L/día de agua nueva). El rover va a 3,6 km/h (el VIPER de la NASA va a ~0,8 km/h), con un taladro de 300 W y un cargador de 1200 W en la estación. Regenerar el filtro químico en el horno es una hipótesis.</li>
+          </ul>
+        </details>
       </div>
 
       <aside class="sim-panel card" id="sim-panel">
@@ -315,7 +369,7 @@
             <div class="kpi"><div class="v" id="m-ice">0</div><div class="l" id="m-ice-l">En la colonia</div></div>
             <div class="kpi"><div class="v" id="m-holes">0</div><div class="l">Perforaciones</div></div>
             <div class="kpi"><div class="v" id="m-dist">0</div><div class="l">Distancia recorrida</div></div>
-            <div class="kpi"><div class="v" id="m-spec">—</div><div class="l">Energía por kg de agua</div></div>
+            <div class="kpi"><div class="v" id="m-spec">—</div><div class="l">Energía por litro de agua</div></div>
             <div class="kpi"><div class="v" id="m-cov">0</div><div class="l">Terreno medido</div></div>
           </div>
           <div class="panel-title" style="margin:22px 0 10px"><h4>¿Qué pasa si…?</h4></div>
@@ -337,7 +391,7 @@
           <div class="caption">Batería a lo largo de la misión</div>
           <div class="ctl"><label for="s-thr">Umbral de hielo para perforar</label><output for="s-thr"></output><input type="range" id="s-thr" data-p="iceThreshold" min="0.5" max="8" step="0.1"></div>
           <div class="ctl"><label for="s-res">Reserva de batería para volver</label><output for="s-res"></output><input type="range" id="s-res" data-p="reserve" min="0" max="60" step="5"></div>
-          <div class="ctl"><label for="s-vmax">Velocidad máxima</label><output for="s-vmax"></output><input type="range" id="s-vmax" data-p="vmax" min="0.05" max="0.4" step="0.01"></div>
+          <div class="ctl"><label for="s-vmax">Velocidad máxima</label><output for="s-vmax"></output><input type="range" id="s-vmax" data-p="vmax" min="0.1" max="2" step="0.05"></div>
           <div class="ctl"><label for="s-depth">Profundidad de perforación</label><output for="s-depth"></output><input type="range" id="s-depth" data-p="drillDepth" min="0.3" max="1.5" step="0.05"></div>
           <div class="ctl"><label for="s-dpow">Potencia del taladro</label><output for="s-dpow"></output><input type="range" id="s-dpow" data-p="drillPower" min="60" max="400" step="10"></div>
           <div class="ctl"><label for="s-cargo">Capacidad de bodega</label><output for="s-cargo"></output><input type="range" id="s-cargo" data-p="cargoCap" min="10" max="100" step="5"></div>
@@ -359,6 +413,8 @@
           <div class="ctl"><label for="s-etah">Eficiencia de calentamiento</label><output for="s-etah"></output><input type="range" id="s-etah" data-p="etaH" min="0.15" max="0.95" step="0.01"></div>
           <div class="ctl"><label for="s-etac">Captura de vapor</label><output for="s-etac"></output><input type="range" id="s-etac" data-p="etaCap" min="0.4" max="0.99" step="0.01"></div>
           <div class="ctl"><label for="s-solar">Paneles solares de la estación</label><output for="s-solar"></output><input type="range" id="s-solar" data-p="solarW" min="500" max="5000" step="100"></div>
+          <label class="check switch" style="margin-top:14px"><input type="checkbox" id="p-regen" checked> Regenerar el filtro químico en el horno <span class="muted">(hipótesis)</span></label>
+          <p class="caption" style="margin-top:4px">Cuando el horno está libre, o queda poco filtro, lo calienta para limpiarlo y reutilizarlo. En cada ciclo se pierde un 10 % (supuesto).</p>
           <p class="note" style="margin-top:16px"><strong>Cómo se obtiene el agua</strong>En el vacío el hielo no se derrite: al calentarlo por encima de ~210 K pasa directamente a vapor. El vapor se congela en la trampa fría (la caja que se cubre de escarcha). Después se funde, pasa por el biofiltro de microorganismos (la cúpula), luego por filtros químicos y una membrana con luz UV, y llega al tanque azul.</p>
         </div>
 
@@ -444,7 +500,7 @@
         <div class="card">
           <div class="result-grid">
             <div class="kpi"><div class="v" id="k-pur" style="color:#fff">—</div><div class="l">Agua purificada por lote</div></div>
-            <div class="kpi"><div class="v" id="k-spec">—</div><div class="l">Energía por kg de agua</div></div>
+            <div class="kpi"><div class="v" id="k-spec">—</div><div class="l">Energía por litro de agua</div></div>
             <div class="kpi"><div class="v" id="k-energy">—</div><div class="l">Energía total</div></div>
             <div class="kpi"><div class="v" id="k-time">—</div><div class="l">Tiempo de horno</div></div>
           </div>
@@ -547,16 +603,17 @@
 <script src="assets/vendor/three-r170.js"></script>
 <script src="assets/sky/estrellas.js"></script>
 <script>if (location.protocol === 'file:') document.write('<script src="assets/sky/cielo-local.js"><\/script><script src="assets/terrain/terreno-local.js"><\/script>');</script>
-<script src="js/sim-env.js"></script>
-<script src="js/core.js"></script>
-<script src="js/data.js"></script>
-<script src="js/model.js"></script>
-<script src="js/dem-shackleton.js"></script>
-<script src="js/sim-engine.js"></script>
-<script src="js/sim-explain.js"></script>
-<script src="js/sim-view.js"></script>
-<script src="js/viability.js"></script>
-<script src="js/proto.js"></script>
-<script src="js/main.js"></script>
+<script src="js/sim-env.js?v=20261114j"></script>
+<script src="js/core.js?v=20261114j"></script>
+<script src="js/data.js?v=20261114j"></script>
+<script src="js/model.js?v=20261114j"></script>
+<script src="js/dem-shackleton.js?v=20261114j"></script>
+<script src="js/sim-engine.js?v=20261114j"></script>
+<script src="js/sim-explain.js?v=20261114j"></script>
+<script src="js/sim-view.js?v=20261114j"></script>
+<script src="js/viability.js?v=20261114j"></script>
+<script src="js/proto.js?v=20261114j"></script>
+<script src="js/main.js?v=20261114j"></script>
+<script src="chatbot/astra-launcher.js?v=20261114b"></script>
 </body>
 </html>
