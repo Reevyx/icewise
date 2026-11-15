@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,300..600&family=Inter:wght@300..600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261114j">
-  <link rel="stylesheet" href="css/sim.css?v=20261114j">
+  <link rel="stylesheet" href="css/styles.css?v=20261115t">
+  <link rel="stylesheet" href="css/sim.css?v=20261115t">
   <link rel="stylesheet" href="chatbot/astra-launcher.css?v=20261115a">
   <link rel="preload" as="image" href="assets/img/hero-artemis2-terminator.jpg">
 </head>
@@ -163,17 +163,79 @@
             <div class="rc-distbox" id="rc-dist">DIST —</div>
             <div class="rc-hint">Arrastra para mirar · Rueda: zoom · Doble clic: centrar</div>
           </div>
+          <div class="sim-walk" id="sim-walk" hidden>
+            <div class="sw-cross" aria-hidden="true"></div>
+            <div class="sw-panel">
+              <div class="sw-head"><span class="sw-dot" aria-hidden="true"></span><b id="sw-room" aria-live="polite">—</b><button type="button" class="sw-exit" id="sw-exit">Salir <kbd>Esc</kbd></button></div>
+              <canvas id="sw-map" width="232" height="196" aria-label="Plano de la colonia con tu posición"></canvas>
+              <div class="sw-hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> caminar · <kbd>←</kbd><kbd>→</kbd> girar · arrastra para mirar · <kbd>Shift</kbd> correr</div>
+            </div>
+            <div class="sw-pad" id="sw-pad" aria-hidden="true">
+              <button type="button" data-w="tl">⟲</button><button type="button" data-w="w">▲</button><button type="button" data-w="tr">⟳</button>
+              <button type="button" data-w="a">◀</button><button type="button" data-w="s">▼</button><button type="button" data-w="d">▶</button>
+            </div>
+          </div>
           <div class="sim-dest" id="sim-dest" hidden>Modo destino: haz clic en el terreno para enviar el rover · <kbd>Esc</kbd> para salir</div>
           <div class="sim-tools" id="sim-tools" role="group" aria-label="Herramientas">
             <button type="button" data-t="mapa" aria-pressed="false" aria-label="Mapa y rutas (tecla M)" title="Mapa y rutas · M"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg></button>
             <button type="button" data-t="control" aria-pressed="false" aria-label="Telemetría del rover (tecla G)" title="Telemetría · G"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 20V12M10 20V6M15 20v-9M20 20V4"/></svg></button>
             <button type="button" data-t="capas" aria-pressed="false" aria-label="Capas y leyenda (tecla L)" title="Capas y leyenda · L"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></button>
+            <button type="button" data-t="colonia" aria-pressed="false" aria-label="Colonia UKU PACHA (tecla C)" title="Colonia UKU PACHA · C"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 19h18"/><path d="M5 19v-5a4 4 0 0 1 8 0v5"/><path d="M13 19v-3.5a3 3 0 0 1 6 0V19"/><path d="M9 10V7M7.5 7h3"/></svg></button>
             <button type="button" data-t="despiece" aria-pressed="false" aria-label="Despiece del rover (tecla X)" title="Despiece del rover · X"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></button>
             <span class="sim-tools-sep" aria-hidden="true"></span>
             <button type="button" data-t="ayuda" aria-pressed="false" aria-label="Controles y atajos de teclado (tecla H)" title="Controles · H"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h1M10.5 10h1M14.5 10h1M8 14h8"/></svg></button>
             <button type="button" data-t="pantalla" aria-pressed="false" aria-label="Pantalla completa (tecla F)" title="Pantalla completa · F"><svg class="fs-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><svg class="fs-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
           </div>
           <div class="sim-side" id="sim-side">
+            <div class="sim-panel2 sim-colony" id="sim-colony" hidden>
+              <div class="sm-head"><span>Colonia UKU PACHA · MK-I</span><button type="button" class="sm-x" data-close aria-label="Cerrar la colonia"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+              <div class="col-kpis">
+                <div><b><span id="col-crew">10</span><small>/ 48</small></b><span>habitantes · objetivo</span></div>
+                <div><b>600<small>m²</small></b><span>presurizados</span></div>
+                <div><b>80<small>m²</small></b><span>invernadero</span></div>
+              </div>
+              <div class="col-agua">
+                <div class="col-agua-fila"><span>Agua en la colonia</span><b id="col-agua">0 L</b></div>
+                <div class="sc-bar"><i id="col-agua-bar"></i></div>
+                <div class="col-agua-fila"><small>Necesita <b id="col-dem">2,5 L/día</b> · reserva <b id="col-dias">0 días</b></small><small id="col-flujo">—</small></div>
+              </div>
+              <div class="col-sectores" id="col-sectores" role="group" aria-label="Sectores de la colonia"></div>
+              <div class="col-ficha">
+                <div class="col-ficha-head"><span class="col-code" id="col-code">A</span><div><h4 id="col-title">Complejo habitacional</h4><small id="col-type">Sector habitable</small></div></div>
+                <p id="col-desc"></p>
+                <div class="col-datos"><div><span>Superficie</span><b id="col-area">—</b></div><div><span>Capacidad</span><b id="col-cap">—</b></div><div><span>Diseño</span><b>Conceptual</b></div></div>
+                <p class="col-agua-sec" id="col-agua-sec" hidden>El nivel del depósito de este sector sube con el agua que llega de ICEWISE.</p>
+                <ul class="col-feat" id="col-feat"></ul>
+                <div class="col-interior">
+                  <button type="button" class="col-entrar" id="col-entrar" title="Recorre la colonia por dentro en primera persona, entrando por la esclusa A">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l4-4-4-4"/><path d="M14 12H4"/></svg>
+                    Entrar a la colonia
+                  </button>
+                  <button type="button" class="col-corte" id="col-corte" aria-pressed="false" title="Quita techos y regolito para ver el interior, como una maqueta en corte">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15h18"/><path d="M5 15V9a7 7 0 0 1 14 0v6" stroke-dasharray="2.5 2.5"/><path d="M7 15v4h10v-4"/></svg>
+                    Ver interior
+                  </button>
+                  <div class="col-salas" id="col-salas" hidden></div>
+                </div>
+                <div class="col-dentro" id="col-dentro-fila" hidden><span id="col-dentro">Dentro</span><button type="button" class="btn btn--sm btn--quiet" id="col-salir">Salir · Esc</button></div>
+              </div>
+              <details class="col-mas">
+                <summary>Capas</summary>
+                <div class="col-capas" id="col-capas">
+                  <label><input type="checkbox" data-capa="hab" checked> Hábitats y módulos</label>
+                  <label><input type="checkbox" data-capa="reg" checked> Blindaje de regolito</label>
+                  <label><input type="checkbox" data-capa="ene" checked> Energía</label>
+                  <label><input type="checkbox" data-capa="log" checked> Logística</label>
+                  <label><input type="checkbox" data-capa="lbl" checked> Etiquetas de sectores</label>
+                </div>
+              </details>
+              <details class="col-mas">
+                <summary>Crecimiento por etapas</summary>
+                <ol class="col-etapas" id="col-etapas"></ol>
+                <p class="sm-hint">Cada etapa solo se aprueba si el agua, el aire, la energía, los repuestos y la evacuación lo permiten.</p>
+              </details>
+              <p class="sm-hint">Investigación UKU PACHA MK-I: superficies, capacidades y blindajes son parámetros conceptuales, no un plano certificado. Haz clic en un módulo de la colonia para ver su ficha.</p>
+            </div>
             <div class="sim-panel2 sim-layers" id="sim-layers" hidden>
               <div class="sm-head"><span>Capas</span><button type="button" class="sm-x" data-close aria-label="Cerrar las capas"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
               <label class="ly"><input type="checkbox" id="ov-ice" checked><span class="lg-ice"></span><span class="ly-t">Hielo bajo el suelo<small><span class="lg-scale"><i>1 %</i><b></b><i>10 %</i></span></small></span></label>
@@ -192,8 +254,9 @@
                 <dt>Arrastrar · rueda</dt><dd>Girar la cámara · acercar</dd>
                 <dt><kbd>Espacio</kbd></dt><dd>Perforar aquí (conduciendo)</dd>
                 <dt><kbd>E</kbd></dt><dd>Elegir a dónde enviar el rover</dd>
-                <dt><kbd>M</kbd> <kbd>G</kbd> <kbd>L</kbd></dt><dd>Mapa · telemetría · capas</dd>
+                <dt><kbd>M</kbd> <kbd>G</kbd> <kbd>L</kbd> <kbd>C</kbd></dt><dd>Mapa · telemetría · capas · colonia</dd>
                 <dt><kbd>X</kbd> <kbd>F</kbd></dt><dd>Despiece · pantalla completa</dd>
+                <dt>Dentro de la colonia</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> caminar · <kbd>←</kbd><kbd>→</kbd> girar · <kbd>Shift</kbd> correr · <kbd>Esc</kbd> salir</dd>
               </dl>
             </div>
             <div class="sim-panel2 sim-map" id="sim-map" hidden>
@@ -261,6 +324,7 @@
                 <button data-c="tierra" aria-pressed="false" title="Teleobjetivo hacia la Tierra desde la estación (rueda: zoom)">Vista Tierra</button>
                 <button data-c="station" aria-pressed="false">Estación</button>
                 <button data-c="colony" aria-pressed="false">Colonia</button>
+                <button data-c="inside" aria-pressed="false" title="Recorrido en primera persona por dentro de la colonia">Dentro de la colonia</button>
                 <button data-c="overview" aria-pressed="false">Vista general</button>
               </div>
             </div>
@@ -348,7 +412,7 @@
             <li><strong>Rocas y regolito:</strong> escaneos fotográficos (Poly Haven, CC0).</li>
             <li><strong>Perforación:</strong> la vista en corte junto a la broca es ilustrativa; el espesor de la capa seca y el porcentaje de hielo son los del modelo en ese punto, y las virutas caen con la gravedad lunar.</li>
             <li><strong>Rover:</strong> el despiece muestra el diseño propio del rover. Los datos del mapa y de la telemetría salen del modelo de la simulación.</li>
-            <li><strong>Supuestos de diseño:</strong> la colonia tiene 10 personas que usan ~2,5 L de agua al día cada una y reciclan el 90 % (necesitan ~2,5 L/día de agua nueva). El rover va a 3,6 km/h (el VIPER de la NASA va a ~0,8 km/h), con un taladro de 300 W y un cargador de 1200 W en la estación. Regenerar el filtro químico en el horno es una hipótesis.</li>
+            <li><strong>Supuestos de diseño:</strong> la colonia UKU PACHA MK-I tiene 10 personas (ampliable por etapas) que usan ~2,5 L de agua al día cada una y reciclan el 90 % (necesitan ~2,5 L/día de agua nueva). El rover va a 3,6 km/h (el VIPER de la NASA va a ~0,8 km/h), con un taladro de 300 W y un cargador de 1200 W en la estación. Regenerar el filtro químico en el horno es una hipótesis.</li>
           </ul>
         </details>
       </div>
@@ -603,17 +667,17 @@
 <script src="assets/vendor/three-r170.js"></script>
 <script src="assets/sky/estrellas.js"></script>
 <script>if (location.protocol === 'file:') document.write('<script src="assets/sky/cielo-local.js"><\/script><script src="assets/terrain/terreno-local.js"><\/script>');</script>
-<script src="js/sim-env.js?v=20261114j"></script>
-<script src="js/core.js?v=20261114j"></script>
-<script src="js/data.js?v=20261114j"></script>
-<script src="js/model.js?v=20261114j"></script>
-<script src="js/dem-shackleton.js?v=20261114j"></script>
-<script src="js/sim-engine.js?v=20261114j"></script>
-<script src="js/sim-explain.js?v=20261114j"></script>
-<script src="js/sim-view.js?v=20261114j"></script>
-<script src="js/viability.js?v=20261114j"></script>
-<script src="js/proto.js?v=20261114j"></script>
-<script src="js/main.js?v=20261114j"></script>
+<script src="js/sim-env.js?v=20261115t"></script>
+<script src="js/core.js?v=20261115t"></script>
+<script src="js/data.js?v=20261115t"></script>
+<script src="js/model.js?v=20261115t"></script>
+<script src="js/dem-shackleton.js?v=20261115t"></script>
+<script src="js/sim-engine.js?v=20261115t"></script>
+<script src="js/sim-explain.js?v=20261115t"></script>
+<script src="js/sim-view.js?v=20261115t"></script>
+<script src="js/viability.js?v=20261115t"></script>
+<script src="js/proto.js?v=20261115t"></script>
+<script src="js/main.js?v=20261115t"></script>
 <script src="chatbot/astra-launcher.js?v=20261115a"></script>
 </body>
 </html>

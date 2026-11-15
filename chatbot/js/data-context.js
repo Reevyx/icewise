@@ -46,8 +46,8 @@ const ASTRA_KNOWLEDGE = {
             respuesta: "El rover de ICEWISE es autónomo: explora, detecta hielo con su sensor de neutrones, se detiene a medir, decide si perforar, perfora y lleva las muestras a la estación. Tiene una batería de 5 kWh y paneles de 300 W, y esquiva rocas, la estación y pendientes de más de 24°. En la simulación también lo puedes conducir tú con W A S D."
         },
         {
-            keywords: ["colonia", "colono", "persona", "habitante", "astronauta", "tripulacion"],
-            respuesta: "La colonia ICEWISE tiene <strong>10 personas</strong> (supuesto). Cada una usa unos 2,5 litros de agua al día y se recicla el 90 %, así que necesitan unos 2,5 litros nuevos al día. En el modelo, el sistema produce unos 4,3 litros al día: cubre la demanda con margen."
+            keywords: ["colonia", "colono", "persona", "habitante", "astronauta", "tripulacion", "uku pacha", "base lunar", "modulo", "sector", "invernadero"],
+            respuesta: "La colonia <strong>UKU PACHA MK-I</strong> tiene <strong>10 personas</strong> y podría crecer por etapas (hasta 48), solo si el agua, el aire, la energía y la seguridad lo permiten. Tiene unos 600 m² presurizados en siete sectores: habitacional, ciencia, invernadero de 80 m², médico, taller, soporte vital y logística, semienterrados bajo regolito. Cada persona usa unos 2,5 L de agua al día y se recicla el 90 %: necesitan unos 2,5 L nuevos al día, y ICEWISE produce unos 4,3 L (modelo). Son parámetros conceptuales de la investigación, no un diseño certificado."
         },
         {
             keywords: ["energia", "solar", "bateria", "panel", "electric", "cargador"],
@@ -67,7 +67,7 @@ const ASTRA_KNOWLEDGE = {
         },
         {
             keywords: ["icewise", "proyecto", "propuesta", "de que trata"],
-            respuesta: "ICEWISE es una propuesta escolar para obtener agua del hielo lunar en el cráter Shackleton: un rover autónomo busca el hielo, perfora y lleva las muestras a una planta que las convierte en agua, la limpia con un biofiltro de microorganismos y la envía a una colonia de 10 personas."
+            respuesta: "ICEWISE es una propuesta escolar para obtener agua del hielo lunar en el cráter Shackleton: un rover autónomo busca el hielo, perfora y lleva las muestras a una planta que las convierte en agua, la limpia con un biofiltro de microorganismos y la envía a la colonia UKU PACHA, de 10 personas."
         },
         {
             keywords: ["quien eres", "que haces", "que puedes", "ayuda"],

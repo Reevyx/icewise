@@ -507,7 +507,7 @@
           const x = (I + r()) * CELL, z = (J + r()) * CELL, sz = 0.035 + 0.5 * Math.pow(r(), 4.2), a1 = r(), a2 = r(), a3 = r(), sx = 0.75 + 0.5 * r(), sy = 0.55 + 0.35 * r();
           if (r() > dens) continue;
           if (Math.abs(x) > W.HALF - 2 || Math.abs(z) > W.HALF - 2) continue;
-          if (Math.hypot(x - W.station.x, z - W.station.z) < 20 || (W.colony && Math.hypot(x - W.colony.x, z - W.colony.z) < 42)) continue;
+          if (Math.hypot(x - W.station.x, z - W.station.z) < 20 || (W.colony && Math.hypot(x - W.colony.x, z - W.colony.z) < 80)) continue;
           e.set(a1 * 6.3, a2 * 6.3, a3 * 6.3); q.setFromEuler(e); s.set(sz * sx, sz * sy, sz);
           p.set(x, W.hAt(x, z) + sz * 0.12, z); m4.compose(p, q, s); mesh.setMatrixAt(n++, m4);
         }

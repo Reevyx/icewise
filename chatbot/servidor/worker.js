@@ -55,7 +55,7 @@ Datos (modelo de la simulación, no mediciones reales):
 - Planta: el horno calienta las muestras y el hielo pasa a vapor (en el vacío no se derrite); el vapor se congela en una trampa fría, se funde y pasa por el biofiltro, filtros químicos y una membrana con luz UV hasta el tanque.
 - Biofiltro: bacterias Deinococcus peraridilitoris y Pseudomonas extremorientalis, y el liquen Placopsis como biomonitor; que lo logren en la Luna es una hipótesis por comprobar en laboratorio. Los microorganismos limpian el agua, no la producen.
 - Hipótesis: regenerar el filtro químico en el horno; así dura ~70 días en vez de ~12, y luego habría que reponer ~3 kg desde la Tierra cada dos meses.
-- Colonia: 10 personas que usan ~2,5 L de agua al día cada una y reciclan el 90 %, así que necesitan ~2,5 L/día de agua nueva; el sistema produce ~4,3 L/día de agua limpia.
+- Colonia UKU PACHA MK-I (investigación conceptual): 10 personas, ampliable por etapas (hasta 48) solo si soporte vital, energía y seguridad lo demuestran; ~600 m² presurizados en módulos semienterrados bajo regolito, unidos por corredores y esclusas. Sectores: A habitacional, B ciencia, C invernadero hidropónico de 80 m², D médico, E taller, F soporte vital (agua, aire, oxígeno por electrólisis), G logística (garaje, antena, zona de aterrizaje alejada por el polvo), más paneles solares y baterías. Está en terreno elevado cerca de Shackleton, no dentro del cráter. Cada persona usa ~2,5 L de agua al día y se recicla el 90 %, así que necesitan ~2,5 L/día de agua nueva; el sistema produce ~4,3 L/día.
 - El agua es de uso técnico; para beberla habría que confirmar su calidad con análisis reales.`;
 
 export default {
@@ -192,7 +192,7 @@ function normalizarPregunta(s) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 async function claveDe(pregunta) {
-  const huella = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${MODELO_GRATIS}|v2|${pregunta}`));
+  const huella = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${MODELO_GRATIS}|v3|${pregunta}`));
   return "r:" + [...new Uint8Array(huella)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 

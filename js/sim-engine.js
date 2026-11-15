@@ -148,15 +148,16 @@
   const DEFAULT_P = {
     // Rover
     // vmax: 1 m/s = 3,6 km/h (SUPUESTO de diseño; el rover VIPER de NASA va a ~0,2 m/s)
-    // drillPower 300 W: taladro reforzado para abastecer a 10 colonos (SUPUESTO de diseño)
+    // drillPower 300 W: taladro reforzado para abastecer a la colonia de 10 personas (SUPUESTO de diseño)
     vmax: 1.0, iceThreshold: 3.0, drillDepth: 1.0, cargoCap: 40, reserve: 30, drillPower: 300, autoLoop: true,
     // Planta
     heaterW: 600, etaH: 0.5, etaCap: 0.85, solarW: 2000, adsRegen: true,
     // Biología
     chamber: 'inside', Tc: 22, feed: 1.0, dose: 0.00001, nutrients: 1.0, light: true, bioPurif: true
   };
-  // Colonia (SUPUESTOS): 10 personas, ~2,5 L de agua/persona/día y 90 % de reciclaje → ~2,5 L/día de agua nueva (1 kg de agua ≈ 1 L)
-  const COLONY = { crew: 10, demandKgDay: 10 * 2.5 * 0.1, pumpKgH: 2 };
+  // Colonia UKU PACHA MK-I (SUPUESTOS): 10 personas, ~2,5 L de agua/persona/día y 90 % de reciclaje
+  // → ~2,5 L/día de agua nueva (1 kg de agua ≈ 1 L)
+  const COLONY = { crew: 10, demandKgDay: 10 * 2.5 * 0.1, pumpKgH: 2, crewTarget: 48 };
   const RAW = { N: 40, S: 35, Hg: 25 };   // índice ilustrativo de contaminantes del condensado
   const ADS_STOCK = 3, ADS_PER_KG = 0.25;   // kg de adsorbente en la estación; kg por kg de agua con carga 100 (supuestos)
   // Regeneración del adsorbente en el horno (HIPÓTESIS): calentarlo libera lo retenido y se reutiliza.

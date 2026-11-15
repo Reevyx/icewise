@@ -162,7 +162,7 @@
     IceEnv.patchTree(scene, SV);
     addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
     addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
-    addLabel('Colonia ICEWISE', () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'mid');
+    addLabel('Colonia UKU PACHA', () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'far');   // de cerca mandan las etiquetas de los sectores
     if (W.shackleton) {
       const dx = W.shackleton.x, dz = W.shackleton.z, L = Math.hypot(dx, dz), k = W.HALF * 0.93 / Math.max(Math.abs(dx), Math.abs(dz));
       const px = dx * k, pz = dz * k;
@@ -206,7 +206,7 @@
     let n = 0;
     for (let i = 0; i < 12000 && n < 2600; i++) {
       const x = (Math.random() - 0.5) * W.SIZE * 0.96, z = (Math.random() - 0.5) * W.SIZE * 0.96;
-      if (Math.hypot(x - W.station.x, z - W.station.z) < 25 || W.slopeAt(x, z) > 26) continue;
+      if (Math.hypot(x - W.station.x, z - W.station.z) < 25 || Math.hypot(x - W.colony.x, z - W.colony.z) < 80 || W.slopeAt(x, z) > 26) continue;
       const k = Math.pow(Math.random(), 3) * 1.8 + 0.15;
       e.set(Math.random() * 3, Math.random() * 6.3, Math.random() * 3); q.setFromEuler(e); s.set(k * (0.8 + Math.random() * 0.5), k * 0.6, k * (0.8 + Math.random() * 0.5));
       p.set(x, W.hAt(x, z) + k * 0.15, z); m4.compose(p, q, s); rocks.setMatrixAt(n++, m4);
@@ -393,17 +393,336 @@
     cyl(0.08, 0.08, 6, metal, 0, 3, 0, wing, 8); box(0.08, 3.2, 4.4, cells, 0, 5.2, 0, wing);
     const lamp = new THREE.PointLight(0xfff1dc, 360, 40, 2); lamp.position.set(0, 8, 0); g.add(lamp);
     scene.add(g);
-    // Tubería sobre soportes: del tanque de la planta al depósito de la colonia, siguiendo el terreno
-    const a = ST.tank.getWorldPosition(new THREE.Vector3()), b = new THREE.Vector3(c.x - 6, y0, c.z - 8);
-    const pts = [], n = Math.max(12, Math.round(a.distanceTo(b) / 6));
-    for (let k = 0; k <= n; k++) { const t = k / n, x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t; pts.push(new THREE.Vector3(x, W.hAt(x, z) + 1.2, z)); }
-    pts[0].y = a.y + 1.6; pts[pts.length - 1].y = y0 + 2;
-    const curve = new THREE.CatmullRomCurve3(pts);
-    mesh(new THREE.TubeGeometry(curve, n * 4, 0.16, 8), metal, 0, 0, 0, scene);
-    for (let k = 1; k < n; k += 2) { const q = pts[k]; cyl(0.06, 0.06, 1.2, metal, q.x, q.y - 0.6, q.z, scene, 6); }
     const dots = [];
     for (let k = 0; k < 40; k++) { const d = mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xa9b6ff }), 0, 0, 0, scene); d.castShadow = false; d.visible = false; dots.push(d); }
-    Object.assign(COL, { g, water, curve, dots });
+    Object.assign(COL, { g, water, dots, lamp, metal });
+    buildPipe(new THREE.Vector3(c.x - 6, y0, c.z - 8), y0 + 2);
+  }
+  // ---------- Colonia UKU PACHA MK-I (investigación «Colonia» + maqueta uku_pacha_mk1) ----------
+  // Las superficies y capacidades son parámetros conceptuales de la investigación, no un diseño certificado.
+  // El modelo de Blender (assets/models/colony.glb) nombra cada pieza empezando por su sector:
+  // A…G = sectores, N = energía, R = berma de regolito (R_A… cubre un módulo del sector A).
+  const COLONIA = {
+    A: { code: 'A', short: 'Habitacional', title: 'Complejo habitacional', type: 'Sector habitable', area: '240 m²', cap: '10 personas', capa: 'hab',
+      desc: 'Alojamiento de la tripulación: dormitorios individuales, cocina, comedor, baños, zona común, almacenamiento personal y área de ejercicio. Queda junto al soporte vital para acortar recorridos y facilitar evacuaciones.',
+      feat: ['Dormitorios individuales con privacidad', 'Cocina, comedor y zona común', 'Área de ejercicio', 'Iluminación circadiana y ventilación', 'Corredores presurizados aislables'] },
+    B: { code: 'B', short: 'Ciencia', title: 'Centro científico', type: 'Investigación', area: '90 m²', cap: '6 investigadores', capa: 'hab',
+      desc: 'Laboratorio de geología, análisis de muestras, microscopía y caracterización del regolito. Aquí se mide cuánta agua tienen las muestras que trae el rover y qué otros volátiles contienen.',
+      feat: ['Análisis de regolito y hielo', 'Microscopía', 'Control de muestras sin contaminación cruzada', 'Esclusa propia'] },
+    C: { code: 'C', short: 'Invernadero', title: 'Invernadero', type: 'Producción agrícola', area: '80 m²', cap: '4 operadores', capa: 'hab',
+      desc: 'Laboratorio agrícola con hidroponía e iluminación LED. Complementa los alimentos traídos de la Tierra y aporta bienestar; no busca la autosuficiencia alimentaria.',
+      feat: ['Cultivo hidropónico (sin suelo)', 'Iluminación LED', 'Control de humedad y nutrientes', 'Recirculación de agua'] },
+    D: { code: 'D', short: 'Médico', title: 'Centro médico', type: 'Salud y emergencias', area: '25 m²', cap: '1–2 pacientes', capa: 'hab',
+      desc: 'Atención primaria, diagnóstico, aislamiento médico, botiquín avanzado y telemedicina con la Tierra.',
+      feat: ['Diagnóstico básico', 'Telemedicina', 'Aislamiento sanitario', 'Botiquín avanzado'] },
+    E: { code: 'E', short: 'Taller', title: 'Taller industrial', type: 'Mantenimiento', area: '55 m²', cap: '4 técnicos', capa: 'hab',
+      desc: 'Reparación de herramientas, mantenimiento del rover, repuestos y fabricación experimental de piezas no críticas. Está separado de las zonas habitables por el polvo.',
+      feat: ['Mantenimiento de rovers', 'Impresión 3D experimental', 'Banco de pruebas', 'Almacén de repuestos críticos'] },
+    F: { code: 'F', short: 'Soporte vital', title: 'Soporte vital', type: 'Sistemas críticos', area: '60 m²', cap: 'Acceso técnico', capa: 'hab', agua: true,
+      desc: 'Tratamiento y almacenamiento de agua, control del aire, eliminación de CO₂, oxígeno por electrólisis y gestión de residuos. Aquí llega por tubería el agua que produce ICEWISE.',
+      feat: ['Depósitos de agua de la colonia', 'Reciclaje de agua (90 %, supuesto)', 'Oxígeno por electrólisis del agua', 'Eliminación de CO₂', 'Equipos redundantes'] },
+    G: { code: 'G', short: 'Logística', title: 'Zona logística', type: 'Infraestructura exterior', area: 'Exterior', cap: 'Vehículos y carga', capa: 'log',
+      desc: 'Garaje de rovers, esclusa de carga, antena de comunicaciones y una zona de aterrizaje alejada del complejo para que el polvo de los motores no dañe hábitats ni paneles.',
+      feat: ['Garaje de rovers', 'Antena de comunicaciones', 'Zona de aterrizaje separada', 'Rutas de servicio'] },
+    N: { code: 'EN', short: 'Energía', title: 'Centro energético', type: 'Infraestructura energética', area: 'Exterior', cap: 'Red de la colonia', capa: 'ene',
+      desc: 'Paneles solares verticales que siguen al Sol (en el polo está a solo 1–2° sobre el horizonte), baterías para los periodos de sombra y distribución eléctrica. La fisión de superficie se estudia como fuente continua para etapas futuras.',
+      feat: ['Paneles solares verticales', 'Baterías', 'Distribución protegida', 'Ampliable por módulos'] }
+  };
+  const COL_ETAPAS = [[10, 'MK-I · inicial', 'Validar habitabilidad, soporte vital, energía, comunicaciones y operaciones robóticas.'],
+    [24, 'Expansión 1', 'Más módulos y almacenamiento; demostrar que los sistemas críticos toleran más demanda.'],
+    [36, 'Expansión 2', 'Ampliar laboratorio, taller, invernadero y generación eléctrica.'],
+    [48, 'Expansión 3', 'Redundancia, producción local de recursos, reservas y capacidad médica.']];
+  const sectorDeNombre = (n) => { const m = /^([A-GNR])_?([A-G])?/.exec(n || ''); if (!m) return null; return m[1] === 'R' ? (m[2] || null) : m[1]; };
+  // Al cargar colony.glb: cada pieza se apoya en el relieve real, los paneles miran al Sol, los sectores
+  // quedan marcados para seleccionarlos y la tubería llega al nuevo depósito de agua.
+  function setupColonyModel(scn) {
+    const g = COL.g, y0 = g.position.y, az = Math.atan2(W.sunDir.z, W.sunDir.x);
+    COL.sectors = {}; COL.capas = { hab: [], reg: [], ene: [], log: [] }; COL.model = scn;
+    COL.techos = scn.children.filter(o => /_techo$/.test(o.name));
+    COL.interiores = scn.children.filter(o => /_int$/.test(o.name));
+    // El complejo presurizado (módulos, nodos, pasillos, esclusas, invernadero) va entero a una sola altura
+    // (como sobre una explanada nivelada): así los suelos casan y se puede caminar de una sala a otra.
+    const pres = scn.children.filter(o => o.userData.presurizado);
+    COL.presOff = pres.length ? pres.reduce((s, o) => s + W.hAt(g.position.x + o.position.x, g.position.z + o.position.z) - y0, 0) / pres.length : 0;
+    g.updateMatrixWorld(true);
+    COL.interiores.forEach(o => { o.visible = false; o.traverse(m => { if (m.isMesh) m.castShadow = false; });
+      const bb = new THREE.Box3().setFromObject(o); o.userData.c = bb.getCenter(new THREE.Vector3()).sub(scn.getWorldPosition(new THREE.Vector3())); o.userData.r = bb.getSize(new THREE.Vector3()).length() / 2; });
+    navLoad(scn);
+    [...scn.children].forEach(o => {
+      const wx = g.position.x + o.position.x, wz = g.position.z + o.position.z;
+      o.position.y += o.userData.presurizado ? COL.presOff : W.hAt(wx, wz) - y0;   // cada sector sobre su suelo
+      if (o.name === 'NAV') return;
+      if (/^N_solar/i.test(o.name)) o.rotation.y = -az;                        // paneles de cara al Sol
+      if (/^G_aterrizaje/i.test(o.name)) {                                     // la plataforma se apoya en la pendiente real
+        const e = 3, nx = W.hAt(wx - e, wz) - W.hAt(wx + e, wz), nz = W.hAt(wx, wz - e) - W.hAt(wx, wz + e);
+        o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(nx, 2 * e, nz).normalize());
+      }
+      const key = sectorDeNombre(o.name);
+      const capa = /^R/.test(o.name) ? 'reg' : key && COLONIA[key] ? COLONIA[key].capa : null;
+      if (capa) COL.capas[capa].push(o);
+      if (!key) return;
+      (COL.sectors[key] = COL.sectors[key] || { objs: [], mats: new Map() }).objs.push(o);
+      o.traverse(m => {
+        m.userData.sector = key;
+        if (!m.isMesh || !m.material || m.material.transparent) return;
+        const sec = COL.sectors[key];                                          // material propio por sector (para resaltarlo)
+        if (!sec.mats.has(m.material)) { const c = m.material.clone(); if (c.emissive) { c.userData.em0 = c.emissive.getHex(); c.userData.ei0 = c.emissiveIntensity; } sec.mats.set(m.material, c); }
+        m.material = sec.mats.get(m.material);
+      });
+    });
+    g.updateMatrixWorld(true);
+    const caja = new THREE.Box3();
+    // pieza principal de cada sector: ahí van su etiqueta y el centro de la cámara (algunos sectores están repartidos)
+    const PRINCIPAL = { A: 'A_hab_2', B: 'B_ciencia', C: 'C_invernadero', D: 'D_medico', E: 'E_taller', F: 'F_soporte', G: 'G_garaje', N: 'N_baterias' };
+    Object.entries(COL.sectors).forEach(([key, sec]) => {
+      const main = scn.getObjectByName(PRINCIPAL[key] || '');
+      caja.makeEmpty();
+      if (main) caja.expandByObject(main); else sec.objs.filter(o => !/^R/.test(o.name)).forEach(o => caja.expandByObject(o));
+      if (caja.isEmpty()) sec.objs.forEach(o => caja.expandByObject(o));
+      sec.center = caja.getCenter(new THREE.Vector3()); sec.size = caja.getSize(new THREE.Vector3());
+      const top = caja.max.y + 1.5, info = COLONIA[key];
+      if (info) sec.label = addLabel(`${info.code} · ${info.short}`, () => new THREE.Vector3(sec.center.x, top, sec.center.z), 'col');
+    });
+    // Agua de la colonia: la malla F_agua (origen en su base) sube y baja con la reserva
+    const agua = scn.getObjectByName('F_agua');
+    if (agua) {
+      COL.water.visible = false; COL.water = agua; COL.waterModel = true; agua.userData.sy = agua.scale.y;
+      const p = agua.getWorldPosition(new THREE.Vector3());
+      buildPipe(new THREE.Vector3(p.x, p.y, p.z), p.y + 2.2);
+    }
+    if (COL.lamp) COL.lamp.position.y = 14;
+    colonySelect(COL.sel || 'A', false);
+    refreshObstacles();
+  }
+  function colonySelect(key, volar = true) {
+    const info = COLONIA[key]; if (!info) return;
+    COL.sel = key;
+    const ver = !$('#sim-colony').hidden && !COL.corte && camMode !== 'inside';   // resaltado solo con la ventana abierta y vista exterior
+    Object.entries(COL.sectors || {}).forEach(([k, sec]) => sec.mats.forEach(m => { if (m.emissive) { const on = ver && k === key, lit = (m.userData.em0 || 0) !== 0; if (on && !lit) { m.emissive.setHex(0x24316e); m.emissiveIntensity = 0.45; } else { m.emissive.setHex(m.userData.em0 || 0); m.emissiveIntensity = m.userData.ei0 ?? 1; } } }));   // las piezas que ya brillan (luces, pantallas) conservan su brillo
+    $$('#col-sectores button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === key)));
+    set('col-code', info.code); set('col-title', info.title); set('col-type', info.type);
+    set('col-area', info.area); set('col-cap', info.cap); set('col-desc', info.desc);
+    $('#col-feat').innerHTML = info.feat.map(f => `<li>${f}</li>`).join('');
+    $('#col-agua-sec').hidden = !info.agua;
+    colonySalas(key);
+    const sec = COL.sectors && COL.sectors[key];
+    if (volar && sec) {                                                        // la cámara vuela hasta el sector
+      setCam('colony');
+      const d = Math.max(26, sec.size.length() * 1.9);
+      COL.focus = sec.center.clone();
+      controls.target.copy(sec.center); camera.position.set(sec.center.x - d * 0.55, sec.center.y + d * 0.55, sec.center.z + d * 0.75);
+    }
+  }
+  // ---------- Interior de la colonia: recorrido en primera persona ----------
+  // «Ver interior»: oculta techos (*_techo) y bermas, como una maqueta en corte, y muestra los muebles (*_int).
+  // «Entrar»: se camina por dentro (W A S D, arrastrar para mirar). El modelo trae una malla de navegación (objeto NAV:
+  // rejilla de 10 cm con el suelo libre de paredes y muebles) para no atravesar nada, y la lista de salas.
+  // WALK guarda posición y mirada: más adelante podrá llevar a un astronauta en vez de a la cámara.
+  const SALAS = { A_hab_1: 'Dormitorios A1', A_hab_2: 'Dormitorios A2 y baño', A_hab_3: 'Zona común A3', B_ciencia: 'Laboratorio',
+    B_esclusa: 'Esclusa B', C_invernadero: 'Invernadero', D_medico: 'Sala médica', E_taller: 'Taller', F_soporte: 'Soporte vital' };
+  const WALK = { on: false, x: 0, z: 0, yaw: 0, pitch: 0, keys: {}, drag: false, px: 0, py: 0, bob: 0, room: '', roomT: 0, spawn: null, eye: 1.62 };
+  window.ICE_WALK = WALK;                                                     // acceso para depurar y, más adelante, para el astronauta
+  function navLoad(scn) {
+    const n = scn.getObjectByName('NAV'); COL.nav = null; if (!n || !n.userData.nav_rle) return;
+    const u = n.userData, w = u.nav_w, h = u.nav_h, grid = new Uint8Array(w * h);
+    let k = 0, v = 0; String(u.nav_rle).split(',').forEach(t => { const r = +t; if (v) grid.fill(1, k, k + r); k += r; v ^= 1; });
+    let rooms = [], spawns = {};
+    try { rooms = JSON.parse(u.nav_rooms || '[]'); spawns = JSON.parse(u.nav_spawns || '{}'); } catch (e) { /* sin salas */ }
+    COL.nav = { x0: u.nav_x0, y0: u.nav_y0, cell: u.nav_cell, w, h, grid, floor: u.nav_floor, rooms, spawns, img: null };
+  }
+  // coordenadas del modelo (Three: x, z) ↔ rejilla (Blender: x, y = −z)
+  function navOk(lx, lz) {
+    const N = COL.nav; if (!N) return false;
+    const i = Math.floor((lx - N.x0) / N.cell), j = Math.floor((-lz - N.y0) / N.cell);
+    return i >= 0 && j >= 0 && i < N.w && j < N.h && N.grid[j * N.w + i] === 1;
+  }
+  function navRoom(lx, lz) {
+    const N = COL.nav, bx = lx, by = -lz; if (!N) return '';
+    const r = N.rooms.find(q => bx >= q[1] && bx <= q[3] && by >= q[2] && by <= q[4]);
+    return r ? r[0] : '';
+  }
+  function colonyLuz() {
+    if (!COL.luz) { COL.luz = new THREE.PointLight(0xfff2e2, 0, 16, 1.6); scene.add(COL.luz); }
+    if (!COL.hemi) { COL.hemi = new THREE.HemisphereLight(0xfff6ea, 0x3a3a44, 0); scene.add(COL.hemi); }
+    COL.hemi.intensity = WALK.on ? 0.42 : 0;
+    if (WALK.on) { COL.luz.distance = 8; COL.luz.decay = 1.5; COL.luz.intensity = 4.5; }
+    else if (COL.corte) { const c = COL.g.position; COL.luz.position.set(c.x, c.y + 18, c.z); COL.luz.distance = 90; COL.luz.decay = 1.2; COL.luz.intensity = 260; }
+    else COL.luz.intensity = 0;
+  }
+  function colonyInteriores() {
+    const hab = $('#col-capas input[data-capa="hab"]');
+    (COL.interiores || []).forEach(o => {
+      let v = (COL.corte || WALK.on) && (!hab || hab.checked || WALK.on);
+      if (v && WALK.on && o.userData.c) v = Math.hypot(o.userData.c.x - WALK.x, o.userData.c.z - WALK.z) < o.userData.r + 18;   // dentro solo se dibujan los muebles de las salas cercanas
+      o.visible = v;
+    });
+  }
+  function colonyCorte(on) {
+    COL.corte = on;
+    (COL.techos || []).forEach(o => { o.visible = !on || WALK.on; });
+    const reg = $('#col-capas input[data-capa="reg"]');
+    ((COL.capas || {}).reg || []).forEach(o => { o.visible = !on && !WALK.on && (!reg || reg.checked); });
+    $('#col-corte').setAttribute('aria-pressed', String(on));
+    colonyInteriores();
+    colonySelect(COL.sel || 'A', false); colonyLuz();
+    if (on && camMode !== 'inside' && COL.sectors && COL.sectors[COL.sel]) colonySelect(COL.sel, true);
+    refreshObstacles();
+  }
+  // Entrar: por la esclusa A (entrada principal) o directamente a una sala
+  function colonyEnter(nombre) {
+    if (!COL.nav) { toast('El modelo de la colonia aún se está cargando.'); return; }
+    WALK.spawn = nombre || 'A_esclusa'; setCam('inside');
+  }
+  function walkStart(nombre) {
+    const N = COL.nav; if (!N) return;
+    const sp = N.spawns[nombre] || N.spawns.A_esclusa || Object.values(N.spawns)[0]; if (!sp) return;
+    WALK.on = true; WALK.x = sp[0]; WALK.z = -sp[1]; WALK.yaw = Math.atan2(-(sp[2] - sp[0]), -(-sp[3] + sp[1])); WALK.pitch = -0.05;
+    WALK.keys = {}; WALK.room = ''; COL.dentro = nombre;
+    controls.enabled = false;
+    (COL.techos || []).forEach(o => { o.visible = true; });                    // dentro, con techo
+    ((COL.capas || {}).reg || []).forEach(o => { o.visible = false; });     // las bermas atraviesan los cascos por dentro
+    colonyInteriores(); colonyLuz(); colonySelect(COL.sel || 'A', false);
+    $('#sim-walk').hidden = false; $('#col-dentro-fila').hidden = false;
+    walkMapPrep(); walkUpdate(0);
+    $('#sim-view').focus({ preventScroll: true });
+    toast('W A S D para caminar · arrastra para mirar · Shift para correr · Esc para salir');
+  }
+  function colonyInsideOff() {
+    if (!WALK.on) return;
+    WALK.on = false; COL.dentro = null; WALK.keys = {}; colonyLuz();
+    (COL.techos || []).forEach(o => { o.visible = !COL.corte; });
+    const reg = $('#col-capas input[data-capa="reg"]');
+    ((COL.capas || {}).reg || []).forEach(o => { o.visible = !COL.corte && (!reg || reg.checked); });
+    colonyInteriores();
+    $('#sim-walk').hidden = true;
+    const f = $('#col-dentro-fila'); if (f) f.hidden = true;
+    setTimeout(() => colonySelect(COL.sel || 'A', false), 0);
+  }
+  // Paso a paso: velocidad de una persona (1,4 m/s; 2,6 corriendo), en tiempo real aunque el tiempo vaya acelerado.
+  // Si el paso choca, se intenta deslizar a lo largo de la pared.
+  function walkUpdate(dt) {
+    const k = WALK.keys, f = (k.w ? 1 : 0) - (k.s ? 1 : 0), r = (k.d ? 1 : 0) - (k.a ? 1 : 0), turn = (k.tl ? 1 : 0) - (k.tr ? 1 : 0);
+    if (turn) WALK.yaw += turn * 1.8 * dt;
+    const moving = !!(f || r);
+    if (moving) {
+      const sp = k.shift ? 2.6 : 1.4, len = Math.hypot(f, r), sy = Math.sin(WALK.yaw), cy = Math.cos(WALK.yaw);
+      const dx = (-sy * f + cy * r) / len * sp * dt, dz = (-cy * f - sy * r) / len * sp * dt;
+      if (navOk(WALK.x + dx, WALK.z + dz)) { WALK.x += dx; WALK.z += dz; }
+      else if (navOk(WALK.x + dx, WALK.z)) WALK.x += dx;
+      else if (navOk(WALK.x, WALK.z + dz)) WALK.z += dz;
+      WALK.bob += dt * sp * 5.2;
+    }
+    const y = COL.nav.floor + COL.presOff + WALK.eye + (moving ? Math.sin(WALK.bob) * 0.022 : 0);
+    const eye = COL.model.localToWorld(new THREE.Vector3(WALK.x, y, WALK.z));
+    camera.position.copy(eye); camera.rotation.order = 'YXZ'; camera.rotation.set(WALK.pitch, WALK.yaw, 0);
+    const fwd = new THREE.Vector3(-Math.sin(WALK.yaw) * Math.cos(WALK.pitch), Math.sin(WALK.pitch), -Math.cos(WALK.yaw) * Math.cos(WALK.pitch));
+    controls.target.copy(eye).addScaledVector(fwd, 2.5);
+    if (COL.luz) COL.luz.position.copy(eye).add(new THREE.Vector3(0, 0.35, 0));
+    const now = performance.now();
+    if (now - WALK.roomT > 180) {
+      WALK.roomT = now; const room = navRoom(WALK.x, WALK.z) || WALK.room;
+      if (room !== WALK.room) { WALK.room = room; set('sw-room', room); set('col-dentro', 'Dentro: ' + room); }
+      walkMapDraw(); colonyInteriores();
+    }
+  }
+  // Minimapa: la rejilla de navegación dibujada una vez; encima, la posición y hacia dónde se mira
+  function walkMapPrep() {
+    const N = COL.nav, cv = $('#sw-map'); if (!N || !cv) return;
+    if (!N.img) {
+      const off = document.createElement('canvas'); off.width = N.w; off.height = N.h;
+      const g = off.getContext('2d'), id = g.createImageData(N.w, N.h);
+      for (let j = 0; j < N.h; j++) for (let i = 0; i < N.w; i++) {
+        if (!N.grid[j * N.w + i]) continue;
+        const o = ((N.h - 1 - j) * N.w + i) * 4; id.data[o] = 205; id.data[o + 1] = 207; id.data[o + 2] = 218; id.data[o + 3] = 150;
+      }
+      g.putImageData(id, 0, 0); N.img = off;
+    }
+  }
+  function walkMapDraw() {
+    const N = COL.nav, cv = $('#sw-map'); if (!N || !N.img || !cv || $('#sim-walk').hidden) return;
+    const g = cv.getContext('2d'), W2 = cv.width, H2 = cv.height, s = Math.min(W2 / N.w, H2 / N.h);
+    const ox = (W2 - N.w * s) / 2, oy = (H2 - N.h * s) / 2;
+    g.clearRect(0, 0, W2, H2); g.imageSmoothingEnabled = true; g.drawImage(N.img, ox, oy, N.w * s, N.h * s);
+    g.font = '600 9px Inter, sans-serif'; g.textAlign = 'center'; g.fillStyle = 'rgba(237,237,243,.75)';
+    N.rooms.forEach(q => { if (!/·/.test(q[0])) return; const cx = ((q[1] + q[3]) / 2 - N.x0) / N.cell, cy = ((q[2] + q[4]) / 2 - N.y0) / N.cell;
+      g.fillText(q[0].split(' · ')[0], ox + cx * s, oy + (N.h - cy) * s + 3); });
+    const px = ox + (WALK.x - N.x0) / N.cell * s, py = oy + (N.h - (-WALK.z - N.y0) / N.cell) * s;
+    const dx = -Math.sin(WALK.yaw), dy = Math.cos(WALK.yaw);                // hacia dónde se mira (Blender x, y)
+    g.save(); g.translate(px, py); g.rotate(Math.atan2(dx, dy));
+    g.fillStyle = 'rgba(82,102,235,.28)'; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, 16, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55); g.fill();
+    g.fillStyle = '#5266eb'; g.strokeStyle = '#ededf3'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(0, -6); g.lineTo(4.5, 4.5); g.lineTo(0, 2.5); g.lineTo(-4.5, 4.5); g.closePath(); g.fill(); g.stroke();
+    g.restore();
+  }
+  function colonySalas(key) {
+    const box = $('#col-salas'); if (!box) return;
+    const salas = Object.keys(SALAS).filter(n => n[0] === key && COL.model && COL.model.getObjectByName(n));
+    box.innerHTML = salas.map(n => '<button type="button" class="btn btn--sm" data-sala="' + n + '">Ir a · ' + SALAS[n] + '</button>').join('');
+    box.hidden = !salas.length;
+    $$('#col-salas [data-sala]').forEach(b => b.addEventListener('click', () => colonyEnter(b.dataset.sala)));
+  }
+  function colonyCapa(capa, on) {
+    if (capa === 'lbl') { COL.labelsOff = !on; return; }
+    ((COL.capas || {})[capa] || []).forEach(o => { o.visible = on && !(capa === 'reg' && (COL.corte || WALK.on)) && !/_int$/.test(o.name); });
+    colonyInteriores();
+    refreshObstacles();
+  }
+  function bindWalk() {
+    const el = renderer.domElement;
+    el.addEventListener('pointerdown', ev => { if (camMode !== 'inside') return; WALK.drag = true; WALK.px = ev.clientX; WALK.py = ev.clientY; });
+    window.addEventListener('pointermove', ev => {
+      if (!WALK.drag) return;
+      WALK.yaw -= (ev.clientX - WALK.px) * 0.0042; WALK.pitch = Math.max(-1.3, Math.min(1.15, WALK.pitch - (ev.clientY - WALK.py) * 0.0042));
+      WALK.px = ev.clientX; WALK.py = ev.clientY;
+    });
+    window.addEventListener('pointerup', () => { WALK.drag = false; });
+    $$('#sw-pad [data-w]').forEach(b => {
+      const on = e => { e.preventDefault(); WALK.keys[b.dataset.w] = true; b.classList.add('is-on'); };
+      const off = () => { WALK.keys[b.dataset.w] = false; b.classList.remove('is-on'); };
+      b.addEventListener('pointerdown', on); ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, off));
+    });
+    $('#sw-exit').addEventListener('click', () => setCam('colony'));
+  }
+  function bindColony() {
+    $('#col-sectores').innerHTML = Object.entries(COLONIA).map(([k, s]) => `<button type="button" data-s="${k}" aria-pressed="false"><b>${s.code}</b><span>${s.short}</span></button>`).join('');
+    $$('#col-sectores button').forEach(b => b.addEventListener('click', () => colonySelect(b.dataset.s)));
+    $$('#col-capas input[data-capa]').forEach(i => i.addEventListener('change', () => colonyCapa(i.dataset.capa, i.checked)));
+    $('#col-corte').addEventListener('click', () => colonyCorte(!COL.corte));
+    $('#col-salir').addEventListener('click', () => setCam('colony'));
+    $('#col-entrar').addEventListener('click', () => colonyEnter('A_esclusa'));
+    bindWalk();
+    $('#col-etapas').innerHTML = COL_ETAPAS.map(([n, t, d], i) => `<li class="${i === 0 ? 'is-on' : ''}"><b>${n}</b><span><strong>${t}</strong>${d}</span></li>`).join('');
+    colonySelect('A', false);
+  }
+  function updateColonyPanel() {
+    if ($('#sim-colony').hidden) return;
+    const C = S.colony, dem = sim.COLONY.demandKgDay;
+    set('col-crew', `${C.crew}`); set('col-agua', `${fmt(C.water, 1)} L`); set('col-dias', `${fmt(C.water / dem, 1)} días`);
+    set('col-dem', `${fmt(dem, 1)} L/día`); bar('col-agua-bar', C.water / Math.max(dem * 10, 1));
+    set('col-flujo', S.t - C.flowT < 600 ? 'Llegando agua por la tubería' : 'Sin flujo ahora');
+  }
+  function colonyPick(ev) {
+    if (!COL.model) return false;
+    const r = renderer.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((ev.clientX - r.left) / r.width * 2 - 1, -(ev.clientY - r.top) / r.height * 2 + 1), camera);
+    const hit = ray.intersectObject(COL.model, true).find(h => h.object.visible && h.object.userData.sector);
+    if (!hit) return false;
+    if ($('#sim-colony').hidden) toggleTool('colonia');
+    colonySelect(hit.object.userData.sector, false);
+    return true;
+  }
+  // Tubería sobre soportes: del tanque de la planta al depósito de la colonia, siguiendo el terreno.
+  // Se reconstruye cuando llega el modelo de Blender (el depósito de UKU PACHA está en otro sitio).
+  function buildPipe(b, yEnd) {
+    if (COL.pipe) { COL.pipe.traverse(o => { if (o.geometry) o.geometry.dispose(); }); scene.remove(COL.pipe); }
+    const pipe = new THREE.Group(), a = ST.tank.getWorldPosition(new THREE.Vector3());
+    const pts = [], n = Math.max(12, Math.round(a.distanceTo(b) / 6));
+    for (let k = 0; k <= n; k++) { const t = k / n, x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t; pts.push(new THREE.Vector3(x, W.hAt(x, z) + 1.2, z)); }
+    pts[0].y = a.y + 1.6; pts[pts.length - 1].y = yEnd;
+    const curve = new THREE.CatmullRomCurve3(pts);
+    mesh(new THREE.TubeGeometry(curve, n * 4, 0.16, 8), COL.metal, 0, 0, 0, pipe);
+    for (let k = 1; k < n; k += 2) { const q = pts[k]; cyl(0.06, 0.06, 1.2, COL.metal, q.x, q.y - 0.6, q.z, pipe, 6); }
+    scene.add(pipe);
+    Object.assign(COL, { pipe, curve });
   }
 
   // ---------- Modelos hechos en Blender (opcionales) ----------
@@ -447,7 +766,7 @@
           setupRoverAnim(scn);
         },
         station: (scn) => { hide(ST.g, [...ST.flowDots, BIO.lichen, BIO.rock]); ST.g.add(scn); setupStationAnim(scn); },   // se conservan las bacterias, el liquen y la roca del biofiltro
-        colony: (scn) => { hide(COL.g, [COL.water]); COL.g.add(scn); },
+        colony: (scn) => { hide(COL.g, []); COL.g.add(scn); setupColonyModel(scn); },   // UKU PACHA MK-I
         biofilter: (scn) => { hide(BIO.bio, [BIO.lichen]); BIO.bio.add(scn); }
       };
       (Array.isArray(list) ? list : []).forEach(name => {
@@ -739,7 +1058,7 @@
 
   function addLabel(text, posFn, cls = '') {
     const el = document.createElement('span'); el.className = 'sim-label ' + cls; el.textContent = text;
-    $('#sim-labels').appendChild(el); labels.push({ el, posFn, cls });
+    $('#sim-labels').appendChild(el); const l = { el, posFn, cls }; labels.push(l); return l;
   }
 
   // =====================================================================
@@ -803,7 +1122,9 @@
   function updateColony(t) {
     const C = S.colony, flowing = S.t - C.flowT < 600;
     COL.dots.forEach((d, k) => { d.visible = flowing; if (flowing) d.position.copy(COL.curve.getPointAt((t * 0.05 + k / COL.dots.length) % 1)); });
-    const lvl = Math.min(1, C.water / 40); COL.water.scale.y = Math.max(0.001, lvl * 3.8); COL.water.position.y = 0.2 + 1.9 * lvl;
+    const lvl = Math.min(1, C.water / 40);
+    if (COL.waterModel) COL.water.scale.y = Math.max(0.001, lvl * COL.water.userData.sy);   // depósito del modelo de Blender
+    else { COL.water.scale.y = Math.max(0.001, lvl * 3.8); COL.water.position.y = 0.2 + 1.9 * lvl; }
   }
 
   function updateStation(t) {
@@ -888,14 +1209,24 @@
       rcam.dist = dHit; rcam.aim.copy(pos).addScaledVector(fwd, Math.min(dHit, 400));
       camera.position.copy(pos); controls.target.copy(rcam.aim); camera.lookAt(pos.clone().add(fwd));
       const fov = 58 / rcam.zoom; if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    } else if (camMode === 'inside' && WALK.on && COL.nav) {
+      walkUpdate(cdt);
     } else {
       let target = null;
       if (camMode === 'station') target = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0));
-      else if (camMode === 'colony') target = COL.g.position.clone().add(new THREE.Vector3(0, 3, 0));
+      else if (camMode === 'colony') target = COL.focus ? COL.focus.clone() : COL.g.position.clone().add(new THREE.Vector3(0, 3, 0));
       if (target) { const delta = target.clone().sub(controls.target).multiplyScalar(0.12); controls.target.add(delta); camera.position.add(delta); }
       controls.update();
       const gh = W.hAt(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gh) camera.position.y = gh;   // la cámara no atraviesa el terreno real
     }
+    if (camMode === 'inside' && WALK.on) {
+      // Dentro: la sombra del Sol queda fija sobre toda la colonia (no se recalcula a cada paso) y no hace falta
+      // el detalle fino del terreno ni los granos, que quedan bajo el suelo
+      if (!WALK.sunOk) { IceEnv.updateSun(sun, W, COL.g.position, 34); WALK.sunOk = true; }
+      sky.update(camera, cdt, S.t);
+      return;
+    }
+    WALK.sunOk = false;
     const focusD = camMode === 'rovercam' ? Math.min(rcam.dist, 160) : camMode === 'tierra' ? 1e9 : camera.position.distanceTo(controls.target);
     IceEnv.DETAIL.oU.value.set(Math.round(controls.target.x), Math.round(controls.target.z));   // origen cercano: precisión en el zoom
     detailUpd(controls.target, Q.detail ? focusD : 1e9);
@@ -911,7 +1242,7 @@
     const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight;
     labels.forEach(l => {
       const wp = l.posFn(), p = wp.clone().project(camera), dist = camera.position.distanceTo(wp);
-      const hide = p.z > 1 || (l.cls === 'ov' && camMode !== 'overview') || (l.cls === 'mid' && dist > 700) || (l.cls === 'near' && dist > 45) || (l.cls === 'far' && dist < 90) || (l.cls === 'rover' && dist < 25);
+      const hide = p.z > 1 || (l.cls === 'ov' && camMode !== 'overview') || (l.cls === 'mid' && dist > 700) || (l.cls === 'near' && dist > 45) || (l.cls === 'far' && dist < 90) || (l.cls === 'rover' && dist < 25) || (l.cls === 'col' && (COL.labelsOff || dist > 260)) || camMode === 'inside';
       const disp = hide ? 'none' : 'block'; if (l.disp !== disp) { l.el.style.display = disp; l.disp = disp; }
       if (!hide) { const tf = `translate(${Math.round((p.x * 0.5 + 0.5) * w)}px, ${Math.round((-p.y * 0.5 + 0.5) * h)}px) translate(-50%, -100%)`; if (l.tf !== tf) { l.el.style.transform = tf; l.tf = tf; } }
     });
@@ -1014,6 +1345,8 @@
     }, { passive: false });
     el.addEventListener('pointerup', ev => {
       if (EXP.on && ev.button === 0 && down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) <= 5) { expPick(ev); return; }
+      if (camMode === 'inside') return;
+      if (!destMode && !EXP.on && ev.button === 0 && down && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) <= 5 && colonyPick(ev)) return;
       if (!destMode || ev.button !== 0 || !down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5) return;
       const p = pickTerrain(ev); if (!p) return;
       const r = el.getBoundingClientRect();
@@ -1027,15 +1360,18 @@
     $('#sim-dest-btn').addEventListener('click', () => setDestMode(!destMode));
     window.addEventListener('keydown', e => {
       if (!visible || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.code === 'KeyE' && !e.repeat && !EXP.on) { setDestMode(!destMode); e.preventDefault(); }
+      if (e.code === 'KeyE' && !e.repeat && !EXP.on && camMode !== 'inside') { setDestMode(!destMode); e.preventDefault(); }
       else if (e.code === 'Escape' && destMode) setDestMode(false);
+      else if (e.code === 'Escape' && camMode === 'inside') setCam('colony');
     });
   }
 
   function setCamLens(mode) {
-    const near = mode === 'rovercam' ? 0.08 : 0.25, fov = mode === 'rovercam' ? 58 : 46;
+    const near = mode === 'rovercam' ? 0.08 : mode === 'inside' ? 0.05 : 0.25, fov = mode === 'rovercam' ? 58 : mode === 'inside' ? 70 : 46;
     if (camera.near !== near || camera.fov !== fov) { camera.near = near; camera.fov = fov; camera.updateProjectionMatrix(); }
-    controls.enabled = !(mode === 'rover' || mode === 'rovercam' || mode === 'tierra');
+    controls.minDistance = mode === 'inside' ? 0.15 : 2.2; controls.maxDistance = mode === 'inside' ? 7 : W.SIZE * 2.5;
+    if (mode !== 'inside') colonyInsideOff();
+    controls.enabled = !(mode === 'rover' || mode === 'rovercam' || mode === 'tierra' || mode === 'inside');
     $('#sim-rcam').hidden = mode !== 'rovercam';
   }
   function setCam(mode) {
@@ -1049,7 +1385,8 @@
     if (mode === 'rover') { Object.assign(chase, { yaw: 0, pitch: 0.3, dist: 9 }); const { want, look } = chaseWant(); camera.position.copy(want); controls.target.copy(look); camera.lookAt(look); }
     if (mode === 'station') { const t = BIO.worldPos().add(new THREE.Vector3(-1.0, 1.0, 0)); controls.target.copy(t); camera.position.set(t.x - 2, t.y + 5, t.z + 13); }
     if (mode === 'overview') { const k = W.SIZE / 600; controls.target.set(W.station.x * 0.3, 0, W.station.z * 0.3); camera.position.set(-260 * k, 330 * k, 380 * k); }
-    if (mode === 'colony') { const c = COL.g.position; controls.target.set(c.x, c.y + 3, c.z); camera.position.set(c.x - 30, c.y + 22, c.z + 38); }
+    if (mode === 'inside') { walkStart(WALK.spawn || 'A_esclusa'); WALK.spawn = null; }
+    if (mode === 'colony') { COL.focus = null; const c = COL.g.position; controls.target.set(c.x, c.y + 3, c.z); camera.position.set(c.x - 52, c.y + 40, c.z + 64); }
     if (mode === 'despiece') {                                              // órbita alrededor del rover, vista de tres cuartos
       const R = S.rover, c = R3.g.position.clone().add(new THREE.Vector3(0, 1.0, 0)), a = R.heading + 2.3;
       controls.target.copy(c); camera.position.set(c.x + Math.cos(a) * 8.6, c.y + 3.4, c.z + Math.sin(a) * 8.6);
@@ -1600,7 +1937,7 @@
 
   // ---------- Botones y teclas de las herramientas ----------
   // Paneles que abre cada herramienta (el despiece y la pantalla completa no son paneles)
-  const TOOL_PANEL = { mapa: '#sim-map', control: '#sim-ctrl', capas: '#sim-layers', ayuda: '#sim-keys' };
+  const TOOL_PANEL = { mapa: '#sim-map', control: '#sim-ctrl', capas: '#sim-layers', ayuda: '#sim-keys', colonia: '#sim-colony' };
   function setToolUI() {
     $$('#sim-tools button').forEach(b => { const t = b.dataset.t;
       b.setAttribute('aria-pressed', String(TOOL_PANEL[t] ? !$(TOOL_PANEL[t]).hidden : t === 'pantalla' ? !!fsElement() : EXP.on)); });
@@ -1632,6 +1969,7 @@
     const el = $(TOOL_PANEL[t]); if (!el) return; el.hidden = !el.hidden;
     if (t === 'capas' || t === 'ayuda') { const other = $(TOOL_PANEL[t === 'capas' ? 'ayuda' : 'capas']); if (!el.hidden) other.hidden = true; }   // uno a la vez en esa columna
     if (t === 'mapa') drawMap(); else if (t === 'control') updateControl();
+    else if (t === 'colonia') { if (!el.hidden) { updateColonyPanel(); if (camMode !== 'colony') setCam('colony'); } colonySelect(COL.sel || 'A', false); }
     setToolUI();
   }
   // ---------- Paneles como ventanas: se arrastran por la cabecera y cambian de tamaño desde la esquina ----------
@@ -1684,6 +2022,7 @@
   function clampWindows() { WIN.list.forEach(f => f()); }
   function bindTools() {
     ['#sim-map', '#sim-ctrl', '#sim-layers', '#sim-keys'].forEach(s => makeWindow($(s)));
+    makeWindow($('#sim-colony'), 260, 160); bindColony();
     makeWindow($('#sim-exp'), 240, 140);
     $$('#sim-tools button').forEach(b => b.addEventListener('click', () => toggleTool(b.dataset.t)));
     Object.entries(TOOL_PANEL).forEach(([t, sel]) => { const x = $(`${sel} [data-close]`); if (x) x.addEventListener('click', () => toggleTool(t)); });
@@ -1728,6 +2067,7 @@
       else if (e.code === 'KeyX') { toggleTool('despiece'); e.preventDefault(); }
       else if (e.code === 'KeyL') { toggleTool('capas'); e.preventDefault(); }
       else if (e.code === 'KeyH') { toggleTool('ayuda'); e.preventDefault(); }
+      else if (e.code === 'KeyC') { toggleTool('colonia'); e.preventDefault(); }
       else if (e.code === 'KeyF') { toggleFullscreen(); e.preventDefault(); }
       else if (e.code === 'Escape' && EXP.on) setExplode(false);
       else if (e.code === 'Escape') ['capas', 'ayuda'].forEach(t => { if (!$(TOOL_PANEL[t]).hidden) toggleTool(t); });   // Esc cierra capas y controles
@@ -1996,15 +2336,17 @@
     const kmap = { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
     const cmap = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd', ShiftLeft: 'shift', ShiftRight: 'shift' };
     const typing = () => /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+    const wmap = { KeyW: 'w', ArrowUp: 'w', KeyS: 's', ArrowDown: 's', KeyA: 'a', KeyD: 'd', ArrowLeft: 'tl', ArrowRight: 'tr', ShiftLeft: 'shift', ShiftRight: 'shift' };
     window.addEventListener('keydown', e => {
       if (!visible || typing() || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (camMode === 'inside' && wmap[e.code]) { WALK.keys[wmap[e.code]] = true; if (wmap[e.code] !== 'shift') e.preventDefault(); return; }
       const manual = S.rover.mode === 'manual';
       if (manual && kmap[e.code]) { keys[kmap[e.code]] = true; e.preventDefault(); }
       else if (cmap[e.code]) { camKeys[cmap[e.code]] = true; if (cmap[e.code] !== 'shift') e.preventDefault(); }
       if (manual && e.code === 'Space' && document.activeElement === host) { sim.cmd.drillHere(); e.preventDefault(); }
     });
-    window.addEventListener('keyup', e => { if (kmap[e.code]) keys[kmap[e.code]] = false; if (cmap[e.code]) camKeys[cmap[e.code]] = false; });
-    window.addEventListener('blur', () => { Object.keys(camKeys).forEach(k => { camKeys[k] = false; }); Object.keys(keys).forEach(k => { keys[k] = false; }); });
+    window.addEventListener('keyup', e => { if (kmap[e.code]) keys[kmap[e.code]] = false; if (cmap[e.code]) camKeys[cmap[e.code]] = false; if (wmap[e.code]) WALK.keys[wmap[e.code]] = false; });
+    window.addEventListener('blur', () => { Object.keys(camKeys).forEach(k => { camKeys[k] = false; }); Object.keys(keys).forEach(k => { keys[k] = false; }); WALK.keys = {}; });
     document.addEventListener('icewise:startMission', () => { hideIntro(); if (!S.running) toggleRun(); });
   }
   function applyKeys() {
@@ -2026,7 +2368,7 @@
   function updateUI() {
     const R = S.rover, Pl = S.plant, B = S.bio;
     const taskTxt = (TASKS[R.task] || R.task) + (R.task === 'drill' ? ` · ${fmt(R.drillDepth, 2)} de ${fmt(P.drillDepth, 2)} m` : R.task === 'characterize' ? ` · ${Math.round(R.charT / 12)} %` : '');
-    set('hud-clock', clockStr(S.t)); set('hud-task', taskTxt); updateCoreVis();
+    set('hud-clock', clockStr(S.t)); set('hud-task', taskTxt); updateCoreVis(); updateColonyPanel();
     set('hud-bat', `Batería ${fmt(R.battery / sim.ROVER.cap * 100, 0)} %`); set('hud-temp', `Exterior ${fmt(R.Tenv || 0, 0)} K · rover ${fmt(R.sysT - 273.15, 0)} °C`);
     set('hud-water', `Agua limpia ${fmt(S.totals.water, 2)} L · en la colonia ${fmt(S.colony.water, 2)} L${S.totals.rejected > 0 ? ` · contaminada ${fmt(S.totals.rejected, 2)} L` : ''}`);
     const hb = $('#hud-bat'); if (hb) hb.classList.toggle('warn', R.battery / sim.ROVER.cap < P.reserve / 100 + 0.05);
