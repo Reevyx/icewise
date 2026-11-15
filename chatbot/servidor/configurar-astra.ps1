@@ -50,6 +50,28 @@ Ok 'Sesión de Cloudflare activa'
 
 # 4) Publicar el servidor ----------------------------------------------------------
 Paso 4 'Publicando el servidor'
+# Almacén gratuito de respuestas guardadas (Workers KV): las preguntas repetidas no gastan cuota de IA
+$toml = Join-Path $servidor 'wrangler.toml'
+$tomlTxt = [IO.File]::ReadAllText($toml, $utf8)
+if ($tomlTxt -notmatch 'binding\s*=\s*"RESPUESTAS"') {
+  $kvSalida = cmd /c "npx wrangler kv namespace create astra-respuestas 2>&1" | Out-String
+  $kvId = ([regex]::Match($kvSalida, 'id"?\s*[=:]\s*"([0-9a-f]{32})"')).Groups[1].Value
+  if (-not $kvId) {
+    # Ya existía: se busca en la lista de almacenes de la cuenta
+    $kvLista = cmd /c "npx wrangler kv namespace list 2>&1" | Out-String
+    try {
+      $inicio = $kvLista.IndexOf('[')
+      if ($inicio -ge 0) { $kvId = (($kvLista.Substring($inicio) | ConvertFrom-Json) | Where-Object { $_.title -like '*astra-respuestas*' } | Select-Object -First 1).id }
+    } catch {}
+  }
+  if ($kvId) {
+    $bloque = "`n# Respuestas guardadas (Workers KV, gratis): una pregunta repetida reutiliza la respuesta de la IA`n[[kv_namespaces]]`nbinding = `"RESPUESTAS`"`nid = `"$kvId`"`n"
+    [IO.File]::WriteAllText($toml, $tomlTxt.TrimEnd() + "`n" + $bloque, $utf8)
+    Ok 'Almacén de respuestas guardadas listo (Workers KV)'
+  } else {
+    Aviso 'No se pudo crear el almacén de respuestas guardadas; ASTRA funciona igual, solo que sin reutilizar respuestas.'
+  }
+} else { Ok 'Almacén de respuestas guardadas ya configurado' }
 $lineas = New-Object System.Collections.Generic.List[string]
 cmd /c "npx wrangler deploy 2>&1" | ForEach-Object { Write-Host "   $_"; $lineas.Add([string]$_) }
 $codigo = $LASTEXITCODE

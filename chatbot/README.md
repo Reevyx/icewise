@@ -21,7 +21,7 @@ Asistente de chat de ICEWISE, integrado desde `astra-chatbot-standalone.zip`. Co
 
 ## Cómo responde ASTRA
 
-1. **IA gratuita (Workers AI de Cloudflare)**, modelo Mistral Small 3.1, con instrucciones sobre ICEWISE: respuestas breves, en español, distinguiendo lo real de lo simulado. Cloudflare da una cuota gratuita que se renueva cada día (10 000 «neuronas»; con mensajes cortos, del orden de 150 al día según nuestra estimación).
+1. **IA gratuita (Workers AI de Cloudflare)**, modelo Mistral Small 3.1, con instrucciones sobre ICEWISE: respuestas breves, en español, distinguiendo lo real de lo simulado. Cloudflare da una cuota gratuita que se renueva cada día (10 000 «neuronas») y que comparten todas las personas que usan la web. Para que alcance para más mensajes sin acortar las respuestas ni cambiar de modelo, el servidor reenvía solo lo reciente de la conversación (los últimos 4 mensajes) con unas instrucciones compactas, y **guarda las respuestas** a primeras preguntas repetidas (Workers KV, gratis) durante 7 días: si otra persona pregunta lo mismo, la respuesta no gasta cuota. Según nuestra estimación, del orden de 250 conversaciones distintas al día, más todas las preguntas repetidas.
 2. **Respuestas locales** si la IA no está disponible (cuota del día agotada, sin conexión o servidor sin configurar): datos de ICEWISE sobre el rover, el hielo, la planta, el biofiltro, la colonia, la energía y el agua. En GitHub Pages siempre funciona.
 3. **Claude (opcional, de pago):** si algún día cargas saldo en console.anthropic.com, el servidor puede usar Claude con la clave guardada como secreto. Si Claude falla, vuelve solo a Workers AI.
 
@@ -29,6 +29,8 @@ Asistente de chat de ICEWISE, integrado desde `astra-chatbot-standalone.zip`. Co
 
 Pulsa el micrófono y habla. ASTRA responde en voz alta y vuelve a escuchar sola, como una conversación. Para terminar, pulsa el mismo botón (o escribe un mensaje).
 
+- **Altavoz** (botón junto a la hora): activado, ASTRA lee en voz alta también lo que responde cuando le escribes. Pulsa otra vez para silenciarlo; el navegador lo recuerda.
+- **En la pantalla completa de la simulación** el botón ASTRA aparece arriba a la derecha.
 - **Funciona en GitHub Pages** porque la página va por HTTPS, que es lo que exige el navegador.
 - **Navegadores:** dictado en Chrome, Edge y Safari. Firefox no tiene dictado: ASTRA lo avisa y se puede escribir. La lectura en voz alta funciona en todos.
 - **La primera vez** el navegador pide permiso para el micrófono. Si se niega, ASTRA explica cómo activarlo.

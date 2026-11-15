@@ -8,11 +8,11 @@
     <!-- Seguridad (CSP): solo scripts de esta web, fuentes de Google y conexiones a esta web o al servidor de ASTRA (workers.dev) -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <script src="js/embed.js?v=20261114d"></script>
+    <script src="js/embed.js?v=20261115b"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/chatbot.css?v=20261114d">
+    <link rel="stylesheet" href="css/chatbot.css?v=20261115b">
 </head>
 <body>
     <div class="chatbot-container">
@@ -33,6 +33,10 @@
                     <option value="estados_unidos">EE. UU. (EST)</option>
                 </select>
                 <span id="reloj-local" class="reloj-badge" aria-live="off">--:--:--</span>
+                <button id="btn-altavoz" type="button" class="btn-altavoz" aria-pressed="false" title="Altavoz: leer en voz alta también las respuestas escritas" aria-label="Altavoz: leer en voz alta también las respuestas escritas">
+                    <svg class="ic-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>
+                    <svg class="ic-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
+                </button>
             </div>
         </header>
 
@@ -52,8 +56,8 @@
         </footer>
     </div>
 
-    <script src="js/data-context.js?v=20261114d"></script>
-    <script src="js/voice-timezone.js?v=20261114d"></script>
-    <script src="js/astra-bot.js?v=20261114d"></script>
+    <script src="js/data-context.js?v=20261115b"></script>
+    <script src="js/voice-timezone.js?v=20261115b"></script>
+    <script src="js/astra-bot.js?v=20261115b"></script>
 </body>
 </html>

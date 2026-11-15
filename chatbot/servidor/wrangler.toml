@@ -23,3 +23,8 @@ namespace_id = "1001"
   [ratelimits.simple]
   limit = 15
   period = 60
+
+# Respuestas guardadas (Workers KV, gratis): una pregunta repetida reutiliza la respuesta de la IA
+[[kv_namespaces]]
+binding = "RESPUESTAS"
+id = "fb54cc6cdb5e4255a3dd53d7250941ba"

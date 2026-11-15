@@ -1,5 +1,7 @@
 # Modelos 3D de Blender
 
+> Los archivos `.blend` (fuente editable) se guardan solo en la computadora: no se suben al repositorio porque la web no los necesita (usa los `.glb`) y guardan rutas locales.
+
 Exporta desde Blender en **glTF binario (.glb)** y guarda aquí con estos nombres:
 
 | Archivo | Sustituye a |

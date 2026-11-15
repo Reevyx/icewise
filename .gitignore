@@ -14,7 +14,9 @@ __pycache__/
 design.md
 discurso.md
 
-# Copias de seguridad de Blender
+# Archivos de Blender: son la fuente de los modelos (la web usa los .glb) y guardan rutas locales
+# de la computadora, así que no se suben al repositorio público
+*.blend
 *.blend1
 *.blend2
 

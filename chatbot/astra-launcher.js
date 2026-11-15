@@ -38,6 +38,23 @@
     frame.addEventListener('load', () => {
       try { frame.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'Escape') { open(false); btn.focus(); } }); } catch (_) {}
     });
+
+    // Pantalla completa: el navegador solo muestra el elemento en pantalla completa (la simulación), así que
+    // el botón y el panel se mueven dentro de él mientras dura, y vuelven a la página al salir.
+    const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+    const alCambiarPantalla = () => {
+      const destino = fsEl() || document.body;
+      const enFs = destino !== document.body;
+      if (panel.parentNode !== destino) {
+        // moveBefore (Chrome/Edge recientes) mueve sin recargar el iframe: la conversación se conserva.
+        // Donde no existe, append lo recarga y la conversación empieza de nuevo.
+        if (destino.moveBefore) { try { destino.moveBefore(panel, null); destino.moveBefore(btn, null); } catch (_) { destino.append(panel, btn); } }
+        else destino.append(panel, btn);
+      }
+      btn.classList.toggle('is-fs', enFs); panel.classList.toggle('is-fs', enFs);
+    };
+    document.addEventListener('fullscreenchange', alCambiarPantalla);
+    document.addEventListener('webkitfullscreenchange', alCambiarPantalla);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build); else build();

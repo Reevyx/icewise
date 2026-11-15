@@ -114,6 +114,24 @@ body {
     color: var(--ivory);
 }
 
+/* Altavoz: leer en voz alta también las respuestas escritas */
+.btn-altavoz {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 28px;
+    padding: 0;
+    border-radius: 40px;
+    background: var(--obsidian);
+    color: var(--ash);
+    border: 1px solid var(--line-mid);
+}
+.btn-altavoz:hover { color: var(--ivory); border-color: rgba(237, 237, 243, 0.5); }
+.btn-altavoz .ic-on { display: none; }
+.btn-altavoz[aria-pressed="true"] { background: var(--ivory); color: var(--onyx); border-color: var(--ivory); }
+.btn-altavoz[aria-pressed="true"] .ic-on { display: block; }
+.btn-altavoz[aria-pressed="true"] .ic-off { display: none; }
+
 .chat-messages {
     flex: 1;
     padding: 18px;

@@ -14,6 +14,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const inputChat = document.getElementById("input-chat");
     const btnEnviar = document.getElementById("btn-enviar");
     const btnVoz = document.getElementById("btn-voz");
+    const btnAltavoz = document.getElementById("btn-altavoz");
+    let altavoz = false;             // leer en voz alta también las respuestas escritas
     const PLACEHOLDER = inputChat.placeholder;
     const historial = [];            // turnos de texto plano para dar contexto a la IA
     let escuchando = false;
@@ -110,7 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     body: JSON.stringify({
                         mensaje: mensajeUsuario,
                         contextoHorario: contexto,
-                        historial: historial.slice(-12)
+                        historial: historial.slice(-4)   // lo reciente basta para seguir la conversación y ahorra cuota
                     }),
                     signal: control.signal
                 });
@@ -147,7 +149,8 @@ document.addEventListener("DOMContentLoaded", () => {
         historial.push({ role: "user", content: texto }, { role: "assistant", content: aTextoPlano(respuesta) });
         if (historial.length > 24) historial.splice(0, historial.length - 24);
 
-        if (usarVoz) {
+        // Habla si se le habló por voz o si el altavoz está activado (también para respuestas escritas)
+        if (usarVoz || altavoz) {
             voiceManager.speak(respuesta, () => {
                 actualizarBotonVoz();
                 if (conversacion) setTimeout(() => { if (conversacion) voiceManager.startListening(); }, 300);   // manos libres
@@ -174,4 +177,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!voiceManager.startListening()) conversacion = voiceManager.soportaDictado && conversacion;
         actualizarBotonVoz();
     });
+
+    // Altavoz: activado, ASTRA lee en voz alta también lo que responde por escrito. Se recuerda en este navegador.
+    function setAltavoz(on, avisar) {
+        altavoz = on;
+        btnAltavoz.setAttribute("aria-pressed", String(on));
+        const t = on ? "Altavoz activado: ASTRA lee en voz alta sus respuestas (pulsa para silenciar)" : "Altavoz: leer en voz alta también las respuestas escritas";
+        btnAltavoz.title = t; btnAltavoz.setAttribute("aria-label", t);
+        try { localStorage.setItem("astra-altavoz", on ? "1" : "0"); } catch (_) {}
+        if (on && avisar) voiceManager.desbloquearVoz();       // solo con un clic real (Safari lo exige)
+        else if (!on && !conversacion) voiceManager.callar();  // silenciar corta lo que esté leyendo
+        if (avisar && on && !voiceManager.soportaVoz) agregarMensajeDOM("Tu navegador no puede leer en voz alta. Prueba con Chrome, Edge o Safari.", "bot");
+    }
+    btnAltavoz.addEventListener("click", () => setAltavoz(!altavoz, true));
+    setAltavoz((() => { try { return localStorage.getItem("astra-altavoz") === "1"; } catch (_) { return false; } })(), false);
 });
