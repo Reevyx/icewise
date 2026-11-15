@@ -30,6 +30,7 @@ Asistente de chat de ICEWISE, integrado desde `astra-chatbot-standalone.zip`. Co
 Pulsa el micrófono y habla. ASTRA responde en voz alta y vuelve a escuchar sola, como una conversación. Para terminar, pulsa el mismo botón (o escribe un mensaje).
 
 - **Altavoz** (botón junto a la hora): activado, ASTRA lee en voz alta también lo que responde cuando le escribes. Pulsa otra vez para silenciarlo; el navegador lo recuerda.
+- **Elegir la voz** (botón de ajustes junto al altavoz): lista las voces en español del navegador, con las naturales primero, y deja probarlas. En **Microsoft Edge** aparecen voces naturales de Microsoft (por ejemplo Dalia, Elvira o Camila), mucho más humanas. «Automática» elige sola la más natural disponible.
 - **En la pantalla completa de la simulación** el botón ASTRA aparece arriba a la derecha.
 - **Funciona en GitHub Pages** porque la página va por HTTPS, que es lo que exige el navegador.
 - **Navegadores:** dictado en Chrome, Edge y Safari. Firefox no tiene dictado: ASTRA lo avisa y se puede escribir. La lectura en voz alta funciona en todos.

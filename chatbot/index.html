@@ -8,11 +8,11 @@
     <!-- Seguridad (CSP): solo scripts de esta web, fuentes de Google y conexiones a esta web o al servidor de ASTRA (workers.dev) -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <script src="js/embed.js?v=20261115b"></script>
+    <script src="js/embed.js?v=20261115c"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/chatbot.css?v=20261115b">
+    <link rel="stylesheet" href="css/chatbot.css?v=20261115c">
 </head>
 <body>
     <div class="chatbot-container">
@@ -37,6 +37,17 @@
                     <svg class="ic-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>
                     <svg class="ic-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
                 </button>
+                <button id="btn-voz-cfg" type="button" class="btn-altavoz" aria-expanded="false" aria-controls="panel-voz" title="Elegir la voz de ASTRA" aria-label="Elegir la voz de ASTRA">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+                </button>
+            </div>
+            <div class="panel-voz" id="panel-voz" hidden>
+                <label for="sel-voz">Voz de ASTRA</label>
+                <select id="sel-voz"></select>
+                <div class="panel-voz-fila">
+                    <button id="btn-probar-voz" type="button">Probar voz</button>
+                    <span id="nota-voz" class="nota-voz"></span>
+                </div>
             </div>
         </header>
 
@@ -56,8 +67,8 @@
         </footer>
     </div>
 
-    <script src="js/data-context.js?v=20261115b"></script>
-    <script src="js/voice-timezone.js?v=20261115b"></script>
-    <script src="js/astra-bot.js?v=20261115b"></script>
+    <script src="js/data-context.js?v=20261115c"></script>
+    <script src="js/voice-timezone.js?v=20261115c"></script>
+    <script src="js/astra-bot.js?v=20261115c"></script>
 </body>
 </html>

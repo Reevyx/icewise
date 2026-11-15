@@ -190,5 +190,48 @@ document.addEventListener("DOMContentLoaded", () => {
         if (avisar && on && !voiceManager.soportaVoz) agregarMensajeDOM("Tu navegador no puede leer en voz alta. Prueba con Chrome, Edge o Safari.", "bot");
     }
     btnAltavoz.addEventListener("click", () => setAltavoz(!altavoz, true));
+
+    // ---------- Elegir la voz (las naturales de Edge suenan mucho más humanas) ----------
+    const btnVozCfg = document.getElementById("btn-voz-cfg");
+    const panelVoz = document.getElementById("panel-voz");
+    const selVoz = document.getElementById("sel-voz");
+    const notaVoz = document.getElementById("nota-voz");
+    const PAISES = { MX: "México", ES: "España", PE: "Perú", AR: "Argentina", CO: "Colombia", CL: "Chile", US: "EE. UU.", VE: "Venezuela", BO: "Bolivia", EC: "Ecuador", UY: "Uruguay", PY: "Paraguay", CR: "Costa Rica", CU: "Cuba", DO: "Rep. Dominicana", GT: "Guatemala", HN: "Honduras", NI: "Nicaragua", PA: "Panamá", PR: "Puerto Rico", SV: "El Salvador", GQ: "Guinea Ecuatorial", "419": "Latinoamérica" };
+    const nombreVoz = (v) => {
+        const pais = PAISES[(v.lang.split(/[-_]/)[1] || "").toUpperCase()] || v.lang;
+        const nombre = v.name.replace(/^(Microsoft|Google)\s+/i, "").replace(/\s*Online\s*\(Natural\)/i, "").replace(/\s*-\s*Spanish.*$/i, "").trim();
+        return `${nombre} · ${pais}${VoiceManager.esNatural(v) ? " · natural" : ""}`;
+    };
+    function llenarVoces() {
+        const voces = voiceManager.vocesEspanol();
+        const actual = voiceManager.vozPreferida || "";
+        selVoz.textContent = "";
+        const auto = new Option("Automática (la más natural disponible)", "");
+        selVoz.add(auto);
+        voces.forEach((v) => selVoz.add(new Option(nombreVoz(v), v.voiceURI)));
+        selVoz.value = voces.some((v) => v.voiceURI === actual) ? actual : "";
+        const naturales = voces.filter(VoiceManager.esNatural).length;
+        notaVoz.textContent = !voiceManager.soportaVoz ? "Este navegador no puede leer en voz alta."
+            : !voces.length ? "No hay voces en español en este navegador."
+            : naturales ? `${naturales} voces naturales disponibles.`
+            : "Para voces más naturales, abre la web en Microsoft Edge.";
+    }
+    const abrirPanelVoz = (on) => {
+        panelVoz.hidden = !on; btnVozCfg.setAttribute("aria-expanded", String(on));
+        if (on) { llenarVoces(); selVoz.focus(); }
+    };
+    btnVozCfg.addEventListener("click", () => abrirPanelVoz(panelVoz.hidden));
+    document.addEventListener("click", (e) => { if (!panelVoz.hidden && !e.target.closest("#panel-voz, #btn-voz-cfg")) abrirPanelVoz(false); });
+    panelVoz.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); abrirPanelVoz(false); btnVozCfg.focus(); } });
+    const probarVoz = () => { voiceManager.desbloquearVoz(); voiceManager.speak("Hola, soy ASTRA. Así sueno con esta voz."); };
+    selVoz.addEventListener("change", () => {
+        voiceManager.setVozPreferida(selVoz.value);
+        try { localStorage.setItem("astra-voz", selVoz.value); } catch (_) {}
+        probarVoz();
+    });
+    document.getElementById("btn-probar-voz").addEventListener("click", probarVoz);
+    // Las voces del sistema llegan un momento después de abrir la página
+    if (voiceManager.soportaVoz) window.speechSynthesis.addEventListener?.("voiceschanged", () => { if (!panelVoz.hidden) llenarVoces(); });
+    voiceManager.setVozPreferida((() => { try { return localStorage.getItem("astra-voz") || ""; } catch (_) { return ""; } })());
     setAltavoz((() => { try { return localStorage.getItem("astra-altavoz") === "1"; } catch (_) { return false; } })(), false);
 });

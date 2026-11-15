@@ -141,12 +141,39 @@ class VoiceManager {
         window.speechSynthesis.speak(u);
     }
 
-    elegirVoz() {
-        const voces = this.voces && this.voces.length ? this.voces : (this.soportaVoz ? window.speechSynthesis.getVoices() : []);
+    // Voz elegida por la persona (voiceURI); vacío = automática
+    setVozPreferida(uri) {
+        this.vozPreferida = uri || "";
+    }
+
+    // Voces naturales: en Edge, "Microsoft … Online (Natural)"; en otros sistemas, las neuronales
+    static esNatural(v) {
+        return /natural|neural/i.test(v.name);
+    }
+
+    // Voces en español: primero las naturales, luego las del país elegido, luego el resto
+    vocesEspanol() {
+        const todas = this.soportaVoz ? window.speechSynthesis.getVoices() : [];
         const id = this.idioma.toLowerCase();
-        return voces.find((v) => v.lang.replace("_", "-").toLowerCase() === id)
-            || voces.find((v) => /^es[-_]/i.test(v.lang) && v.localService)
-            || voces.find((v) => /^es/i.test(v.lang))
+        const delPais = (v) => v.lang.replace("_", "-").toLowerCase() === id;
+        return todas
+            .filter((v) => /^es([-_]|$)/i.test(v.lang))
+            .sort((a, b) => (VoiceManager.esNatural(b) - VoiceManager.esNatural(a)) || (delPais(b) - delPais(a)) || a.name.localeCompare(b.name));
+    }
+
+    elegirVoz() {
+        const voces = this.vocesEspanol();
+        if (this.vozPreferida) {
+            const elegida = voces.find((v) => v.voiceURI === this.vozPreferida);
+            if (elegida) return elegida;
+        }
+        // Automática: la voz natural del país; si no hay, cualquier natural; si no, la del país; si no, la primera en español
+        const id = this.idioma.toLowerCase();
+        const delPais = (v) => v.lang.replace("_", "-").toLowerCase() === id;
+        return voces.find((v) => VoiceManager.esNatural(v) && delPais(v))
+            || voces.find((v) => VoiceManager.esNatural(v))
+            || voces.find(delPais)
+            || voces[0]
             || null;
     }
 

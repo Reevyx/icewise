@@ -30,8 +30,12 @@ const ASTRA_KNOWLEDGE = {
             respuesta: "Antes de perforar, el rover se detiene unos 20 minutos a medir con su sensor y decide: perfora solo si el hielo estimado supera el umbral (3 % por defecto), la pendiente es de 15° o menos y le queda batería para volver. Perfora 1 m con un taladro de 300 W (supuesto de diseño) y guarda la muestra en una bodega de 40 kg."
         },
         {
+            keywords: ["invent", "confirmad", "evidencia", "prueba de que", "por que hay hielo", "zonas de hielo", "seguro que hay"],
+            respuesta: "El hielo en los cráteres de sombra permanente del polo sur <strong>está confirmado</strong>: el impacto de LCROSS (2009) midió un 5,6 % de agua en el cráter Cabeus y en 2018 se publicó evidencia directa de hielo en la superficie (datos de M3). En la simulación, esas zonas de sombra se calculan con el relieve real (LOLA, NASA) y el hielo solo se pone dentro de ellas. Lo que sí es <strong>simulado</strong> es cuánto hay en cada punto, porque desde órbita solo se mide un promedio de kilómetros y nadie lo ha medido aún sobre el terreno."
+        },
+        {
             keywords: ["hielo", "neutron", "sensor", "detecta", "encuentra", "sombra permanente", "psr"],
-            respuesta: "El rover no ve el hielo: lo descubre con un <strong>sensor de neutrones</strong>, porque el hidrógeno del agua frena los neutrones. El hielo está en zonas de sombra permanente, donde nunca da el Sol (unos 40 K). En la simulación el relieve y las sombras son reales (LOLA, NASA), pero dónde hay hielo y cuánto es simulado."
+            respuesta: "El rover no ve el hielo: lo descubre con un <strong>sensor de neutrones</strong>, porque el hidrógeno del agua frena los neutrones. El hielo está en zonas de sombra permanente, donde nunca da el Sol (unos 40 K), y su presencia ahí está confirmada. En la simulación el relieve y las sombras son reales (LOLA, NASA); lo simulado es cuánto hielo hay en cada punto."
         },
         {
             keywords: ["velocidad", "rapido", "lento", "km/h", "viper"],
@@ -55,7 +59,7 @@ const ASTRA_KNOWLEDGE = {
         },
         {
             keywords: ["real", "simulad", "verdad", "inventad", "supuesto", "hipotesis"],
-            respuesta: "Es real: el relieve y las sombras (LOLA, NASA), el cielo, la Tierra y la física del calor y del vacío. Es simulado: el hielo bajo el suelo y los resultados de producción. Son supuestos o hipótesis: la colonia de 10 personas, la velocidad del rover, el taladro, el cargador, la regeneración del filtro y que los microorganismos limpien el agua en la Luna."
+            respuesta: "Es real: el relieve y las sombras (LOLA, NASA), el cielo, la Tierra y la física del calor y del vacío. Es simulado: cuánto hielo hay en cada punto (las zonas de sombra donde está sí son reales) y los resultados de producción. Son supuestos o hipótesis: la colonia de 10 personas, la velocidad del rover, el taladro, el cargador, la regeneración del filtro y que los microorganismos limpien el agua en la Luna."
         },
         {
             keywords: ["agua", "litro", "produc", "abastec", "cuanto tarda"],
