@@ -40,6 +40,7 @@
   const chase = { yaw: 0, pitch: 0.3, dist: 9, drag: false, lastDrag: 0 };   // cámara en 3ª persona
   const rcam = { yaw: 0, pitch: 0, zoom: 1, drag: false, dist: 0, aim: new THREE.Vector3() };   // cámara del mástil
   const tele = { yaw: 0, pitch: 0, fov: 6.5, drag: false };   // Vista Tierra: teleobjetivo desde la estación
+  const TOUCH = { pts: new Map(), d0: 0, base: null };          // dedos sobre la vista 3D (pellizco para acercar)
   let grainsUpd = () => {}, dustUpd = () => {};
   let iceMesh, detMesh, psrMesh, crystals, detCanvas, detCtx, detTex;
   const R3 = {}, ST = {}, BIO = {}, COL = {};
@@ -112,6 +113,8 @@
     camera = new THREE.PerspectiveCamera(46, 1, 0.25, 100000);
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     Object.assign(controls, { enableDamping: true, dampingFactor: 0.08, maxPolarAngle: Math.PI * 0.495, minDistance: 2.2, maxDistance: W.SIZE * 2.5, rotateSpeed: 0.8, zoomSpeed: 1.1 });
+    // Pantallas táctiles: un dedo desplaza la vista sobre el terreno y dos dedos giran y acercan, como en un mapa
+    if (THREE.TOUCH) { controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }; controls.screenSpacePanning = false; }
 
     // Luz: Sol rasante real (1,2° sobre el horizonte) con sombras que siguen a la cámara; luz cenicienta de la Tierra;
     // reflejo del terreno iluminado (mapa de entorno). La "luz de apoyo" es opcional y no es realista.
@@ -582,7 +585,7 @@
     (COL.techos || []).forEach(o => { o.visible = true; });                    // dentro, con techo
     ((COL.capas || {}).reg || []).forEach(o => { o.visible = false; });     // las bermas atraviesan los cascos por dentro
     colonyInteriores(); colonyLuz(); colonySelect(COL.sel || 'A', false);
-    $('#sim-walk').hidden = false; $('#col-dentro-fila').hidden = false;
+    $('#sim-walk').hidden = false; $('#col-dentro-fila').hidden = false; $('#sim-campad').hidden = true;
     walkMapPrep(); walkUpdate(0);
     $('#sim-view').focus({ preventScroll: true });
     toast('W A S D para caminar · arrastra para mirar · Shift para correr · Esc para salir');
@@ -594,7 +597,7 @@
     const reg = $('#col-capas input[data-capa="reg"]');
     ((COL.capas || {}).reg || []).forEach(o => { o.visible = !COL.corte && (!reg || reg.checked); });
     colonyInteriores();
-    $('#sim-walk').hidden = true;
+    $('#sim-walk').hidden = true; $('#sim-campad').hidden = false;
     const f = $('#col-dentro-fila'); if (f) f.hidden = true;
     setTimeout(() => colonySelect(COL.sel || 'A', false), 0);
   }
@@ -666,11 +669,18 @@
     colonyInteriores();
     refreshObstacles();
   }
+  function bindCamPad() {
+    $$('#sim-campad [data-m]').forEach(b => {
+      const on = e => { e.preventDefault(); camKeys[b.dataset.m] = true; b.classList.add('is-on'); };
+      const off = () => { camKeys[b.dataset.m] = false; b.classList.remove('is-on'); };
+      b.addEventListener('pointerdown', on); ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, off));
+    });
+  }
   function bindWalk() {
     const el = renderer.domElement;
     el.addEventListener('pointerdown', ev => { if (camMode !== 'inside') return; WALK.drag = true; WALK.px = ev.clientX; WALK.py = ev.clientY; });
     window.addEventListener('pointermove', ev => {
-      if (!WALK.drag) return;
+      if (!WALK.drag || TOUCH.pts.size > 1) return;
       WALK.yaw -= (ev.clientX - WALK.px) * 0.0042; WALK.pitch = Math.max(-1.3, Math.min(1.15, WALK.pitch - (ev.clientY - WALK.py) * 0.0042));
       WALK.px = ev.clientX; WALK.py = ev.clientY;
     });
@@ -689,7 +699,7 @@
     $('#col-corte').addEventListener('click', () => colonyCorte(!COL.corte));
     $('#col-salir').addEventListener('click', () => setCam('colony'));
     $('#col-entrar').addEventListener('click', () => colonyEnter('A_esclusa'));
-    bindWalk();
+    bindWalk(); bindCamPad();
     $('#col-etapas').innerHTML = COL_ETAPAS.map(([n, t, d], i) => `<li class="${i === 0 ? 'is-on' : ''}"><b>${n}</b><span><strong>${t}</strong>${d}</span></li>`).join('');
     colonySelect('A', false);
   }
@@ -1159,11 +1169,16 @@
   // W A S D: desplaza cámara y objetivo sobre el terreno, en la dirección en que se mira. La velocidad crece con la
   // distancia (cerca = preciso, vista general = rápido). Al moverse se deja de seguir al rover/estación.
   let lastCamT = performance.now();
+  function toFreeCam() {
+    if (camMode === 'free') return;
+    camMode = 'free'; setCamLens('free'); $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true;
+    set('sim-cam-cur', 'Cámara libre'); setToolUI();
+  }
   function moveCameraWASD() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastCamT) / 1000); lastCamT = now;
     const f = (camKeys.w ? 1 : 0) - (camKeys.s ? 1 : 0), r = (camKeys.d ? 1 : 0) - (camKeys.a ? 1 : 0);
     if (!f && !r) return;
-    if (camMode !== 'free') { camMode = 'free'; setCamLens('free'); $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true; }
+    toFreeCam();
     const fwd = new THREE.Vector3().subVectors(controls.target, camera.position); fwd.y = 0;
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
@@ -1315,17 +1330,35 @@
       tip.style.left = Math.min(r.width - 250, ev.clientX - r.left + 14) + 'px'; tip.style.top = Math.max(50, ev.clientY - r.top - 10) + 'px';
     });
     el.addEventListener('pointerleave', () => { tip.hidden = true; });
+    const tdist = () => { const [a, b] = [...TOUCH.pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+    el.addEventListener('pointerdown', ev => {
+      if (ev.pointerType !== 'touch') return;
+      TOUCH.pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (['colony', 'station', 'overview'].includes(camMode) && !destMode) toFreeCam();
+      if (TOUCH.pts.size === 2) { TOUCH.d0 = tdist(); TOUCH.base = { cd: chase.dist, rz: rcam.zoom, tf: tele.fov }; }
+    }, true);
+    window.addEventListener('pointermove', ev => {
+      if (!TOUCH.pts.has(ev.pointerId)) return;
+      TOUCH.pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (TOUCH.pts.size !== 2 || !TOUCH.d0) return;
+      const k = tdist() / TOUCH.d0, B = TOUCH.base;
+      if (camMode === 'rover') chase.dist = Math.max(4, Math.min(45, B.cd / k));
+      else if (camMode === 'rovercam') { rcam.zoom = Math.max(1, Math.min(60, B.rz * k)); updateRoverHUD(); }
+      else if (camMode === 'tierra') tele.fov = Math.max(2, Math.min(40, B.tf / k));
+    });
+    const tup = ev => { TOUCH.pts.delete(ev.pointerId); if (TOUCH.pts.size < 2) TOUCH.d0 = 0; };
+    window.addEventListener('pointerup', tup); window.addEventListener('pointercancel', tup);
     el.addEventListener('pointerdown', ev => { down = { x: ev.clientX, y: ev.clientY };
       if (camMode === 'rover' && !destMode) { chase.drag = true; chase.px = ev.clientX; chase.py = ev.clientY; }
       if (camMode === 'rovercam' && !destMode) { rcam.drag = true; rcam.px = ev.clientX; rcam.py = ev.clientY; }
       if (camMode === 'tierra' && !destMode) { tele.drag = true; tele.px = ev.clientX; tele.py = ev.clientY; } });
     window.addEventListener('pointermove', ev => {
-      if (!tele.drag) return; const k = 0.0045 * tele.fov / 46;
+      if (!tele.drag || TOUCH.pts.size > 1) return; const k = 0.0045 * tele.fov / 46;
       tele.yaw -= (ev.clientX - tele.px) * k; tele.pitch = Math.max(-0.4, Math.min(0.6, tele.pitch - (ev.clientY - tele.py) * k)); tele.px = ev.clientX; tele.py = ev.clientY;
     });
     window.addEventListener('pointerup', () => { tele.drag = false; });
     window.addEventListener('pointermove', ev => {
-      if (!rcam.drag) return;
+      if (!rcam.drag || TOUCH.pts.size > 1) return;
       const k = 0.0045 / rcam.zoom;                                   // con más zoom, giro más fino
       rcam.yaw -= (ev.clientX - rcam.px) * k; rcam.pitch = Math.max(-1.35, Math.min(0.9, rcam.pitch - (ev.clientY - rcam.py) * k));
       rcam.px = ev.clientX; rcam.py = ev.clientY;
@@ -1333,7 +1366,7 @@
     window.addEventListener('pointerup', () => { rcam.drag = false; });
     el.addEventListener('dblclick', () => { if (camMode === 'rovercam') Object.assign(rcam, { yaw: 0, pitch: 0, zoom: 1 }); if (camMode === 'tierra') Object.assign(tele, { yaw: 0, pitch: 0, fov: 6.5 }); });
     window.addEventListener('pointermove', ev => {
-      if (!chase.drag) return;
+      if (!chase.drag || TOUCH.pts.size > 1) return;
       chase.yaw -= (ev.clientX - chase.px) * 0.006; chase.pitch = Math.max(0.05, Math.min(1.25, chase.pitch + (ev.clientY - chase.py) * 0.004));
       chase.px = ev.clientX; chase.py = ev.clientY; chase.lastDrag = performance.now();
     });

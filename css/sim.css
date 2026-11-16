@@ -551,3 +551,46 @@ input[type="checkbox"]:checked::before { transform: scale(1); }
 .col-salas .btn { justify-content: flex-start; font-size: 12px; padding: 7px 12px; }
 .col-dentro { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; margin-bottom: 8px; border-radius: 12px; background: rgba(82,102,235,.18); border: 1px solid rgba(82,102,235,.4); font-size: 12px; color: var(--color-ivory-text); }
 .col-dentro[hidden] { display: none; }
+
+/* =========================================================================
+   Responsive de la simulación (celular y laptops pequeñas)
+   ========================================================================= */
+.sim-intro-card { max-height: 100%; overflow-y: auto; scrollbar-width: thin; }
+/* Flechas de cámara en pantalla: solo en pantallas táctiles (equivalen a W A S D) */
+.sim-campad { display: none; position: absolute; left: 10px; bottom: 56px; z-index: 2; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 5px; }
+.sim-campad button { appearance: none; border: 1px solid var(--line-mid); background: rgba(23,23,33,.72); color: var(--color-ivory-text); border-radius: 12px; font-size: 14px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.sim-campad button.is-on { background: var(--color-ivory-text); color: var(--color-onyx-canvas); }
+.sim-campad [data-m="w"] { grid-column: 2; grid-row: 1; } .sim-campad [data-m="a"] { grid-column: 1; grid-row: 2; }
+.sim-campad [data-m="s"] { grid-column: 2; grid-row: 2; } .sim-campad [data-m="d"] { grid-column: 3; grid-row: 2; }
+@media (pointer: coarse) { .sim-campad { display: grid; } }
+.sim-campad[hidden], .sim-view.is-exp .sim-campad { display: none !important; }
+@media (max-width: 760px) {
+  /* Paneles (colonia, mapa, capas…) a lo ancho de la vista, sin tapar los botones de abajo */
+  .sim-side { left: 8px; right: 50px; top: 52px; bottom: 54px; max-height: none; }
+  .sim-side .sim-panel2, .sim-colony { width: auto; }
+  .sim-ctrl { left: 8px; right: 50px; max-height: calc(100% - 170px); }
+  .sim-ctrl.sim-panel2 { width: auto; }
+  .sim-pad { bottom: 108px; }
+  .sim-hud { right: 50px; }
+  .hud-task { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sim-banner { white-space: normal; width: 86%; text-align: center; font-size: 12px; }
+}
+@media (max-width: 640px) {
+  .sim-intro { padding: 10px; }
+  .sim-intro-card { padding: 18px; }
+  .sim-intro-card ol { font-size: 13.5px; gap: 8px; }
+  .pstep { padding: 8px 6px 6px; } .pstep .pt { font-size: 12px; }
+  .pstep .pv { white-space: normal; overflow-wrap: anywhere; }
+  .sim-qpop { width: min(300px, calc(100vw - 32px)); }
+}
+/* Pantalla completa en el celular: la barra de abajo se desliza de lado y los botones de cámara suben */
+@media (max-width: 760px) {
+  .sim-stage:fullscreen .sim-bar { right: 8px; left: 8px; bottom: 8px; overflow-x: auto; scrollbar-width: none; }
+  .sim-stage:fullscreen .sim-dock { bottom: 64px; }
+  .sim-stage:fullscreen .sim-campad { bottom: 108px; }
+}
+@media (max-width: 760px) {
+  .sim-stage:-webkit-full-screen .sim-bar { right: 8px; left: 8px; bottom: 8px; overflow-x: auto; scrollbar-width: none; }
+  .sim-stage:-webkit-full-screen .sim-dock { bottom: 64px; }
+  .sim-stage:-webkit-full-screen .sim-campad { bottom: 108px; }
+}

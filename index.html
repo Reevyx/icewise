@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,300..600&family=Inter:wght@300..600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261115t">
-  <link rel="stylesheet" href="css/sim.css?v=20261115t">
+  <link rel="stylesheet" href="css/styles.css?v=20261115u">
+  <link rel="stylesheet" href="css/sim.css?v=20261115u">
   <link rel="stylesheet" href="chatbot/astra-launcher.css?v=20261115a">
   <link rel="preload" as="image" href="assets/img/hero-artemis2-terminator.jpg">
 </head>
@@ -256,6 +256,7 @@
                 <dt><kbd>E</kbd></dt><dd>Elegir a dónde enviar el rover</dd>
                 <dt><kbd>M</kbd> <kbd>G</kbd> <kbd>L</kbd> <kbd>C</kbd></dt><dd>Mapa · telemetría · capas · colonia</dd>
                 <dt><kbd>X</kbd> <kbd>F</kbd></dt><dd>Despiece · pantalla completa</dd>
+                <dt>Pantalla táctil</dt><dd>Un dedo: desplazar la vista (en 3ª persona, girar) · dos dedos: girar y pellizcar para acercar · flechas en pantalla: mover la cámara</dd>
                 <dt>Dentro de la colonia</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> caminar · <kbd>←</kbd><kbd>→</kbd> girar · <kbd>Shift</kbd> correr · <kbd>Esc</kbd> salir</dd>
               </dl>
             </div>
@@ -332,6 +333,12 @@
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
               <span>Enviar rover</span>
             </button>
+          </div>
+          <div class="sim-campad" id="sim-campad" role="group" aria-label="Mover la cámara">
+            <button type="button" data-m="w" aria-label="Mover la cámara hacia delante">▲</button>
+            <button type="button" data-m="a" aria-label="Mover la cámara a la izquierda">◀</button>
+            <button type="button" data-m="s" aria-label="Mover la cámara hacia atrás">▼</button>
+            <button type="button" data-m="d" aria-label="Mover la cámara a la derecha">▶</button>
           </div>
           <div class="sim-pad" id="sim-pad" hidden>
             <button data-k="up" aria-label="Avanzar (tecla W)">W</button>
@@ -667,17 +674,17 @@
 <script src="assets/vendor/three-r170.js"></script>
 <script src="assets/sky/estrellas.js"></script>
 <script>if (location.protocol === 'file:') document.write('<script src="assets/sky/cielo-local.js"><\/script><script src="assets/terrain/terreno-local.js"><\/script>');</script>
-<script src="js/sim-env.js?v=20261115t"></script>
-<script src="js/core.js?v=20261115t"></script>
-<script src="js/data.js?v=20261115t"></script>
-<script src="js/model.js?v=20261115t"></script>
-<script src="js/dem-shackleton.js?v=20261115t"></script>
-<script src="js/sim-engine.js?v=20261115t"></script>
-<script src="js/sim-explain.js?v=20261115t"></script>
-<script src="js/sim-view.js?v=20261115t"></script>
-<script src="js/viability.js?v=20261115t"></script>
-<script src="js/proto.js?v=20261115t"></script>
-<script src="js/main.js?v=20261115t"></script>
+<script src="js/sim-env.js?v=20261115u"></script>
+<script src="js/core.js?v=20261115u"></script>
+<script src="js/data.js?v=20261115u"></script>
+<script src="js/model.js?v=20261115u"></script>
+<script src="js/dem-shackleton.js?v=20261115u"></script>
+<script src="js/sim-engine.js?v=20261115u"></script>
+<script src="js/sim-explain.js?v=20261115u"></script>
+<script src="js/sim-view.js?v=20261115u"></script>
+<script src="js/viability.js?v=20261115u"></script>
+<script src="js/proto.js?v=20261115u"></script>
+<script src="js/main.js?v=20261115u"></script>
 <script src="chatbot/astra-launcher.js?v=20261115a"></script>
 </body>
 </html>

@@ -599,3 +599,17 @@ details.eq-block .body { padding-bottom: 20px; }
   body { background: #fff; color: #111; }
   .card, .table-wrap { background: #f4f4f7; }
 }
+
+/* =========================================================================
+   Responsive: los textos nunca se salen de sus cajas
+   ========================================================================= */
+h1, h2, h3, h4, h5, p, li, dd, dt, td, th, figcaption, summary, label, .btn { overflow-wrap: break-word; }
+@media (max-width: 640px) { h1, h2, h3, h4 { -webkit-hyphens: auto; hyphens: auto; } }
+/* Tarjetas de tres en una columna estrecha (p. ej., «El reto» en laptops): bajan de fila antes de apretarse */
+.split .grid-3 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.card h4 { -webkit-hyphens: auto; hyphens: auto; }
+/* Selectores segmentados: en pantallas estrechas, columnas iguales y el texto puede ir en dos líneas */
+@media (max-width: 640px) {
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-radius: 18px; max-width: 100%; }
+  .seg button { white-space: normal; line-height: 1.2; padding-left: 8px; padding-right: 8px; text-align: center; }
+}
