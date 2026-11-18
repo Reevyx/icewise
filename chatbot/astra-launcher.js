@@ -4,6 +4,7 @@
    no afectan al resto de la página). Se carga solo la primera vez que se abre.
    ========================================================================= */
 (function () {
+  const T = window.L || ((es) => es);   // idioma de la página (js/i18n.js)
   const BASE = (document.currentScript && document.currentScript.src) ? new URL('.', document.currentScript.src).href : 'chatbot/';
 
   function build() {
@@ -14,13 +15,13 @@
       '<svg class="ic-chat" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/><path d="M8.5 9.5h7M8.5 12.5h4" stroke-linecap="round"/></svg>' +
       '<svg class="ic-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
       '<span class="astra-fab-t">ASTRA</span>';
-    btn.title = 'Abrir el asistente ASTRA'; btn.setAttribute('aria-label', 'Abrir el asistente ASTRA');
+    btn.title = T('Abrir el asistente ASTRA', 'Open the ASTRA assistant'); btn.setAttribute('aria-label', btn.title);
 
     const panel = document.createElement('div');
     panel.className = 'astra-panel'; panel.id = 'astra-panel'; panel.hidden = true;
-    panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Asistente ASTRA');
+    panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', T('Asistente ASTRA', 'ASTRA assistant'));
     const frame = document.createElement('iframe');
-    frame.title = 'Asistente ASTRA'; frame.setAttribute('allow', 'microphone; autoplay');
+    frame.title = T('Asistente ASTRA', 'ASTRA assistant'); frame.setAttribute('allow', 'microphone; autoplay');
     panel.appendChild(frame);
 
     document.body.append(panel, btn);
@@ -28,7 +29,7 @@
     const open = (on) => {
       if (on && !frame.src) frame.src = BASE + 'index.html?embed=1';
       panel.hidden = !on; btn.setAttribute('aria-expanded', String(on)); btn.classList.toggle('is-open', on);
-      const t = on ? 'Cerrar el asistente ASTRA' : 'Abrir el asistente ASTRA';
+      const t = on ? T('Cerrar el asistente ASTRA', 'Close the ASTRA assistant') : T('Abrir el asistente ASTRA', 'Open the ASTRA assistant');
       btn.title = t; btn.setAttribute('aria-label', t);
       if (on) setTimeout(() => { try { frame.contentWindow.focus(); const i = frame.contentDocument && frame.contentDocument.getElementById('input-chat'); if (i) i.focus(); } catch (_) { frame.focus(); } }, 120);
     };

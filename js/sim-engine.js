@@ -15,6 +15,7 @@
    ========================================================================= */
 (function (root) {
   'use strict';
+  const L = root.L || ((es) => es);   // idioma de la página (js/i18n.js); en Node, español
   const M = root.IceModel;
   const SIZE = 600, HALF = 300, N = 151, STEP = SIZE / (N - 1);   // malla de alturas: 4 m
   const KG = 75, KCELL = SIZE / KG;                                 // rejilla de conocimiento: 8 m
@@ -170,9 +171,9 @@
   // ESPECIES (parámetros aproximados para demostración)
   // =====================================================================
   const SPECIES = [
-    { id: 'dper', name: 'D. peraridilitoris', kind: 'bacteria', Tmin: 10, Topt: 30, Tmax: 40, mu: 0.25, D10: 6000, kdry: 0.0005, kfreeze: 0.0005, kd0: 0.002, K: 1e9, N0: 1e5, unit: 'cél/mL' },
-    { id: 'pext', name: 'P. extremorientalis', kind: 'bacteria', Tmin: 4, Topt: 28, Tmax: 37, mu: 0.5, D10: 150, kdry: 0.05, kfreeze: 0.01, kd0: 0.003, K: 1e9, N0: 1e5, unit: 'cél/mL' },
-    { id: 'plac', name: 'Placopsis (liquen)', kind: 'lichen', Tmin: -10, Topt: 12, Tmax: 25, mu: 0.00015, D10: 1500, kdry: 0.00002, kfreeze: 0.00001, kd0: 0.00001, K: 100, N0: 5, unit: '% cobertura', needsLight: true }
+    { id: 'dper', name: 'D. peraridilitoris', kind: 'bacteria', Tmin: 10, Topt: 30, Tmax: 40, mu: 0.25, D10: 6000, kdry: 0.0005, kfreeze: 0.0005, kd0: 0.002, K: 1e9, N0: 1e5, unit: L('cél/mL', 'cells/mL') },
+    { id: 'pext', name: 'P. extremorientalis', kind: 'bacteria', Tmin: 4, Topt: 28, Tmax: 37, mu: 0.5, D10: 150, kdry: 0.05, kfreeze: 0.01, kd0: 0.003, K: 1e9, N0: 1e5, unit: L('cél/mL', 'cells/mL') },
+    { id: 'plac', name: L('Placopsis (liquen)', 'Placopsis (lichen)'), kind: 'lichen', Tmin: -10, Topt: 12, Tmax: 25, mu: 0.00015, D10: 1500, kdry: 0.00002, kfreeze: 0.00001, kd0: 0.00001, K: 100, N0: 5, unit: L('% cobertura', '% cover'), needsLight: true }
   ];
   function ctmi(T, s) { // Modelo de temperaturas cardinales (Rosso et al.)
     if (T <= s.Tmin || T >= s.Tmax) return 0;
@@ -372,7 +373,7 @@
         case 'idle':
           R.speed = 0;
           if (R.mode === 'auto' && S.running && R.battery >= ROVER.cap * 0.95) {
-            R.task = 'explore'; R.wp = null; log('Batería cargada: inicio de exploración.', 'key');
+            R.task = 'explore'; R.wp = null; log(L('Batería cargada: inicio de exploración.', 'Battery charged: starting exploration.'), 'key');
           }
           break;
         case 'explore': {
@@ -381,26 +382,26 @@
             if (R.routeI < R.route.length - 1) {
               R.routeI++; const p = R.route[R.routeI];
               R.target = { x: p.x, z: p.z }; R.cand = ki(p.x, p.z); R.task = 'goto'; R.stuckT = 0;
-              log(`Ruta: hacia el punto ${R.routeI + 1} de ${R.route.length}.`); break;
+              log(L(`Ruta: hacia el punto ${R.routeI + 1} de ${R.route.length}.`, `Route: heading to point ${R.routeI + 1} of ${R.route.length}.`)); break;
             }
-            R.route = null; R.routeDone = true; R.routeEnd = { t: S.t, d3: S.totals.dist3, holes: S.totals.holes }; log('Ruta completada.', 'key');   // instante exacto del final, para medir el recorrido
+            R.route = null; R.routeDone = true; R.routeEnd = { t: S.t, d3: S.totals.dist3, holes: S.totals.holes }; log(L('Ruta completada.', 'Route completed.'), 'key');   // instante exacto del final, para medir el recorrido
           }
-          if (!R.wp || S.t - R.lastWpPick > 1800) { R.wp = pickWaypoint(); R.lastWpPick = S.t; if (!R.wp) { log('Zona explorada por completo. Regreso a la estación.'); R.task = 'return'; break; } }
+          if (!R.wp || S.t - R.lastWpPick > 1800) { R.wp = pickWaypoint(); R.lastWpPick = S.t; if (!R.wp) { log(L('Zona explorada por completo. Regreso a la estación.', 'Area fully explored. Returning to the station.')); R.task = 'return'; break; } }
           const res = driveToward(R.wp.x, R.wp.z, dt);
           if (res === true) R.wp = null;
-          if (res === 'blocked' && R.stuckT > 60) { if (S.t - (R.lastBlockLog || -1e9) > 1800) { log('Pendiente excesiva (> 24°): cambio de ruta.', 'warn'); R.lastBlockLog = S.t; } R.wp = null; R.stuckT = 0; }
+          if (res === 'blocked' && R.stuckT > 60) { if (S.t - (R.lastBlockLog || -1e9) > 1800) { log(L('Pendiente excesiva (> 24°): cambio de ruta.', 'Slope too steep (> 24°): changing route.'), 'warn'); R.lastBlockLog = S.t; } R.wp = null; R.stuckT = 0; }
           if (S.t - R.lastSense > 2) {
             R.lastSense = S.t; sense(1.2);
             const c = findCandidate();
-            if (c !== null) { R.cand = c; R.task = 'goto'; const e = est(c); log(`Señal de hidrógeno: celda con ${e.toFixed(1)} % estimado. Me acerco para caracterizar.`, 'key'); }
+            if (c !== null) { R.cand = c; R.task = 'goto'; const e = est(c); log(L(`Señal de hidrógeno: celda con ${e.toFixed(1)} % estimado. Me acerco para caracterizar.`, `Hydrogen signal: cell with an estimated ${e.toFixed(1)}%. Moving closer to characterise it.`), 'key'); }
           }
           break;
         }
         case 'goto': {
           const c = R.target || cellCenter(R.cand);
           const res = driveToward(c.x, c.z, dt);
-          if (res === 'blocked' && R.stuckT > 90) { log('No puedo llegar: la pendiente supera 24°. Sigo explorando.', 'warn'); R.target = null; R.stuckT = 0; R.task = R.mode === 'auto' ? 'explore' : 'manual'; R.wp = null; break; }
-          if (res === true) { R.task = 'characterize'; R.charT = 0; R.speed = 0; R.target = null; R.cand = ki(R.x, R.z); log('Caracterización: integración de neutrones durante 20 min.'); }
+          if (res === 'blocked' && R.stuckT > 90) { log(L('No puedo llegar: la pendiente supera 24°. Sigo explorando.', 'I cannot get there: the slope is over 24°. Continuing to explore.'), 'warn'); R.target = null; R.stuckT = 0; R.task = R.mode === 'auto' ? 'explore' : 'manual'; R.wp = null; break; }
+          if (res === true) { R.task = 'characterize'; R.charT = 0; R.speed = 0; R.target = null; R.cand = ki(R.x, R.z); log(L('Caracterización: integración de neutrones durante 20 min.', 'Characterisation: integrating neutrons for 20 min.')); }
           if (S.t - R.lastSense > 2) { R.lastSense = S.t; sense(1.2); }
           break;
         }
@@ -413,9 +414,9 @@
           const e = est(R.cand), slope = world.slopeAt(R.x, R.z);
           const needWh = P.drillPower * (P.drillDepth / drillRate(5)) * 2 + returnWh(distSt());
           const okIce = e >= P.iceThreshold, okSlope = slope <= 15, okBat = R.battery - needWh >= ROVER.cap * P.reserve / 100;
-          if (okIce && okSlope && okBat) { R.task = 'drill'; R.drillDepth = 0; log(`GO: ${e.toFixed(1)} % ≥ ${P.iceThreshold} %, pendiente ${slope.toFixed(0)}°, batería suficiente. Perforando.`, 'key'); }
+          if (okIce && okSlope && okBat) { R.task = 'drill'; R.drillDepth = 0; log(L(`GO: ${e.toFixed(1)} % ≥ ${P.iceThreshold} %, pendiente ${slope.toFixed(0)}°, batería suficiente. Perforando.`, `GO: ${e.toFixed(1)}% ≥ ${P.iceThreshold}%, slope ${slope.toFixed(0)}°, enough battery. Drilling.`), 'key'); }
           else {
-            const why = [!okIce && `concentración ${e.toFixed(1)} % < ${P.iceThreshold} %`, !okSlope && `pendiente ${slope.toFixed(0)}°`, !okBat && 'batería insuficiente'].filter(Boolean).join(', ');
+            const why = [!okIce && L(`concentración ${e.toFixed(1)} % < ${P.iceThreshold} %`, `concentration ${e.toFixed(1)}% < ${P.iceThreshold}%`), !okSlope && L(`pendiente ${slope.toFixed(0)}°`, `slope ${slope.toFixed(0)}°`), !okBat && L('batería insuficiente', 'not enough battery')].filter(Boolean).join(', ');
             log(`NO-GO: ${why}.`, 'warn');
             if (!okBat) { R.task = 'return'; } else { S.know.rejected[R.cand] = 1; R.task = 'explore'; R.wp = null; }
           }
@@ -433,15 +434,15 @@
             R.cargoReg += dryMass; R.cargoIce += ice; S.totals.holes++;
             S.holes.push({ x: R.x, z: R.z, w });
             const e = est(R.cand) ?? 0;
-            log(`Muestra ${S.totals.holes}: ${(dryMass + ice).toFixed(1)} kg, hielo medido ${w.toFixed(1)} % (estimado por neutrones ${e.toFixed(1)} %).`, w >= P.iceThreshold ? '' : 'warn');
+            log(L(`Muestra ${S.totals.holes}: ${(dryMass + ice).toFixed(1)} kg, hielo medido ${w.toFixed(1)} % (estimado por neutrones ${e.toFixed(1)} %).`, `Sample ${S.totals.holes}: ${(dryMass + ice).toFixed(1)} kg, measured ice ${w.toFixed(1)}% (neutron estimate ${e.toFixed(1)}%).`), w >= P.iceThreshold ? '' : 'warn');
             // Calibración: la medida directa corrige el mapa en esa celda
             const k = ki(R.x, R.z); S.know.sum[k] = w * 10; S.know.n[k] = 10; S.know.drilled[k]++;
             R.drillDepth = 0;
             const needBack = returnWh(distSt()) + ROVER.cap * P.reserve / 100;
-            if (R.cargoReg + R.cargoIce >= P.cargoCap) { log('Bodega llena: regreso a la estación.'); R.task = 'return'; }
-            else if (R.battery < needBack + P.drillPower * 2) { log('Batería en reserva: regreso.', 'warn'); R.task = 'return'; }
+            if (R.cargoReg + R.cargoIce >= P.cargoCap) { log(L('Bodega llena: regreso a la estación.', 'Cargo bay full: returning to the station.')); R.task = 'return'; }
+            else if (R.battery < needBack + P.drillPower * 2) { log(L('Batería en reserva: regreso.', 'Battery on reserve: returning.'), 'warn'); R.task = 'return'; }
             else if (R.mode === 'manual') { R.task = 'manual'; }
-            else if (w < P.iceThreshold * 0.5) { S.know.rejected[R.cand] = 1; R.task = 'explore'; R.wp = null; log('La perforación no confirma el hielo: celda descartada.', 'warn'); }
+            else if (w < P.iceThreshold * 0.5) { S.know.rejected[R.cand] = 1; R.task = 'explore'; R.wp = null; log(L('La perforación no confirma el hielo: celda descartada.', 'Drilling does not confirm the ice: cell discarded.'), 'warn'); }
             else { R.task = 'reposition'; R.wp = { x: R.x + Math.cos(R.heading + 1.5) * 4, z: R.z + Math.sin(R.heading + 1.5) * 4 }; }
           }
           break;
@@ -459,7 +460,7 @@
 
       // Seguridad energética durante la exploración
       if (R.mode === 'auto' && ['explore', 'goto', 'characterize'].includes(R.task)) {
-        if (R.battery < returnWh(distSt()) + ROVER.cap * P.reserve / 100) { log(`Reserva de batería (${P.reserve} %): regreso a la estación.`, 'warn'); R.task = 'return'; }
+        if (R.battery < returnWh(distSt()) + ROVER.cap * P.reserve / 100) { log(L(`Reserva de batería (${P.reserve} %): regreso a la estación.`, `Battery reserve (${P.reserve}%): returning to the station.`), 'warn'); R.task = 'return'; }
       }
 
       // ---------- Energía y térmica ----------
@@ -477,8 +478,8 @@
       R.charge = atStation && Math.abs(R.speed) < 0.01 ? Math.min(ROVER.chargeW, S.plant ? S.plant.avail + ROVER.chargeW : ROVER.chargeW) : 0;
       R.battery = clamp(R.battery + (R.solar + R.charge - R.power) * dt / 3600, 0, ROVER.cap);
       R.Tenv = Tenv;
-      if (R.battery <= 0 && R.task !== 'dead') { R.task = 'dead'; log('Batería agotada: el rover queda inmovilizado. Ajusta la reserva o el umbral y reinicia.', 'warn'); }
-      if (R.sysT < 230 && !R.coldWarned) { R.coldWarned = true; log('Electrónica por debajo de 230 K: riesgo de daño térmico.', 'warn'); }
+      if (R.battery <= 0 && R.task !== 'dead') { R.task = 'dead'; log(L('Batería agotada: el rover queda inmovilizado. Ajusta la reserva o el umbral y reinicia.', 'Battery depleted: the rover is stranded. Adjust the reserve or the threshold and restart.'), 'warn'); }
+      if (R.sysT < 230 && !R.coldWarned) { R.coldWarned = true; log(L('Electrónica por debajo de 230 K: riesgo de daño térmico.', 'Electronics below 230 K: risk of thermal damage.'), 'warn'); }
       if (R.sysT > 240) R.coldWarned = false;
     }
     function drillRate(w) { return 1.2 * (P.drillPower / 150) / (1 + w / 3); } // m/h — el hielo endurece el regolito
@@ -488,7 +489,7 @@
       if (R.cargoReg <= 0) return;
       S.plant.queue.push({ reg: R.cargoReg, ice: R.cargoIce });
       S.totals.reg += R.cargoReg; S.totals.ice += R.cargoIce;
-      log(`Descarga en la estación: ${R.cargoReg.toFixed(1)} kg de regolito con ${R.cargoIce.toFixed(2)} kg de hielo.`, 'key');
+      log(L(`Descarga en la estación: ${R.cargoReg.toFixed(1)} kg de regolito con ${R.cargoIce.toFixed(2)} kg de hielo.`, `Unloading at the station: ${R.cargoReg.toFixed(1)} kg of regolith with ${R.cargoIce.toFixed(2)} kg of ice.`), 'key');
       R.cargoReg = 0; R.cargoIce = 0;
     }
 
@@ -500,7 +501,7 @@
       const adsLow = P.adsRegen && Pl.adsSpent > 1e-4 && Pl.adsorbent < 0.5;   // poco adsorbente: el horno lo regenera antes del siguiente lote
       if (Pl.state === 'vacío' && Pl.queue.length && !adsLow) {
         const b = Pl.queue.shift(); Pl.reg = b.reg; Pl.ice = b.ice; Pl.T = 55; Pl.released = 0; Pl.captured = 0; Pl.state = 'calentando'; Pl.batchIce = b.ice; Pl.batchE = 0;
-        log(`Horno: lote de ${b.reg.toFixed(1)} kg en proceso.`);
+        log(L(`Horno: lote de ${b.reg.toFixed(1)} kg en proceso.`, `Oven: processing a ${b.reg.toFixed(1)} kg batch.`));
       }
       if (Pl.state === 'vacío' || Pl.state === 'completado') {
         Pl.heater = 0; if (Pl.state === 'completado') Pl.state = 'vacío';
@@ -527,7 +528,7 @@
         const C = Pl.reg * M.regolithCp(Pl.T) + Pl.ice * (7.49 * Pl.T + 90);
         Pl.T += Q / Math.max(C, 1);
         if (Pl.ice <= 1e-6 && Pl.T >= 250) {
-          log(`Trampa fría: se funde la escarcha (${Pl.captured.toFixed(2)} L de agua) y pasa al biofiltro.`);
+          log(L(`Trampa fría: se funde la escarcha (${Pl.captured.toFixed(2)} L de agua) y pasa al biofiltro.`, `Cold trap: the frost is melted (${Pl.captured.toFixed(2)} L of water) and goes to the biofilter.`));
           purify(Pl.captured, Pl.batchE / 3.6e6); Pl.frost = 0;
           Pl.state = 'completado'; Pl.reg = 0;
         }
@@ -565,9 +566,9 @@
       if (ok) { Pl.tank += water; S.totals.water += water; }
       else { Pl.rejected += water; S.totals.rejected += water; }
       log(ok
-        ? `Lote limpio: ${water.toFixed(2)} L de agua apta para uso técnico (${(kwh / Math.max(water, 1e-6)).toFixed(1)} kWh/L). Contaminantes 100 → ${after.toFixed(0)} (biofiltro) → ${final.toFixed(1)} (final).`
-        : `Agua contaminada (${final.toFixed(1)} > 5): ${Pl.adsorbent <= 0 ? 'no queda adsorbente' : 'el biofiltro no limpió lo suficiente'}. ${water.toFixed(2)} L apartados para reprocesar.`, ok ? 'key' : 'warn');
-      if (!ok && Pl.adsorbent <= 0 && !Pl.adsWarned) { Pl.adsWarned = true; log('Sin adsorbente: solo el biofiltro puede alargar la vida de los filtros que vienen de la Tierra.', 'warn'); }
+        ? L(`Lote limpio: ${water.toFixed(2)} L de agua apta para uso técnico (${(kwh / Math.max(water, 1e-6)).toFixed(1)} kWh/L). Contaminantes 100 → ${after.toFixed(0)} (biofiltro) → ${final.toFixed(1)} (final).`, `Clean batch: ${water.toFixed(2)} L of water fit for technical use (${(kwh / Math.max(water, 1e-6)).toFixed(1)} kWh/L). Contaminants 100 → ${after.toFixed(0)} (biofilter) → ${final.toFixed(1)} (final).`)
+        : L(`Agua contaminada (${final.toFixed(1)} > 5): ${Pl.adsorbent <= 0 ? 'no queda adsorbente' : 'el biofiltro no limpió lo suficiente'}. ${water.toFixed(2)} L apartados para reprocesar.`, `Contaminated water (${final.toFixed(1)} > 5): ${Pl.adsorbent <= 0 ? 'no adsorbent left' : 'the biofilter did not clean it enough'}. ${water.toFixed(2)} L set aside for reprocessing.`), ok ? 'key' : 'warn');
+      if (!ok && Pl.adsorbent <= 0 && !Pl.adsWarned) { Pl.adsWarned = true; log(L('Sin adsorbente: solo el biofiltro puede alargar la vida de los filtros que vienen de la Tierra.', 'No adsorbent: only the biofilter can extend the life of the filters shipped from Earth.'), 'warn'); }
     }
 
     // ---------- Cámara biológica ----------
@@ -637,7 +638,7 @@
 
     // ---------- Comandos ----------
     const cmd = {
-      start() { S.running = true; if (S.rover.task === 'dead') return; log('Simulación en marcha.'); },
+      start() { S.running = true; if (S.rover.task === 'dead') return; log(L('Simulación en marcha.', 'Simulation running.')); },
       pause() { S.running = false; },
       setMode(m) { S.rover.mode = m; if (m === 'manual') S.rover.route = null; S.manual.throttle = 0; S.manual.steer = 0; if (m === 'auto') { S.rover.task = distSt() < 16 ? 'idle' : 'return'; } else { if (S.rover.task !== 'dead') S.rover.task = 'manual'; } log(m === 'auto' ? 'Modo autónomo.' : 'Modo manual: W avanzar, S retroceder, A D girar, Espacio perforar. Las flechas mueven la cámara.'); },
       // Obstáculos: { t: 'c', x, z, r } círculo · { t: 'b', x0, z0, x1, z1 } caja · { t: 's', ax, az, bx, bz, r } tramo de tubo
@@ -649,22 +650,22 @@
           else if (o.t === 's') obAdd({ ...o, x0: Math.min(o.ax, o.bx) - o.r, x1: Math.max(o.ax, o.bx) + o.r, z0: Math.min(o.az, o.bz) - o.r, z1: Math.max(o.az, o.bz) + o.r });
         }
       },
-      drillHere() { const R = S.rover; if (R.task === 'dead' || R.task === 'drill') return; R.speed = 0; R.cand = ki(R.x, R.z); R.task = 'drill'; R.drillDepth = 0; log('Perforación manual iniciada.', 'key'); },
+      drillHere() { const R = S.rover; if (R.task === 'dead' || R.task === 'drill') return; R.speed = 0; R.cand = ki(R.x, R.z); R.task = 'drill'; R.drillDepth = 0; log(L('Perforación manual iniciada.', 'Manual drilling started.'), 'key'); },
       goTo(x, z) {
         const R = S.rover; if (R.task === 'dead') return;
         R.mode = 'auto'; R.target = { x, z }; R.cand = ki(x, z); R.task = 'goto'; R.stuckT = 0;
-        log(`Orden del operador: ir a (${x.toFixed(0)}, ${z.toFixed(0)}) y evaluar el hielo.`, 'key');
+        log(L(`Orden del operador: ir a (${x.toFixed(0)}, ${z.toFixed(0)}) y evaluar el hielo.`, `Operator command: go to (${x.toFixed(0)}, ${z.toFixed(0)}) and assess the ice.`), 'key');
       },
       followRoute(pts, from = 0) {                                            // recorrer puntos de paso en orden
         const R = S.rover; if (R.task === 'dead' || !pts.length || from >= pts.length) return;
         cmd.goTo(pts[from].x, pts[from].z); R.route = pts.map(p => ({ x: p.x, z: p.z })); R.routeI = from; R.routeDone = false;
       },
       stopRoute() { S.rover.route = null; S.rover.routeDone = false; },
-      goHome() { if (S.rover.task !== 'dead') { S.rover.mode = 'auto'; S.rover.task = 'return'; log('Orden: volver a la estación.'); } },
-      inoculate() { S.bio.N = SPECIES.map(s => s.N0); S.bio.S = 1; S.bio.V = Math.max(S.bio.V, 50); log('Cámara biológica re-inoculada.'); },
-      solarEvent() { S.bio.spe = 10; log('Evento de partículas solares: +0,05 Gy/h durante 10 h en la cámara.', 'warn'); },
+      goHome() { if (S.rover.task !== 'dead') { S.rover.mode = 'auto'; S.rover.task = 'return'; log(L('Orden: volver a la estación.', 'Command: return to the station.')); } },
+      inoculate() { S.bio.N = SPECIES.map(s => s.N0); S.bio.S = 1; S.bio.V = Math.max(S.bio.V, 50); log(L('Cámara biológica re-inoculada.', 'Biological chamber re-inoculated.')); },
+      solarEvent() { S.bio.spe = 10; log(L('Evento de partículas solares: +0,05 Gy/h durante 10 h en la cámara.', 'Solar particle event: +0.05 Gy/h for 10 h in the chamber.'), 'warn'); },
       resetAll() { resetRover(); resetPlant(); resetBio(); resetColony(); S.t = 0; S.know.sum.fill(0); S.know.n.fill(0); S.know.rejected.fill(0); S.know.drilled.fill(0); S.holes.length = 0; S.trail.length = 0; S.log.length = 0;
-        S.hist = { t: [], bat: [], T: [], tank: [], bio: SPECIES.map(() => []) }; S.totals = { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, dist3: 0, holes: 0, rejected: 0 }; S.running = false; log('Simulación reiniciada.'); }
+        S.hist = { t: [], bat: [], T: [], tank: [], bio: SPECIES.map(() => []) }; S.totals = { ice: 0, reg: 0, water: 0, kWhPlant: 0, dist: 0, dist3: 0, holes: 0, rejected: 0 }; S.running = false; log(L('Simulación reiniciada.', 'Simulation restarted.')); }
     };
 
     return { S, P, world, step, cmd, est, ki, cellCenter, ROVER, SPECIES, bioActivity, RAW, ADS_PER_KG, COLONY };

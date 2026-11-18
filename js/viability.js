@@ -13,18 +13,18 @@
   let activeScenario = 'intermedio';
 
   const SWEEPS = {
-    iceWt: { label: 'Concentración de hielo (% en masa)', values: range(0.5, 20, 0.25) },
-    dryLayer: { label: 'Capa seca superior (m)', values: range(0, 0.6, 0.01) },
-    T0: { label: 'Temperatura inicial (K)', values: range(25, 120, 1) },
-    Tp: { label: 'Temperatura de proceso (K)', values: range(180, 400, 5) },
-    etaH: { label: 'Eficiencia de calentamiento (%)', values: range(15, 95, 1) },
-    etaCap: { label: 'Eficiencia de captura (%)', values: range(40, 99, 1) },
-    depth: { label: 'Profundidad de extracción (m)', values: range(0.2, 2, 0.05) }
+    iceWt: { label: L('Concentración de hielo (% en masa)', 'Ice concentration (wt %)'), values: range(0.5, 20, 0.25) },
+    dryLayer: { label: L('Capa seca superior (m)', 'Dry top layer (m)'), values: range(0, 0.6, 0.01) },
+    T0: { label: L('Temperatura inicial (K)', 'Initial temperature (K)'), values: range(25, 120, 1) },
+    Tp: { label: L('Temperatura de proceso (K)', 'Process temperature (K)'), values: range(180, 400, 5) },
+    etaH: { label: L('Eficiencia de calentamiento (%)', 'Heating efficiency (%)'), values: range(15, 95, 1) },
+    etaCap: { label: L('Eficiencia de captura (%)', 'Capture efficiency (%)'), values: range(40, 99, 1) },
+    depth: { label: L('Profundidad de extracción (m)', 'Extraction depth (m)'), values: range(0.2, 2, 0.05) }
   };
   const METRICS = {
-    specific: { label: 'Energía específica (kWh por litro de agua purificada)', get: r => r.specific, fmt: v => `${fmt(v, 1)} kWh/L`, max: 40 },
-    purified: { label: 'Agua purificada por lote (L)', get: r => r.mass.purified, fmt: v => `${fmt(v, 1)} L` },
-    hours: { label: 'Tiempo de procesamiento (h)', get: r => r.time.hours, fmt: v => `${fmt(v, 0)} h` }
+    specific: { label: L('Energía específica (kWh por litro de agua purificada)', 'Specific energy (kWh per litre of purified water)'), get: r => r.specific, fmt: v => `${fmt(v, 1)} kWh/L`, max: 40 },
+    purified: { label: L('Agua purificada por lote (L)', 'Purified water per batch (L)'), get: r => r.mass.purified, fmt: v => `${fmt(v, 1)} L` },
+    hours: { label: L('Tiempo de procesamiento (h)', 'Processing time (h)'), get: r => r.time.hours, fmt: v => `${fmt(v, 0)} h` }
   };
 
   function range(a, b, s) { const out = []; for (let v = a; v <= b + 1e-9; v += s) out.push(+v.toFixed(4)); return out; }
@@ -37,7 +37,7 @@
     const BASIC = ['iceWt', 'dryLayer', 'Pheat', 'etaH', 'etaCap'];
     M.PARAMS.forEach(p => {
       const adv = !BASIC.includes(p.key);
-      if (p.group !== group) { group = p.group; html += `<div class="param-group-title${adv && !['Depósito', 'Procesamiento'].includes(group) ? ' param--adv' : ''}">${group}</div>`; }
+      if (p.group !== group) { group = p.group; html += `<div class="param-group-title${adv && ![L('Depósito', 'Deposit'), L('Procesamiento', 'Processing')].includes(group) ? ' param--adv' : ''}">${group}</div>`; }
       html += `<div class="param${adv ? ' param--adv' : ''}">
         <div class="param-head"><label for="p-${p.key}">${p.label}</label><output id="o-${p.key}" for="p-${p.key}"></output></div>
         <input type="range" id="p-${p.key}" data-key="${p.key}" min="${p.min}" max="${p.max}" step="${p.step}" value="${params[p.key]}" aria-describedby="s-${p.key}">
@@ -73,7 +73,7 @@
   function markScenario() {
     $$('#lab-scenarios button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === activeScenario)));
     const note = $('#lab-scenario-note');
-    if (note) note.textContent = activeScenario ? M.SCENARIOS[activeScenario].note : 'Parámetros personalizados.';
+    if (note) note.textContent = activeScenario ? M.SCENARIOS[activeScenario].note : L('Parámetros personalizados.', 'Custom parameters.');
   }
 
   // ---------- Cálculo y render ----------
@@ -92,11 +92,15 @@
   function renderSummary(r) {
     const el = $('#lab-summary'); if (!el) return;
     const e = r.energy, pct = v => fmt(v / e.total * 100, 0);
-    const big = [['calentar la roca', e.reg], ['convertir el hielo en vapor', e.latent], ['calor perdido en el horno', e.heatLoss]].sort((a, b) => b[1] - a[1])[0];
-    el.innerHTML = `Con <strong>${fmt(r.params.iceWt, 1)} %</strong> de hielo, procesar <strong>${fmt(r.mass.wet, 0)} kg</strong> de suelo da <strong>${fmt(r.mass.purified, 1)} kg de agua</strong>. `
+    const big = [[L('calentar la roca', 'heating the rock'), e.reg], [L('convertir el hielo en vapor', 'turning the ice into vapour'), e.latent], [L('calor perdido en el horno', 'heat lost in the oven'), e.heatLoss]].sort((a, b) => b[1] - a[1])[0];
+    el.innerHTML = L(`Con <strong>${fmt(r.params.iceWt, 1)} %</strong> de hielo, procesar <strong>${fmt(r.mass.wet, 0)} kg</strong> de suelo da <strong>${fmt(r.mass.purified, 1)} kg de agua</strong>. `
       + `Cada kilo cuesta <strong>${fmt(r.specific, 1)} kWh</strong>, más o menos lo que gasta un horno de cocina en ${fmt(r.specific / 2, 1)} horas. `
       + `La mayor parte de la energía se va en <strong>${big[0]}</strong> (${pct(big[1])} %).`
-      + (r.params.iceWt < 2 ? ' Con tan poco hielo casi toda la energía calienta roca: no compensa.' : '');
+      + (r.params.iceWt < 2 ? ' Con tan poco hielo casi toda la energía calienta roca: no compensa.' : ''),
+      `With <strong>${fmt(r.params.iceWt, 1)}%</strong> ice, processing <strong>${fmt(r.mass.wet, 0)} kg</strong> of soil yields <strong>${fmt(r.mass.purified, 1)} kg of water</strong>. `
+      + `Each kilo costs <strong>${fmt(r.specific, 1)} kWh</strong>, roughly what a kitchen oven uses in ${fmt(r.specific / 2, 1)} hours. `
+      + `Most of the energy goes into <strong>${big[0]}</strong> (${pct(big[1])}%).`
+      + (r.params.iceWt < 2 ? ' With so little ice, almost all the energy heats rock: it is not worth it.' : ''));
   }
 
   function renderKPIs(r) {
@@ -130,13 +134,13 @@
     const el = $('#chart-energy'); if (!el) return;
     const e = r.energy, k = v => v / 3.6e6;
     charts.stackedBar(el, [
-      { label: 'Calentar regolito', value: k(e.reg), color: P.ivory, note: 'm·∫cp(T)dT con cp de Hayne et al. 2017' },
-      { label: 'Sublimar hielo', value: k(e.latent), color: P.cobalt, note: 'L_sub = 2,834 MJ/kg' },
-      { label: 'Calentar hielo y vapor', value: k(e.iceSens + e.vapor), color: P.ash },
-      { label: 'Pérdidas del calentador', value: k(e.heatLoss), color: P.slate, note: '(1 − η_calentamiento)' },
-      { label: 'Sistema en espera', value: k(e.base), color: '#4a4a5a', note: 'P_base × tiempo' },
-      { label: 'Excavación', value: k(e.exc), color: '#9a9aa6' },
-      { label: 'Fundir y purificar', value: k(e.purif), color: '#3a3a4a' }
+      { label: L('Calentar regolito', 'Heating regolith'), value: k(e.reg), color: P.ivory, note: L('m·∫cp(T)dT con cp de Hayne et al. 2017', 'm·∫cp(T)dT with cp from Hayne et al. 2017') },
+      { label: L('Sublimar hielo', 'Subliming ice'), value: k(e.latent), color: P.cobalt, note: L('L_sub = 2,834 MJ/kg', 'L_sub = 2.834 MJ/kg') },
+      { label: L('Calentar hielo y vapor', 'Heating ice and vapour'), value: k(e.iceSens + e.vapor), color: P.ash },
+      { label: L('Pérdidas del calentador', 'Heater losses'), value: k(e.heatLoss), color: P.slate, note: L('(1 − η_calentamiento)', '(1 − η_heating)') },
+      { label: L('Sistema en espera', 'System on standby'), value: k(e.base), color: '#4a4a5a', note: L('P_base × tiempo', 'P_base × time') },
+      { label: L('Excavación', 'Excavation'), value: k(e.exc), color: '#9a9aa6' },
+      { label: L('Fundir y purificar', 'Melting and purifying'), value: k(e.purif), color: '#3a3a4a' }
     ], { legend: $('#legend-energy'), valFmt: v => `${fmt(v, 2)} kWh` });
   }
 
@@ -144,19 +148,19 @@
     const el = $('#chart-sweep'); if (!el) return;
     const sw = SWEEPS[sweepKey], met = METRICS[sweepMetric];
     const series = ['desfavorable', 'intermedio', 'favorable'].map((s, i) => ({
-      name: { desfavorable: 'Poco hielo', intermedio: 'Medido por LCROSS', favorable: 'Mucho hielo' }[s],
+      name: L({ desfavorable: 'Poco hielo', intermedio: 'Medido por LCROSS', favorable: 'Mucho hielo' }, { desfavorable: 'Little ice', intermedio: 'Measured by LCROSS', favorable: 'Lots of ice' })[s],
       color: [P.slate, P.ash, P.ivory][i], dash: i === 0 ? '4 4' : '', width: 1.3,
       data: M.sweep(M.SCENARIOS[s].values, sweepKey, sw.values).map(d => ({ x: d.x, y: met.get(d.r) }))
     }));
-    series.push({ name: 'Parámetros actuales', color: P.cobalt, width: 2.2,
+    series.push({ name: L('Parámetros actuales', 'Current parameters'), color: P.cobalt, width: 2.2,
       data: M.sweep(params, sweepKey, sw.values).map(d => ({ x: d.x, y: met.get(d.r) })) });
     const ys = series.flatMap(s => s.data.map(d => d.y)).filter(isFinite);
     const yMax = met.max ? Math.min(met.max, Math.max(...ys) * 1.05) : Math.max(...ys) * 1.08;
     charts.lineChart(el, {
       series, xLabel: sw.label, yLabel: met.label.split('(')[0].trim(), yMin: 0, yMax,
-      yFmt: v => fmtAuto(v), marker: { x: params[sweepKey], label: 'actual' },
-      band: sweepKey === 'iceWt' ? { x1: 2.7, x2: 8.5, label: 'Rango LCROSS (5,6 ± 2,9 %)' } : null,
-      aria: `${met.label} en función de ${sw.label}`
+      yFmt: v => fmtAuto(v), marker: { x: params[sweepKey], label: L('actual', 'current') },
+      band: sweepKey === 'iceWt' ? { x1: 2.7, x2: 8.5, label: L('Rango LCROSS (5,6 ± 2,9 %)', 'LCROSS range (5.6 ± 2.9%)') } : null,
+      aria: L(`${met.label} en función de ${sw.label}`, `${met.label} as a function of ${sw.label}`)
     });
     const lg = $('#legend-sweep');
     if (lg) lg.innerHTML = series.map(s => `<span><span class="sw" style="background:${s.color}"></span>${s.name}</span>`).join('');
@@ -164,7 +168,7 @@
 
   function renderWarnings(r) {
     const el = $('#lab-warnings'); if (!el) return;
-    const okOnly = r.warnings.length === 1 && r.warnings[0].startsWith('Sin incoherencias');
+    const okOnly = r.warnings.length === 1 && r.warnings[0].startsWith(L('Sin incoherencias', 'No physical'));
     el.innerHTML = r.warnings.map(w => `<li class="${okOnly ? 'ok' : ''}">${w}</li>`).join('');
     const sat = $('#k-sat'); if (sat) sat.textContent = `${fmt(r.pore.saturation * 100, 0)} %`;
     const por = $('#k-por'); if (por) por.textContent = `${fmt(r.pore.porosity * 100, 0)} %`;
@@ -235,7 +239,7 @@
     const more = $('#lab-more');
     if (more) more.addEventListener('click', () => {
       const on = $('#lab-params').classList.toggle('show-all');
-      more.textContent = on ? 'Mostrar solo lo esencial' : 'Mostrar todos los parámetros';
+      more.textContent = on ? L('Mostrar solo lo esencial', 'Show only the essentials') : L('Mostrar todos los parámetros', 'Show all parameters');
     });
     $$('#lab-scenarios button').forEach(b => b.addEventListener('click', () => {
       activeScenario = b.dataset.s; params = { ...M.SCENARIOS[activeScenario].values };

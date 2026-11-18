@@ -4,14 +4,17 @@
 // Funciona en GitHub Pages (HTTPS). Dictado: Chrome, Edge y Safari (Firefox no lo tiene: se avisa
 // y se puede escribir). Lectura en voz alta: todos los navegadores modernos.
 // Cada país usa su variante de español para entender y para hablar.
+// En inglés (window.ASTRA_LANG, js/lang.js) ASTRA entiende y habla inglés de EE. UU. en todos los países.
+const ASTRA_EN = (window.ASTRA_LANG || "es") === "en";
+const IDIOMA_BASE = ASTRA_EN ? "en-US" : "es-ES";
 const ZONAS_HORARIAS = {
-    "peru": { tz: "America/Lima", nombre: "Perú", voz: "es-PE" },
-    "espana": { tz: "Europe/Madrid", nombre: "España", voz: "es-ES" },
-    "mexico": { tz: "America/Mexico_City", nombre: "México", voz: "es-MX" },
-    "colombia": { tz: "America/Bogota", nombre: "Colombia", voz: "es-CO" },
-    "argentina": { tz: "America/Argentina/Buenos_Aires", nombre: "Argentina", voz: "es-AR" },
-    "chile": { tz: "America/Santiago", nombre: "Chile", voz: "es-CL" },
-    "estados_unidos": { tz: "America/New_York", nombre: "Estados Unidos", voz: "es-US" }
+    "peru": { tz: "America/Lima", nombre: ASTRA_EN ? "Peru" : "Perú", voz: ASTRA_EN ? "en-US" : "es-PE" },
+    "espana": { tz: "Europe/Madrid", nombre: ASTRA_EN ? "Spain" : "España", voz: ASTRA_EN ? "en-GB" : "es-ES" },
+    "mexico": { tz: "America/Mexico_City", nombre: ASTRA_EN ? "Mexico" : "México", voz: ASTRA_EN ? "en-US" : "es-MX" },
+    "colombia": { tz: "America/Bogota", nombre: "Colombia", voz: ASTRA_EN ? "en-US" : "es-CO" },
+    "argentina": { tz: "America/Argentina/Buenos_Aires", nombre: "Argentina", voz: ASTRA_EN ? "en-US" : "es-AR" },
+    "chile": { tz: "America/Santiago", nombre: "Chile", voz: ASTRA_EN ? "en-US" : "es-CL" },
+    "estados_unidos": { tz: "America/New_York", nombre: ASTRA_EN ? "United States" : "Estados Unidos", voz: ASTRA_EN ? "en-US" : "es-US" }
 };
 
 class TimezoneManager {
@@ -37,18 +40,18 @@ class TimezoneManager {
         const info = ZONAS_HORARIAS[this.paisActual] || {
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
             nombre: "Local",
-            voz: "es-ES"
+            voz: IDIOMA_BASE
         };
 
         const ahora = new Date();
-        const horaCorta = new Intl.DateTimeFormat("es-ES", {
+        const horaCorta = new Intl.DateTimeFormat(IDIOMA_BASE, {
             timeZone: info.tz,
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit"
         }).format(ahora);
 
-        const fechaHoraCompleta = new Intl.DateTimeFormat("es-ES", {
+        const fechaHoraCompleta = new Intl.DateTimeFormat(IDIOMA_BASE, {
             timeZone: info.tz,
             dateStyle: "full",
             timeStyle: "medium"
@@ -58,7 +61,7 @@ class TimezoneManager {
             paisClave: this.paisActual,
             paisNombre: info.nombre,
             timeZone: info.tz,
-            idiomaVoz: info.voz || "es-ES",
+            idiomaVoz: info.voz || IDIOMA_BASE,
             horaCorta,
             fechaHoraCompleta
         };
@@ -76,7 +79,7 @@ class VoiceManager {
     constructor(onTranscriptCallback, onStateChangeCallback, opciones = {}) {
         this.onTranscript = onTranscriptCallback;
         this.onStateChange = onStateChangeCallback;
-        this.idioma = opciones.idioma || "es-ES";
+        this.idioma = opciones.idioma || IDIOMA_BASE;
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         this.recognition = SpeechRecognition ? new SpeechRecognition() : null;
         this.soportaDictado = !!this.recognition;
@@ -107,7 +110,7 @@ class VoiceManager {
     }
 
     setIdioma(idioma) {
-        this.idioma = idioma || "es-ES";
+        this.idioma = idioma || IDIOMA_BASE;
         if (this.recognition) this.recognition.lang = this.idioma;
     }
 
@@ -151,13 +154,13 @@ class VoiceManager {
         return /natural|neural/i.test(v.name);
     }
 
-    // Voces en español: primero las naturales, luego las del país elegido, luego el resto
+    // Voces del idioma de ASTRA (español o inglés): primero las naturales, luego las del país elegido, luego el resto
     vocesEspanol() {
         const todas = this.soportaVoz ? window.speechSynthesis.getVoices() : [];
         const id = this.idioma.toLowerCase();
         const delPais = (v) => v.lang.replace("_", "-").toLowerCase() === id;
         return todas
-            .filter((v) => /^es([-_]|$)/i.test(v.lang))
+            .filter((v) => (ASTRA_EN ? /^en([-_]|$)/i : /^es([-_]|$)/i).test(v.lang))
             .sort((a, b) => (VoiceManager.esNatural(b) - VoiceManager.esNatural(a)) || (delPais(b) - delPais(a)) || a.name.localeCompare(b.name));
     }
 

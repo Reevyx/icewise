@@ -241,6 +241,15 @@ h4 { font-size: var(--text-subheading); line-height: 1.35; letter-spacing: 0.02e
 .nav-links a:hover { color: var(--color-ivory-text); }
 .nav-links a.is-active { color: var(--color-ivory-text); background: rgba(237, 237, 243, 0.08); }
 .nav-actions { display: flex; align-items: center; gap: 8px; }
+/* Botón de idioma: EN | ES, el activo resaltado */
+.lang-toggle {
+  -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 2px;
+  min-height: 36px; padding: 3px; border: 1px solid var(--line-soft); border-radius: var(--radius-nav);
+  background: transparent; cursor: pointer; font-family: var(--font-arcadia); font-size: 12px; letter-spacing: .08em;
+}
+.lang-toggle span { display: inline-flex; align-items: center; min-height: 28px; padding: 0 9px; border-radius: var(--radius-nav); color: var(--color-ash-text); transition: color .2s, background-color .2s; }
+.lang-toggle span.on { background: var(--color-ivory-text); color: var(--color-onyx-canvas); }
+.lang-toggle:hover span:not(.on) { color: var(--color-ivory-text); }
 @media (max-width: 1180px) { .nav-links { display: none; } }
 @media (max-width: 520px) { .nav-actions .btn--primary { display: none; } }
 

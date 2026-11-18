@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (estado === "error") manejarErrorVoz(detalle);
             if (estado === "unsupported") {
                 conversacion = false;
-                agregarMensajeDOM("Tu navegador no permite dictar por voz (pasa en Firefox). Prueba con <strong>Chrome</strong>, <strong>Edge</strong> o <strong>Safari</strong>. Mientras tanto, puedes escribirme.", "bot");
+                agregarMensajeDOM(L("Tu navegador no permite dictar por voz (pasa en Firefox). Prueba con <strong>Chrome</strong>, <strong>Edge</strong> o <strong>Safari</strong>. Mientras tanto, puedes escribirme.", "Your browser does not support voice dictation (this happens in Firefox). Try <strong>Chrome</strong>, <strong>Edge</strong> or <strong>Safari</strong>. Meanwhile, you can type to me."), "bot");
             }
             actualizarBotonVoz();
         },
@@ -51,18 +51,23 @@ document.addEventListener("DOMContentLoaded", () => {
         btnVoz.classList.toggle("escuchando", escuchando);
         btnVoz.classList.toggle("conversando", conversacion && !escuchando);
         btnVoz.setAttribute("aria-pressed", String(activo));
-        const etiqueta = activo ? "Terminar la conversación por voz" : "Hablar por voz con ASTRA";
+        const etiqueta = activo ? L("Terminar la conversación por voz", "End the voice conversation") : L("Hablar por voz con ASTRA", "Talk to ASTRA by voice");
         btnVoz.title = etiqueta; btnVoz.setAttribute("aria-label", etiqueta);
-        inputChat.placeholder = escuchando ? "Te escucho…" : (conversacion && voiceManager.hablando() ? "ASTRA está hablando…" : PLACEHOLDER);
+        inputChat.placeholder = escuchando ? L("Te escucho…", "I'm listening…") : (conversacion && voiceManager.hablando() ? L("ASTRA está hablando…", "ASTRA is speaking…") : PLACEHOLDER);
     }
 
     function manejarErrorVoz(codigo) {
-        const mensajes = {
+        const mensajes = L({
             "not-allowed": "Para hablar conmigo, permite el uso del micrófono: pulsa el icono del candado junto a la dirección de la página y activa <strong>Micrófono</strong>.",
             "service-not-allowed": "El navegador no permite el dictado por voz en esta página. Prueba con Chrome o Edge, o escríbeme.",
             "audio-capture": "No encuentro ningún micrófono. Conecta uno o escríbeme.",
             "network": "El dictado por voz necesita conexión a internet. Revisa la conexión o escríbeme."
-        };
+        }, {
+            "not-allowed": "To talk to me, allow the microphone: click the padlock icon next to the page address and turn on <strong>Microphone</strong>.",
+            "service-not-allowed": "The browser does not allow voice dictation on this page. Try Chrome or Edge, or type to me.",
+            "audio-capture": "I can't find a microphone. Connect one or type to me.",
+            "network": "Voice dictation needs an internet connection. Check your connection or type to me."
+        });
         if (codigo === "no-speech") { conversacion = false; return; }   // silencio: se termina la conversación sin molestar
         if (codigo === "aborted") return;
         conversacion = false;
@@ -82,18 +87,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // La palabra clave tiene que aparecer al INICIO de una palabra ("hora" sirve para "horas", no para "ahora")
     const escRegex = (s) => s.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
-    const coincide = (texto, kw) => new RegExp("(^|[^a-z0-9ñ])" + escRegex(kw)).test(texto);
+    // Con "=" delante, la palabra tiene que ir entera ("=ice" no sirve para "icewise")
+    const coincide = (texto, kw) => kw.startsWith("=")
+        ? new RegExp("(^|[^a-z0-9ñ])" + escRegex(kw.slice(1)) + "([^a-z0-9ñ]|$)").test(texto)
+        : new RegExp("(^|[^a-z0-9ñ])" + escRegex(kw)).test(texto);
+    const EN = window.ASTRA_LANG === "en";
 
     function respuestaLocal(textoLimpio, mensajeUsuario, contexto) {
         for (const item of ASTRA_KNOWLEDGE.respuestasPredefinidas) {
-            if (item.keywords.some((kw) => coincide(textoLimpio, kw))) {
-                return typeof item.respuesta === "function"
-                    ? item.respuesta(contexto)
-                    : item.respuesta;
+            const claves = EN ? (item.keywordsEn || []) : item.keywords;
+            const resp = EN && item.respuestaEn ? item.respuestaEn : item.respuesta;
+            if (claves.some((kw) => coincide(textoLimpio, kw))) {
+                return typeof resp === "function" ? resp(contexto) : resp;
             }
         }
         // Respuesta por defecto si no coincide ninguna palabra clave
-        return "Todavía no sé responder eso sin conexión con la IA. Prueba a preguntarme por el <strong>rover</strong>, el <strong>hielo</strong>, el <strong>biofiltro</strong>, la <strong>colonia</strong> o cuánta <strong>agua</strong> produce ICEWISE.";
+        return L("Todavía no sé responder eso sin conexión con la IA. Prueba a preguntarme por el <strong>rover</strong>, el <strong>hielo</strong>, el <strong>biofiltro</strong>, la <strong>colonia</strong> o cuánta <strong>agua</strong> produce ICEWISE.",
+            "I can't answer that yet without a connection to the AI. Try asking me about the <strong>rover</strong>, the <strong>ice</strong>, the <strong>biofilter</strong>, the <strong>colony</strong> or how much <strong>water</strong> ICEWISE produces.");
     }
 
     async function generarRespuestaBot(mensajeUsuario) {
@@ -106,11 +116,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const control = new AbortController();
             const espera = setTimeout(() => control.abort(), 25000);
             try {
-                const res = await fetch(api.endpoint, {
+                const res = await fetch(api.endpoint + (EN ? "?idioma=en" : ""), {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         mensaje: mensajeUsuario,
+                        idioma: EN ? "en" : "es",       // idioma de la página: la IA responde en él
                         contextoHorario: contexto,
                         historial: historial.slice(-4)   // lo reciente basta para seguir la conversación y ahorra cuota
                     }),
@@ -140,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         agregarMensajeDOM(texto, "user");
         inputChat.value = "";
-        const pensando = agregarMensajeDOM('<span class="puntos" aria-label="ASTRA está pensando"><i></i><i></i><i></i></span>', "bot");
+        const pensando = agregarMensajeDOM(`<span class="puntos" aria-label="${L("ASTRA está pensando", "ASTRA is thinking")}"><i></i><i></i><i></i></span>`, "bot");
         pensando.classList.add("pensando");
 
         const respuesta = await generarRespuestaBot(texto);
@@ -182,12 +193,12 @@ document.addEventListener("DOMContentLoaded", () => {
     function setAltavoz(on, avisar) {
         altavoz = on;
         btnAltavoz.setAttribute("aria-pressed", String(on));
-        const t = on ? "Altavoz activado: ASTRA lee en voz alta sus respuestas (pulsa para silenciar)" : "Altavoz: leer en voz alta también las respuestas escritas";
+        const t = on ? L("Altavoz activado: ASTRA lee en voz alta sus respuestas (pulsa para silenciar)", "Speaker on: ASTRA reads its answers aloud (press to mute)") : L("Altavoz: leer en voz alta también las respuestas escritas", "Speaker: also read written answers aloud");
         btnAltavoz.title = t; btnAltavoz.setAttribute("aria-label", t);
         try { localStorage.setItem("astra-altavoz", on ? "1" : "0"); } catch (_) {}
         if (on && avisar) voiceManager.desbloquearVoz();       // solo con un clic real (Safari lo exige)
         else if (!on && !conversacion) voiceManager.callar();  // silenciar corta lo que esté leyendo
-        if (avisar && on && !voiceManager.soportaVoz) agregarMensajeDOM("Tu navegador no puede leer en voz alta. Prueba con Chrome, Edge o Safari.", "bot");
+        if (avisar && on && !voiceManager.soportaVoz) agregarMensajeDOM(L("Tu navegador no puede leer en voz alta. Prueba con Chrome, Edge o Safari.", "Your browser cannot read aloud. Try Chrome, Edge or Safari."), "bot");
     }
     btnAltavoz.addEventListener("click", () => setAltavoz(!altavoz, true));
 
@@ -196,25 +207,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const panelVoz = document.getElementById("panel-voz");
     const selVoz = document.getElementById("sel-voz");
     const notaVoz = document.getElementById("nota-voz");
-    const PAISES = { MX: "México", ES: "España", PE: "Perú", AR: "Argentina", CO: "Colombia", CL: "Chile", US: "EE. UU.", VE: "Venezuela", BO: "Bolivia", EC: "Ecuador", UY: "Uruguay", PY: "Paraguay", CR: "Costa Rica", CU: "Cuba", DO: "Rep. Dominicana", GT: "Guatemala", HN: "Honduras", NI: "Nicaragua", PA: "Panamá", PR: "Puerto Rico", SV: "El Salvador", GQ: "Guinea Ecuatorial", "419": "Latinoamérica" };
+    const PAISES = EN
+        ? { US: "USA", GB: "UK", AU: "Australia", CA: "Canada", IN: "India", IE: "Ireland", NZ: "New Zealand", ZA: "South Africa", SG: "Singapore", PH: "Philippines", NG: "Nigeria", KE: "Kenya", HK: "Hong Kong", TZ: "Tanzania" }
+        : { MX: "México", ES: "España", PE: "Perú", AR: "Argentina", CO: "Colombia", CL: "Chile", US: "EE. UU.", VE: "Venezuela", BO: "Bolivia", EC: "Ecuador", UY: "Uruguay", PY: "Paraguay", CR: "Costa Rica", CU: "Cuba", DO: "Rep. Dominicana", GT: "Guatemala", HN: "Honduras", NI: "Nicaragua", PA: "Panamá", PR: "Puerto Rico", SV: "El Salvador", GQ: "Guinea Ecuatorial", "419": "Latinoamérica" };
     const nombreVoz = (v) => {
         const pais = PAISES[(v.lang.split(/[-_]/)[1] || "").toUpperCase()] || v.lang;
-        const nombre = v.name.replace(/^(Microsoft|Google)\s+/i, "").replace(/\s*Online\s*\(Natural\)/i, "").replace(/\s*-\s*Spanish.*$/i, "").trim();
+        const nombre = v.name.replace(/^(Microsoft|Google)\s+/i, "").replace(/\s*Online\s*\(Natural\)/i, "").replace(/\s*-\s*(Spanish|English).*$/i, "").trim();
         return `${nombre} · ${pais}${VoiceManager.esNatural(v) ? " · natural" : ""}`;
     };
     function llenarVoces() {
         const voces = voiceManager.vocesEspanol();
         const actual = voiceManager.vozPreferida || "";
         selVoz.textContent = "";
-        const auto = new Option("Automática (la más natural disponible)", "");
+        const auto = new Option(L("Automática (la más natural disponible)", "Automatic (the most natural available)"), "");
         selVoz.add(auto);
         voces.forEach((v) => selVoz.add(new Option(nombreVoz(v), v.voiceURI)));
         selVoz.value = voces.some((v) => v.voiceURI === actual) ? actual : "";
         const naturales = voces.filter(VoiceManager.esNatural).length;
-        notaVoz.textContent = !voiceManager.soportaVoz ? "Este navegador no puede leer en voz alta."
-            : !voces.length ? "No hay voces en español en este navegador."
-            : naturales ? `${naturales} voces naturales disponibles.`
-            : "Para voces más naturales, abre la web en Microsoft Edge.";
+        notaVoz.textContent = !voiceManager.soportaVoz ? L("Este navegador no puede leer en voz alta.", "This browser cannot read aloud.")
+            : !voces.length ? L("No hay voces en español en este navegador.", "There are no English voices in this browser.")
+            : naturales ? L(`${naturales} voces naturales disponibles.`, `${naturales} natural voices available.`)
+            : L("Para voces más naturales, abre la web en Microsoft Edge.", "For more natural voices, open the site in Microsoft Edge.");
     }
     const abrirPanelVoz = (on) => {
         panelVoz.hidden = !on; btnVozCfg.setAttribute("aria-expanded", String(on));
@@ -223,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnVozCfg.addEventListener("click", () => abrirPanelVoz(panelVoz.hidden));
     document.addEventListener("click", (e) => { if (!panelVoz.hidden && !e.target.closest("#panel-voz, #btn-voz-cfg")) abrirPanelVoz(false); });
     panelVoz.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); abrirPanelVoz(false); btnVozCfg.focus(); } });
-    const probarVoz = () => { voiceManager.desbloquearVoz(); voiceManager.speak("Hola, soy ASTRA. Así sueno con esta voz."); };
+    const probarVoz = () => { voiceManager.desbloquearVoz(); voiceManager.speak(L("Hola, soy ASTRA. Así sueno con esta voz.", "Hi, I am ASTRA. This is how I sound with this voice.")); };
     selVoz.addEventListener("change", () => {
         voiceManager.setVozPreferida(selVoz.value);
         try { localStorage.setItem("astra-voz", selVoz.value); } catch (_) {}

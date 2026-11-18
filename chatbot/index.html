@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/chatbot.css?v=20261115c">
+    <link rel="stylesheet" href="css/chatbot.css?v=20261118a">
 </head>
 <body>
     <div class="chatbot-container">
@@ -20,9 +20,10 @@
             <div class="header-title">
                 <span class="status-dot" aria-hidden="true"></span>
                 <h1>ASTRA Assistant</h1>
+                <button id="btn-lang" type="button" class="btn-lang" translate="no"><span>EN</span><span class="on">ES</span></button>
             </div>
             <div class="timezone-selector">
-                <label for="select-pais">País:</label>
+                <label for="select-pais" id="lbl-pais">País:</label>
                 <select id="select-pais">
                     <option value="peru">Perú (PET)</option>
                     <option value="espana">España (CET)</option>
@@ -42,7 +43,7 @@
                 </button>
             </div>
             <div class="panel-voz" id="panel-voz" hidden>
-                <label for="sel-voz">Voz de ASTRA</label>
+                <label for="sel-voz" id="lbl-voz">Voz de ASTRA</label>
                 <select id="sel-voz"></select>
                 <div class="panel-voz-fila">
                     <button id="btn-probar-voz" type="button">Probar voz</button>
@@ -52,7 +53,7 @@
         </header>
 
         <main id="chat-messages" class="chat-messages" aria-live="polite">
-            <div class="message bot">
+            <div class="message bot" id="msg-inicio">
                 Hola, soy <strong>ASTRA</strong>. Puedes escribirme o usar el botón de micrófono. ¿En qué te ayudo hoy?
             </div>
         </main>
@@ -67,8 +68,9 @@
         </footer>
     </div>
 
-    <script src="js/data-context.js?v=20261115c"></script>
-    <script src="js/voice-timezone.js?v=20261115c"></script>
-    <script src="js/astra-bot.js?v=20261115c"></script>
+    <script src="js/lang.js?v=20261118a"></script>
+    <script src="js/data-context.js?v=20261118a"></script>
+    <script src="js/voice-timezone.js?v=20261118a"></script>
+    <script src="js/astra-bot.js?v=20261118a"></script>
 </body>
 </html>

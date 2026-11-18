@@ -11,7 +11,7 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-  const nf = (d) => new Intl.NumberFormat('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const nf = (d) => new Intl.NumberFormat(L('es-ES', 'en-US'), { minimumFractionDigits: d, maximumFractionDigits: d });
   const fmtCache = {};
   function fmt(x, d = 1) {
     if (x === null || x === undefined || Number.isNaN(x)) return '—';
@@ -29,7 +29,7 @@
     if (!isFinite(hours)) return '—';
     if (hours < 1) return `${fmt(hours * 60, 0)} min`;
     if (hours < 48) return `${fmt(hours, 1)} h`;
-    return `${fmt(hours / 24, 1)} días`;
+    return `${fmt(hours / 24, 1)} ${L('días', 'days')}`;
   }
 
   /** Generador pseudoaleatorio con semilla (mulberry32) — simulaciones reproducibles. */
@@ -54,9 +54,10 @@
     };
   }
 
-  const TAG_TEXT = { med: 'Medido', doc: 'Documentado', sup: 'Supuesto', sim: 'Simulado', ice: 'Propuesta ICEWISE', exist: 'Existente', dev: 'En desarrollo / adaptación' };
+  const TAG_TEXT = L({ med: 'Medido', doc: 'Documentado', sup: 'Supuesto', sim: 'Simulado', ice: 'Propuesta ICEWISE', exist: 'Existente', dev: 'En desarrollo / adaptación' },
+    { med: 'Measured', doc: 'Documented', sup: 'Assumption', sim: 'Simulated', ice: 'ICEWISE proposal', exist: 'Existing', dev: 'In development / adaptation' });
   const tag = (kind, text) => `<span class="tag tag--${kind}">${text || TAG_TEXT[kind] || kind}</span>`;
-  const cite = (...ids) => `<sup class="cite">[${ids.map(i => `<a href="#ref-${i}" aria-label="Referencia ${i}">${i}</a>`).join(',')}]</sup>`;
+  const cite = (...ids) => `<sup class="cite">[${ids.map(i => `<a href="#ref-${i}" aria-label="${L('Referencia', 'Reference')} ${i}">${i}</a>`).join(',')}]</sup>`;
 
   let toastTimer;
   function toast(msg) {
@@ -109,7 +110,7 @@
   function lineChart(container, opts) {
     const W = opts.width || 640, H = opts.height || 300, m = { t: 16, r: 18, b: 42, l: opts.width && opts.width < 500 ? 40 : 56 };
     container.innerHTML = '';
-    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || opts.yLabel || 'Gráfico' }, container);
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || opts.yLabel || L('Gráfico', 'Chart') }, container);
     const all = opts.series.flatMap(s => s.data).filter(d => isFinite(d.y));
     const xMin = opts.xMin ?? Math.min(...all.map(d => d.x)), xMax = opts.xMax ?? Math.max(...all.map(d => d.x));
     let yMin = opts.yMin ?? Math.min(0, ...all.map(d => d.y)), yMax = opts.yMax ?? Math.max(...all.map(d => d.y)) * 1.08;
@@ -176,7 +177,7 @@
     const W = 420, H = opts.height || 56;
     container.innerHTML = '';
     const total = segments.reduce((a, s) => a + Math.max(0, s.value), 0) || 1;
-    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || 'Desglose' }, container);
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || L('Desglose', 'Breakdown') }, container);
     let x = 0;
     segments.forEach(s => {
       const w = Math.max(0, s.value) / total * W;
@@ -197,7 +198,7 @@
   function flowBars(container, steps, opts = {}) {
     const rowH = 32, W = 420, labelW = 150, H = steps.length * rowH + 8;
     container.innerHTML = '';
-    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Flujo de masa de agua' }, container);
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': L('Flujo de masa de agua', 'Water mass flow') }, container);
     const max = Math.max(...steps.map(s => s.value), 1e-9);
     steps.forEach((s, i) => {
       const y = i * rowH + 4;
@@ -218,7 +219,7 @@
   function groupedBars(container, groups, series, opts = {}) {
     const W = 640, H = opts.height || 260, m = { t: 14, r: 10, b: 40, l: 56 };
     container.innerHTML = '';
-    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || 'Comparación' }, container);
+    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || L('Comparación', 'Comparison') }, container);
     const max = Math.max(...groups.flatMap(g => g.values).filter(isFinite), 1e-9) * 1.1;
     const Y = v => H - m.b - v / max * (H - m.t - m.b);
     niceTicks(0, max, 4).forEach(v => {

@@ -50,8 +50,14 @@
   const COBALT = 0x5266eb, IVORY = 0xededf3;
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 
-  const TASKS = { idle: 'En estación · cargando batería', explore: 'Explorando: busca señal de hielo', goto: 'Va hacia una zona prometedora', characterize: 'Midiendo cuánto hielo hay',
-    decide: 'Decidiendo si perforar', drill: 'Perforando', reposition: 'Se mueve unos metros para otra perforación', return: 'Vuelve a la estación', manual: 'Control manual', dead: 'Sin energía: inmovilizado' };
+  const TASKS = L({ idle: 'En estación · cargando batería', explore: 'Explorando: busca señal de hielo', goto: 'Va hacia una zona prometedora', characterize: 'Midiendo cuánto hielo hay',
+    decide: 'Decidiendo si perforar', drill: 'Perforando', reposition: 'Se mueve unos metros para otra perforación', return: 'Vuelve a la estación', manual: 'Control manual', dead: 'Sin energía: inmovilizado' },
+    { idle: 'At the station · charging battery', explore: 'Exploring: looking for an ice signal', goto: 'Heading to a promising area', characterize: 'Measuring how much ice there is',
+    decide: 'Deciding whether to drill', drill: 'Drilling', reposition: 'Moving a few metres for another drill hole', return: 'Returning to the station', manual: 'Manual control', dead: 'Out of power: stranded' });
+  // Estados internos del motor (en español) → texto visible
+  const BIO_TXT = { 'Extinto': 'Extinct', 'Creciendo': 'Growing', 'Muriendo': 'Dying', 'Estable': 'Stable', 'Latente (sin agua líquida)': 'Dormant (no liquid water)', 'Latente (frío)': 'Dormant (cold)',
+    'Estrés por calor': 'Heat stress', 'Latente (sin luz)': 'Dormant (no light)', 'Estacionaria (sin nutrientes)': 'Stationary (no nutrients)', 'Estacionaria (saturada)': 'Stationary (saturated)', 'Alerta: agua contaminada': 'Alert: contaminated water' };
+  const bioTxt = (st) => L(st, BIO_TXT[st] || st);
 
   // =====================================================================
   // TEXTURAS PROCEDURALES
@@ -163,13 +169,13 @@
     IceEnv.loadScanned(W, scene, location.protocol === 'file:');   // rocas y regolito escaneados (Poly Haven, CC0)
     buildRover(); buildStation(); buildColony(); refreshObstacles(); buildMarkers(); loadCustomModels(); buildDrillFX();
     IceEnv.patchTree(scene, SV);
-    addLabel('Estación solar y planta de agua', () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
-    addLabel('Zona en sombra permanente: aquí está el hielo', () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
-    addLabel('Colonia UKU PACHA', () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'far');   // de cerca mandan las etiquetas de los sectores
+    addLabel(L('Estación solar y planta de agua', 'Solar station and water plant'), () => new THREE.Vector3(W.station.x, W.hAt(W.station.x, W.station.z) + 10, W.station.z));
+    addLabel(L('Zona en sombra permanente: aquí está el hielo', 'Permanently shadowed area: this is where the ice is'), () => new THREE.Vector3(W.psrMain.x, W.hAt(W.psrMain.x, W.psrMain.z) + 60, W.psrMain.z), 'ov');
+    addLabel(L('Colonia UKU PACHA', 'UKU PACHA Colony'), () => new THREE.Vector3(W.colony.x, W.hAt(W.colony.x, W.colony.z) + 14, W.colony.z), 'far');   // de cerca mandan las etiquetas de los sectores
     if (W.shackleton) {
-      const dx = W.shackleton.x, dz = W.shackleton.z, L = Math.hypot(dx, dz), k = W.HALF * 0.93 / Math.max(Math.abs(dx), Math.abs(dz));
+      const dx = W.shackleton.x, dz = W.shackleton.z, dCentro = Math.hypot(dx, dz), k = W.HALF * 0.93 / Math.max(Math.abs(dx), Math.abs(dz));
       const px = dx * k, pz = dz * k;
-      addLabel(`→ Centro del cráter Shackleton (a ${Math.round(L / 1000)} km)`, () => new THREE.Vector3(px, W.hAt(px, pz) + 80, pz), 'ov');
+      addLabel(L(`→ Centro del cráter Shackleton (a ${Math.round(dCentro / 1000)} km)`, `→ Centre of Shackleton crater (${Math.round(dCentro / 1000)} km away)`), () => new THREE.Vector3(px, W.hAt(px, pz) + 80, pz), 'ov');
     }
     addLabel('Rover', () => new THREE.Vector3(S.rover.x, W.hAt(S.rover.x, S.rover.z) + 4.2, S.rover.z), 'rover');
   }
@@ -365,8 +371,8 @@
     lichen.count = 0; bio.add(lichen);
     scene.add(g);
     Object.assign(ST, { g, glow, frost, water, flowCurve, flowDots, tank }); Object.assign(BIO, { bio, dper, pext, lichen, lamp, ring, rock, worldPos: () => bio.getWorldPosition(new THREE.Vector3()) });
-    addLabel('Biofiltro: microorganismos que limpian el agua', () => BIO.worldPos().add(new THREE.Vector3(0, 3.4, 0)), 'near');
-    addLabel('Horno → trampa fría → biofiltro → tanque', () => new THREE.Vector3(st.x, y0, st.z).add(new THREE.Vector3(3.4, 2.2, 2.6)), 'near');
+    addLabel(L('Biofiltro: microorganismos que limpian el agua', 'Biofilter: microorganisms that clean the water'), () => BIO.worldPos().add(new THREE.Vector3(0, 3.4, 0)), 'near');
+    addLabel(L('Horno → trampa fría → biofiltro → tanque', 'Oven → cold trap → biofilter → tank'), () => new THREE.Vector3(st.x, y0, st.z).add(new THREE.Vector3(3.4, 2.2, 2.6)), 'near');
   }
 
   // ---------- Colonia ICEWISE (borde del cráter Shackleton) ----------
@@ -431,10 +437,44 @@
       desc: 'Paneles solares verticales que siguen al Sol (en el polo está a solo 1–2° sobre el horizonte), baterías para los periodos de sombra y distribución eléctrica. La fisión de superficie se estudia como fuente continua para etapas futuras.',
       feat: ['Paneles solares verticales', 'Baterías', 'Distribución protegida', 'Ampliable por módulos'] }
   };
-  const COL_ETAPAS = [[10, 'MK-I · inicial', 'Validar habitabilidad, soporte vital, energía, comunicaciones y operaciones robóticas.'],
+  // Fichas en inglés (mismos campos; los códigos y capas no cambian)
+  if (IceLang === 'en') {
+    const EN = {
+      A: { short: 'Living', title: 'Living quarters', type: 'Habitable sector', cap: '10 people',
+        desc: 'Crew accommodation: private bedrooms, kitchen, dining room, bathrooms, common area, personal storage and an exercise area. It sits next to life support to shorten trips and make evacuation easier.',
+        feat: ['Private bedrooms', 'Kitchen, dining room and common area', 'Exercise area', 'Circadian lighting and ventilation', 'Pressurized corridors that can be sealed off'] },
+      B: { short: 'Science', title: 'Science centre', type: 'Research', cap: '6 researchers',
+        desc: 'Geology lab for sample analysis, microscopy and regolith characterisation. This is where the water content of the rover\'s samples, and the other volatiles they contain, are measured.',
+        feat: ['Regolith and ice analysis', 'Microscopy', 'Sample handling without cross-contamination', 'Its own airlock'] },
+      C: { short: 'Greenhouse', title: 'Greenhouse', type: 'Food production', cap: '4 operators',
+        desc: 'Agricultural lab with hydroponics and LED lighting. It complements food brought from Earth and supports wellbeing; it does not aim for food self-sufficiency.',
+        feat: ['Hydroponic growing (no soil)', 'LED lighting', 'Humidity and nutrient control', 'Water recirculation'] },
+      D: { short: 'Medical', title: 'Medical centre', type: 'Health and emergencies', cap: '1–2 patients',
+        desc: 'Primary care, diagnosis, medical isolation, an advanced medical kit and telemedicine with Earth.',
+        feat: ['Basic diagnosis', 'Telemedicine', 'Medical isolation', 'Advanced medical kit'] },
+      E: { short: 'Workshop', title: 'Industrial workshop', type: 'Maintenance', cap: '4 technicians',
+        desc: 'Tool repair, rover maintenance, spare parts and experimental manufacturing of non-critical parts. It is kept apart from the living areas because of the dust.',
+        feat: ['Rover maintenance', 'Experimental 3D printing', 'Test bench', 'Critical spare parts store'] },
+      F: { short: 'Life support', title: 'Life support', type: 'Critical systems', cap: 'Technical access',
+        desc: 'Water treatment and storage, air control, CO₂ removal, oxygen by electrolysis and waste management. The water produced by ICEWISE arrives here by pipe.',
+        feat: ['Colony water tanks', 'Water recycling (90%, assumption)', 'Oxygen by water electrolysis', 'CO₂ removal', 'Redundant equipment'] },
+      G: { short: 'Logistics', title: 'Logistics area', type: 'Outdoor infrastructure', area: 'Outdoors', cap: 'Vehicles and cargo',
+        desc: 'Rover garage, cargo airlock, communications antenna and a landing zone far from the complex so engine dust does not damage habitats or panels.',
+        feat: ['Rover garage', 'Communications antenna', 'Separate landing zone', 'Service routes'] },
+      N: { short: 'Energy', title: 'Energy centre', type: 'Energy infrastructure', area: 'Outdoors', cap: 'Colony grid',
+        desc: 'Vertical solar panels that track the Sun (at the pole it is only 1–2° above the horizon), batteries for shadow periods and power distribution. Surface fission is being studied as a continuous source for future stages.',
+        feat: ['Vertical solar panels', 'Batteries', 'Protected distribution', 'Expandable in modules'] }
+    };
+    for (const k in EN) Object.assign(COLONIA[k], EN[k]);
+  }
+  const COL_ETAPAS = L([[10, 'MK-I · inicial', 'Validar habitabilidad, soporte vital, energía, comunicaciones y operaciones robóticas.'],
     [24, 'Expansión 1', 'Más módulos y almacenamiento; demostrar que los sistemas críticos toleran más demanda.'],
     [36, 'Expansión 2', 'Ampliar laboratorio, taller, invernadero y generación eléctrica.'],
-    [48, 'Expansión 3', 'Redundancia, producción local de recursos, reservas y capacidad médica.']];
+    [48, 'Expansión 3', 'Redundancia, producción local de recursos, reservas y capacidad médica.']],
+    [[10, 'MK-I · initial', 'Validate habitability, life support, energy, communications and robotic operations.'],
+    [24, 'Expansion 1', 'More modules and storage; show that critical systems can handle more demand.'],
+    [36, 'Expansion 2', 'Expand the lab, workshop, greenhouse and power generation.'],
+    [48, 'Expansion 3', 'Redundancy, local resource production, reserves and medical capacity.']]);
   const sectorDeNombre = (n) => { const m = /^([A-GNR])_?([A-G])?/.exec(n || ''); if (!m) return null; return m[1] === 'R' ? (m[2] || null) : m[1]; };
   // Al cargar colony.glb: cada pieza se apoya en el relieve real, los paneles miran al Sol, los sectores
   // quedan marcados para seleccionarlos y la tubería llega al nuevo depósito de agua.
@@ -521,8 +561,10 @@
   // «Entrar»: se camina por dentro (W A S D, arrastrar para mirar). El modelo trae una malla de navegación (objeto NAV:
   // rejilla de 10 cm con el suelo libre de paredes y muebles) para no atravesar nada, y la lista de salas.
   // WALK guarda posición y mirada: más adelante podrá llevar a un astronauta en vez de a la cámara.
-  const SALAS = { A_hab_1: 'Dormitorios A1', A_hab_2: 'Dormitorios A2 y baño', A_hab_3: 'Zona común A3', B_ciencia: 'Laboratorio',
-    B_esclusa: 'Esclusa B', C_invernadero: 'Invernadero', D_medico: 'Sala médica', E_taller: 'Taller', F_soporte: 'Soporte vital' };
+  const SALAS = L({ A_hab_1: 'Dormitorios A1', A_hab_2: 'Dormitorios A2 y baño', A_hab_3: 'Zona común A3', B_ciencia: 'Laboratorio',
+    B_esclusa: 'Esclusa B', C_invernadero: 'Invernadero', D_medico: 'Sala médica', E_taller: 'Taller', F_soporte: 'Soporte vital' },
+    { A_hab_1: 'Bedrooms A1', A_hab_2: 'Bedrooms A2 and bathroom', A_hab_3: 'Common area A3', B_ciencia: 'Laboratory',
+    B_esclusa: 'Airlock B', C_invernadero: 'Greenhouse', D_medico: 'Medical room', E_taller: 'Workshop', F_soporte: 'Life support' });
   const WALK = { on: false, x: 0, z: 0, yaw: 0, pitch: 0, keys: {}, drag: false, px: 0, py: 0, bob: 0, room: '', roomT: 0, spawn: null, eye: 1.62 };
   window.ICE_WALK = WALK;                                                     // acceso para depurar y, más adelante, para el astronauta
   function navLoad(scn) {
@@ -542,8 +584,12 @@
   function navRoom(lx, lz) {
     const N = COL.nav, bx = lx, by = -lz; if (!N) return '';
     const r = N.rooms.find(q => bx >= q[1] && bx <= q[3] && by >= q[2] && by <= q[4]);
-    return r ? r[0] : '';
+    return r ? salaTxt(r[0]) : '';
   }
+  // Los nombres de las salas vienen en español dentro de colony.glb
+  const SALA_EN = [['Dormitorios y baño', 'Bedrooms and bathroom'], ['Dormitorios', 'Bedrooms'], ['Zona común', 'Common area'], ['Laboratorio', 'Laboratory'], ['Sala médica', 'Medical room'],
+    ['Taller', 'Workshop'], ['Soporte vital', 'Life support'], ['Esclusa', 'Airlock'], ['Invernadero', 'Greenhouse'], ['Nodo', 'Node'], ['Pasillo', 'Corridor']];
+  function salaTxt(n) { if (IceLang !== 'en') return n; for (const [es, en] of SALA_EN) n = n.replace(es, en); return n; }
   function colonyLuz() {
     if (!COL.luz) { COL.luz = new THREE.PointLight(0xfff2e2, 0, 16, 1.6); scene.add(COL.luz); }
     if (!COL.hemi) { COL.hemi = new THREE.HemisphereLight(0xfff6ea, 0x3a3a44, 0); scene.add(COL.hemi); }
@@ -573,7 +619,7 @@
   }
   // Entrar: por la esclusa A (entrada principal) o directamente a una sala
   function colonyEnter(nombre) {
-    if (!COL.nav) { toast('El modelo de la colonia aún se está cargando.'); return; }
+    if (!COL.nav) { toast(L('El modelo de la colonia aún se está cargando.', 'The colony model is still loading.')); return; }
     WALK.spawn = nombre || 'A_esclusa'; setCam('inside');
   }
   function walkStart(nombre) {
@@ -588,7 +634,7 @@
     $('#sim-walk').hidden = false; $('#col-dentro-fila').hidden = false; $('#sim-campad').hidden = true;
     walkMapPrep(); walkUpdate(0);
     $('#sim-view').focus({ preventScroll: true });
-    toast('W A S D para caminar · arrastra para mirar · Shift para correr · Esc para salir');
+    toast(L('W A S D para caminar · arrastra para mirar · Shift para correr · Esc para salir', 'W A S D to walk · drag to look · Shift to run · Esc to exit'));
   }
   function colonyInsideOff() {
     if (!WALK.on) return;
@@ -624,7 +670,7 @@
     const now = performance.now();
     if (now - WALK.roomT > 180) {
       WALK.roomT = now; const room = navRoom(WALK.x, WALK.z) || WALK.room;
-      if (room !== WALK.room) { WALK.room = room; set('sw-room', room); set('col-dentro', 'Dentro: ' + room); }
+      if (room !== WALK.room) { WALK.room = room; set('sw-room', room); set('col-dentro', L('Dentro: ', 'Inside: ') + room); }
       walkMapDraw(); colonyInteriores();
     }
   }
@@ -659,7 +705,7 @@
   function colonySalas(key) {
     const box = $('#col-salas'); if (!box) return;
     const salas = Object.keys(SALAS).filter(n => n[0] === key && COL.model && COL.model.getObjectByName(n));
-    box.innerHTML = salas.map(n => '<button type="button" class="btn btn--sm" data-sala="' + n + '">Ir a · ' + SALAS[n] + '</button>').join('');
+    box.innerHTML = salas.map(n => '<button type="button" class="btn btn--sm" data-sala="' + n + '">' + L('Ir a · ', 'Go to · ') + SALAS[n] + '</button>').join('');
     box.hidden = !salas.length;
     $$('#col-salas [data-sala]').forEach(b => b.addEventListener('click', () => colonyEnter(b.dataset.sala)));
   }
@@ -706,9 +752,9 @@
   function updateColonyPanel() {
     if ($('#sim-colony').hidden) return;
     const C = S.colony, dem = sim.COLONY.demandKgDay;
-    set('col-crew', `${C.crew}`); set('col-agua', `${fmt(C.water, 1)} L`); set('col-dias', `${fmt(C.water / dem, 1)} días`);
-    set('col-dem', `${fmt(dem, 1)} L/día`); bar('col-agua-bar', C.water / Math.max(dem * 10, 1));
-    set('col-flujo', S.t - C.flowT < 600 ? 'Llegando agua por la tubería' : 'Sin flujo ahora');
+    set('col-crew', `${C.crew}`); set('col-agua', `${fmt(C.water, 1)} L`); set('col-dias', `${fmt(C.water / dem, 1)} ${L('días', 'days')}`);
+    set('col-dem', `${fmt(dem, 1)} ${L('L/día', 'L/day')}`); bar('col-agua-bar', C.water / Math.max(dem * 10, 1));
+    set('col-flujo', S.t - C.flowT < 600 ? L('Llegando agua por la tubería', 'Water arriving through the pipe') : L('Sin flujo ahora', 'No flow right now'));
   }
   function colonyPick(ev) {
     if (!COL.model) return false;
@@ -1172,7 +1218,7 @@
   function toFreeCam() {
     if (camMode === 'free') return;
     camMode = 'free'; setCamLens('free'); $$('#sim-cam button[data-c]').forEach(b => b.setAttribute('aria-pressed', 'false')); $('#sim-core').hidden = true;
-    set('sim-cam-cur', 'Cámara libre'); setToolUI();
+    set('sim-cam-cur', L('Cámara libre', 'Free camera')); setToolUI();
   }
   function moveCameraWASD() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastCamT) / 1000); lastCamT = now;
@@ -1281,16 +1327,16 @@
     g.fillStyle = '#c3c3cc'; g.font = '10px Inter, sans-serif';
     for (let d = 0; d <= maxD + 1e-6; d += 0.5) { g.fillText(`${fmt(d, 1)} m`, 6, Y(d) + 3); g.fillStyle = 'rgba(237,237,243,.12)'; g.fillRect(x0, Y(d), x1 - x0, 1); g.fillStyle = '#c3c3cc'; }
     g.fillStyle = '#ededf3'; g.fillRect(x0, top - 1, x1 - x0, 2);
-    g.font = '10px Inter, sans-serif'; g.fillStyle = '#c3c3cc'; g.fillText('capa seca', x0 + 6, top + 12);
+    g.font = '10px Inter, sans-serif'; g.fillStyle = '#c3c3cc'; g.fillText(L('capa seca', 'dry layer'), x0 + 6, top + 12);
     if (R.drillDepth > 0 || R.task === 'drill') {
       const cx = (x0 + x1) / 2; g.strokeStyle = '#ededf3'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, top - 8); g.lineTo(cx, Y(R.drillDepth)); g.stroke();
       g.fillStyle = '#5266eb'; g.beginPath(); g.moveTo(cx - 5, Y(R.drillDepth)); g.lineTo(cx + 5, Y(R.drillDepth)); g.lineTo(cx, Y(R.drillDepth) + 8); g.fill();
     }
     g.setLineDash([3, 3]); g.strokeStyle = 'rgba(237,237,243,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, Y(P.drillDepth)); g.lineTo(x1, Y(P.drillDepth)); g.stroke(); g.setLineDash([]);
     g.fillStyle = '#ededf3'; g.font = '600 11px Inter, sans-serif';
-    g.fillText(wTrue > 0.3 ? `Hielo real: ${fmt(wTrue, 1)} %` : 'Sin hielo aquí', 10, Hd - 19);
+    g.fillText(wTrue > 0.3 ? L(`Hielo real: ${fmt(wTrue, 1)} %`, `Real ice: ${fmt(wTrue, 1)}%`) : L('Sin hielo aquí', 'No ice here'), 10, Hd - 19);
     g.fillStyle = '#c3c3cc'; g.font = '10px Inter, sans-serif';
-    g.fillText(est != null ? `El rover estima: ${fmt(est, 1)} %` : 'El rover aún no ha medido aquí', 10, Hd - 6);
+    g.fillText(est != null ? L(`El rover estima: ${fmt(est, 1)} %`, `Rover estimate: ${fmt(est, 1)}%`) : L('El rover aún no ha medido aquí', 'The rover has not measured here yet'), 10, Hd - 6);
   }
 
   // ---------- Interacción con el terreno ----------
@@ -1304,6 +1350,11 @@
   function describe(x, z) {
     const w = W.iceWt(x, z), dry = W.dryLayer(x, z), T = W.envT(x, z), psr = W.fracAt(W.psr, x, z) > 0.5, slope = W.slopeAt(x, z);
     const k = sim.ki(x, z), est = S.know.n[k] ? S.know.sum[k] / S.know.n[k] : null;
+    if (IceLang === 'en') {
+      const headEn = w > 0.3 ? `<strong>Ice beneath the ground: ${fmt(w, 1)}%</strong><br>starts at ${fmt(dry * 100, 0)} cm depth` : `<strong>No ice</strong><br>${psr ? 'permanent shadow, but no deposit here' : 'sunlit area: ice would sublime'}`;
+      const altEn = W.real ? ` · elevation ${fmt(W.hAt(x, z) + W.meta.base, 0)} m` : '';
+      return `${headEn}<br><span class="muted">${fmt(T, 0)} K (${fmt(T - 273.15, 0)} °C) · ${psr ? 'permanent shadow' : 'sunlit'} · slope ${fmt(slope, 0)}°${slope > 24 ? ' (too steep)' : ''}${altEn}</span><br><span class="muted">${est != null ? `The rover measured ${fmt(est, 1)}% here` : 'The rover has not measured here yet'}</span>`;
+    }
     const head = w > 0.3 ? `<strong>Hielo bajo el suelo: ${fmt(w, 1)} %</strong><br>empieza a ${fmt(dry * 100, 0)} cm de profundidad` : `<strong>Sin hielo</strong><br>${psr ? 'sombra permanente, pero sin depósito aquí' : 'zona con sol: el hielo se sublimaría'}`;
     const alt = W.real ? ` · altura ${fmt(W.hAt(x, z) + W.meta.base, 0)} m` : '';
     return `${head}<br><span class="muted">${fmt(T, 0)} K (${fmt(T - 273.15, 0)} °C) · ${psr ? 'sombra permanente' : 'iluminado'} · pendiente ${fmt(slope, 0)}°${slope > 24 ? ' (demasiado inclinada)' : ''}${alt}</span><br><span class="muted">${est != null ? `El rover midió aquí ${fmt(est, 1)} %` : 'El rover aún no ha medido aquí'}</span>`;
@@ -1385,9 +1436,9 @@
       const r = el.getBoundingClientRect();
       pickMarker.visible = true; pickMarker.position.set(p.x, p.y + 0.4, p.z);
       tip.hidden = true;
-      pop.innerHTML = `${describe(p.x, p.z)}<div class="row" style="margin-top:12px;gap:8px"><button class="btn btn--primary btn--sm" data-go>Enviar el rover aquí</button><button class="btn btn--sm btn--quiet" data-close>Cancelar</button></div>`;
+      pop.innerHTML = `${describe(p.x, p.z)}<div class="row" style="margin-top:12px;gap:8px"><button class="btn btn--primary btn--sm" data-go>${L('Enviar el rover aquí', 'Send the rover here')}</button><button class="btn btn--sm btn--quiet" data-close>${L('Cancelar', 'Cancel')}</button></div>`;
       pop.hidden = false; pop.style.left = Math.min(r.width - 290, ev.clientX - r.left + 10) + 'px'; pop.style.top = Math.min(r.height - 190, Math.max(50, ev.clientY - r.top - 20)) + 'px';
-      pop.querySelector('[data-go]').onclick = () => { sim.cmd.stopRoute(); sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); setDestMode(false); hideIntro(); toast('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.'); };
+      pop.querySelector('[data-go]').onclick = () => { sim.cmd.stopRoute(); sim.cmd.goTo(p.x, p.z); setModeUI('auto'); if (!S.running) toggleRun(); setDestMode(false); hideIntro(); toast(L('El rover va hacia ese punto, medirá el hielo y decidirá si perforar.', 'The rover is heading to that point; it will measure the ice and decide whether to drill.')); };
       pop.querySelector('[data-close]').onclick = () => { pop.hidden = true; pickMarker.visible = false; };
     });
     $('#sim-dest-btn').addEventListener('click', () => setDestMode(!destMode));
@@ -1558,7 +1609,7 @@
       const host = $('#sim-view'), vis = _dv.z < 1 && camD < 40;
       DR.tag.hidden = !vis;
       if (vis) { DR.tag.style.transform = `translate(${(_dv.x * 0.5 + 0.5) * host.clientWidth}px, ${(-_dv.y * 0.5 + 0.5) * host.clientHeight}px) translate(-50%, -100%)`;
-        set_(DR.tag, `Corte ilustrativo · capa seca ${fmt(DR.dry * 100, 0)} cm · hielo ${fmt(DR.ice, 1)} %${drilling ? ` · broca a ${fmt(R.drillDepth, 2)} m` : ''}`); }
+        set_(DR.tag, L(`Corte ilustrativo · capa seca ${fmt(DR.dry * 100, 0)} cm · hielo ${fmt(DR.ice, 1)} %${drilling ? ` · broca a ${fmt(R.drillDepth, 2)} m` : ''}`, `Illustrative cutaway · dry layer ${fmt(DR.dry * 100, 0)} cm · ice ${fmt(DR.ice, 1)}%${drilling ? ` · bit at ${fmt(R.drillDepth, 2)} m` : ''}`)); }
     } else DR.tag.hidden = true;
     // virutas despedidas: salen mientras gira la broca y caen formando el montón
     if (drilling && S.running) DR.emit += dt * 55;
@@ -1623,6 +1674,21 @@
     { id: 'chasis', re: /./, h: 0, v: 0, name: 'Chasis y electrónica',
       d: 'Casco con aislamiento multicapa, radiador con persianas, electrónica, faros y cámaras de peligro. Mantiene el interior por encima de −10 °C.' }
   ];
+  if (IceLang === 'en') {
+    const EN = {
+      paneles: ['Solar panels', 'Three wings of solar cells (300 W in the simulation). They charge the battery while the rover is in sunlight; in shadow they produce nothing.'],
+      antenas: ['Communications', 'Steerable high-gain antenna and UHF antenna. They send data to the station when there is line of sight; the terrain can block it.'],
+      mastil: ['Camera mast', 'Navigation cameras on a head that pans and tilts: it scans while exploring, looks at the ground while measuring and watches the drill. It is the “Rover camera”.'],
+      brazo: ['Robotic arm', 'Four joints (base, shoulder, elbow and wrist). It carries each sample from the drill to a cartridge in the carousel.'],
+      taladro: ['Drill', 'A 10 cm auger that drills down to 1 m. The carriage moves down a rack; ice hardens the soil and drilling takes longer.'],
+      carrusel: ['Sample carousel', 'Eight sealed cartridges. They keep the icy soil samples until the station, where they are unloaded into the oven.'],
+      bateria: ['Battery', '5 kWh in the simulation. It powers the wheels, instruments, heating and drill. The rover returns before dropping below the reserve.'],
+      ciencia: ['Science instruments', 'Neutron spectrometer and helium-3 detectors: they pick up the hydrogen of the ice beneath the ground. Ground-penetrating radar and sample analyser. Only the spectrometer is used in the simulation.'],
+      ruedas: ['Wheels and suspension', 'Six wheels with their own motors and rocker-bogie suspension that keeps all six on the ground. The four corner wheels steer.'],
+      chasis: ['Chassis and electronics', 'Hull with multilayer insulation, louvred radiator, electronics, headlights and hazard cameras. It keeps the inside above −10 °C.']
+    };
+    EXP_GROUPS.forEach(G => { if (EN[G.id]) { G.name = EN[G.id][0]; G.d = EN[G.id][1]; } });
+  }
   const EXP = { on: false, built: false, k: 0, target: 0, amt: 1, sel: null, objs: [], meshes: [], groups: {}, root: null, prev: null, wasRunning: false };
   function expBuild() {
     if (EXP.built) return true;
@@ -1657,8 +1723,8 @@
   function expSelect(id) {
     EXP.sel = EXP.sel === id ? null : id;
     const gr = EXP.sel && EXP.groups[EXP.sel];
-    set('se-name', gr ? gr.G.name : 'Elige una pieza');
-    set('se-desc', gr ? gr.G.d : 'Toca una etiqueta o una pieza del rover para ver qué hace. Arrastra para girar alrededor y usa la rueda para acercarte.');
+    set('se-name', gr ? gr.G.name : L('Elige una pieza', 'Choose a part'));
+    set('se-desc', gr ? gr.G.d : L('Toca una etiqueta o una pieza del rover para ver qué hace. Arrastra para girar alrededor y usa la rueda para acercarte.', 'Tap a label or a rover part to see what it does. Drag to rotate around it and use the wheel to zoom in.'));
     Object.values(EXP.groups).forEach(g => { if (g.el) g.el.setAttribute('aria-pressed', String(g.G.id === EXP.sel)); });
     EXP.meshes.forEach(n => { [].concat(n.material).forEach(mt => { if (!mt.emissive) return; const o = mt.userData.eEm; if (!o) return;
       if (n.userData.eg === EXP.sel) mt.emissive.setRGB(0.1, 0.13, 0.42); else mt.emissive.copy(o); }); });
@@ -1666,7 +1732,7 @@
   function setExplode(on) {
     if (on === EXP.on) return;
     if (on) {
-      if (!expBuild()) { toast('El despiece necesita el modelo 3D del rover, que aún se está cargando.'); return; }
+      if (!expBuild()) { toast(L('El despiece necesita el modelo 3D del rover, que aún se está cargando.', 'The exploded view needs the rover 3D model, which is still loading.')); return; }
       if (destMode) setDestMode(false);
       EXP.on = true; EXP.target = 1;
       EXP.wasRunning = S.running; if (S.running) { sim.cmd.pause(); toggleRunLabel(); }
@@ -1758,7 +1824,7 @@
     const st = W.station, cp = COL.g.position;
     g.fillStyle = '#ededf3'; g.fillRect(X(st.x) - 5, Y(st.z) - 5, 10, 10);
     g.beginPath(); g.arc(X(cp.x), Y(cp.z), 5.5, 0, 6.283); g.fill();
-    g.font = '600 15px Inter, sans-serif'; g.fillStyle = 'rgba(237,237,243,.92)'; g.fillText('Estación', X(st.x) + 9, Y(st.z) + 5); g.fillText('Colonia', X(cp.x) + 9, Y(cp.z) + 5);
+    g.font = '600 15px Inter, sans-serif'; g.fillStyle = 'rgba(237,237,243,.92)'; g.fillText(L('Estación', 'Station'), X(st.x) + 9, Y(st.z) + 5); g.fillText(L('Colonia', 'Colony'), X(cp.x) + 9, Y(cp.z) + 5);
     // ruta: línea discontinua rover → puntos de paso pendientes
     const pend = ROUTE.pts.slice(ROUTE.active ? ROUTE.i : 0);
     if (pend.length) {
@@ -1804,11 +1870,11 @@
     const R = S.rover;
     if (!R.route) {
       ROUTE.active = false;
-      if (R.routeDone) { ROUTE.i = ROUTE.pts.length; finishRun(); toast('Ruta completada: el rover pasó por todos los puntos.'); }
+      if (R.routeDone) { ROUTE.i = ROUTE.pts.length; finishRun(); toast(L('Ruta completada: el rover pasó por todos los puntos.', 'Route completed: the rover passed through every point.')); }
       routeMarks(); setRouteUI(); return;
     }
     if (R.routeI !== ROUTE.i) { ROUTE.i = R.routeI; routeMarks(); setRouteUI(); }
-    if ((R.task === 'return' || R.task === 'idle') && !ROUTE.paused) { ROUTE.paused = true; toast('El rover vuelve a la estación (batería o bodega); al recargar seguirá la ruta.'); }
+    if ((R.task === 'return' || R.task === 'idle') && !ROUTE.paused) { ROUTE.paused = true; toast(L('El rover vuelve a la estación (batería o bodega); al recargar seguirá la ruta.', 'The rover is returning to the station (battery or cargo); after recharging it will continue the route.')); }
     if (R.task !== 'return' && R.task !== 'idle') ROUTE.paused = false;
   }
   function finishRun() {
@@ -1819,8 +1885,8 @@
     if (sv) { sv.run = { d3: r.d3, dt: r.dt, drills: r.drills }; storeSaved(); renderSaved(); }
   }
   function setRouteUI() {
-    const go = $('#sm-go'); if (go) { go.textContent = ROUTE.active ? 'Detener ruta' : (ROUTE.i > 0 && ROUTE.i < ROUTE.pts.length ? 'Seguir ruta' : 'Recorrer ruta'); go.disabled = !ROUTE.pts.length; }
-    set('sm-count', ROUTE.pts.length ? `${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}` : 'Sin puntos de paso');
+    const go = $('#sm-go'); if (go) { go.textContent = ROUTE.active ? L('Detener ruta', 'Stop route') : (ROUTE.i > 0 && ROUTE.i < ROUTE.pts.length ? L('Seguir ruta', 'Resume route') : L('Recorrer ruta', 'Follow route')); go.disabled = !ROUTE.pts.length; }
+    set('sm-count', ROUTE.pts.length ? L(`${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}`, `${ROUTE.pts.length} waypoint${ROUTE.pts.length > 1 ? 's' : ''}${ROUTE.active ? ` · heading to ${ROUTE.i + 1}` : ''}`) : L('Sin puntos de paso', 'No waypoints'));
     set('sm-est', routeEstimateHTML()); const sb = $('#sm-save'); if (sb) sb.disabled = !ROUTE.pts.length;
     drawMap();
   }
@@ -1882,17 +1948,17 @@
     setMeasureUI();
   }
   function setMeasureUI() {
-    set('sm-mcount', !MEAS.a ? 'Haz clic en el mapa para marcar el punto A' : !MEAS.b ? 'Ahora haz clic en el punto B' : 'A → B medido · otro clic empieza de nuevo');
+    set('sm-mcount', !MEAS.a ? L('Haz clic en el mapa para marcar el punto A', 'Click on the map to mark point A') : !MEAS.b ? L('Ahora haz clic en el punto B', 'Now click on point B') : L('A → B medido · otro clic empieza de nuevo', 'A → B measured · another click starts over'));
     const M = MEAS.res, el = $('#sm-mest');
     if (el) el.innerHTML = !M ? '' :
-      `<div class="sm-kv"><span>Línea recta</span><b>${fmtDist(M.d2)}</b></div>` +
-      `<div class="sm-kv"><span>Sobre el terreno</span><b>${fmtDist(M.d3)}</b></div>` +
-      `<div class="sm-kv"><span>Desnivel</span><b>+${fmt(M.up, 0)} m / −${fmt(M.down, 0)} m</b></div>` +
-      `<div class="sm-kv"><span>Pendiente máxima</span><b>${fmt(M.maxSlope, 0)}°</b></div>` +
-      `<div class="sm-kv"><span>Tiempo del rover</span><b>${fmtDur(M.t)}</b></div>` +
-      `<div class="sm-kv"><span>Energía de la marcha</span><b>${fmt(energyWh(M.t), 0)} Wh</b></div>` +
-      (M.blocked > 0 ? `<p class="sm-warn">${fmtDist(M.blocked)} con subidas de más de 24°: el rover no puede ir en línea recta y tendría que rodear.</p>` : '') +
-      `<p class="sm-hint">${fmtDur(M.t / warp)} reales a la velocidad actual (${warp}×).</p>`;
+      `<div class="sm-kv"><span>${L('Línea recta', 'Straight line')}</span><b>${fmtDist(M.d2)}</b></div>` +
+      `<div class="sm-kv"><span>${L('Sobre el terreno', 'Over the terrain')}</span><b>${fmtDist(M.d3)}</b></div>` +
+      `<div class="sm-kv"><span>${L('Desnivel', 'Elevation change')}</span><b>+${fmt(M.up, 0)} m / −${fmt(M.down, 0)} m</b></div>` +
+      `<div class="sm-kv"><span>${L('Pendiente máxima', 'Maximum slope')}</span><b>${fmt(M.maxSlope, 0)}°</b></div>` +
+      `<div class="sm-kv"><span>${L('Tiempo del rover', 'Rover time')}</span><b>${fmtDur(M.t)}</b></div>` +
+      `<div class="sm-kv"><span>${L('Energía de la marcha', 'Driving energy')}</span><b>${fmt(energyWh(M.t), 0)} Wh</b></div>` +
+      (M.blocked > 0 ? `<p class="sm-warn">${fmtDist(M.blocked)} ${L('con subidas de más de 24°: el rover no puede ir en línea recta y tendría que rodear.', 'with climbs steeper than 24°: the rover cannot go in a straight line and would have to go around.')}</p>` : '') +
+      `<p class="sm-hint">${L(`${fmtDur(M.t / warp)} reales a la velocidad actual (${warp}×).`, `${fmtDur(M.t / warp)} of real time at the current speed (${warp}×).`)}</p>`;
     drawProfile(); drawMap();
   }
   function drawProfile() {
@@ -1916,12 +1982,12 @@
   function storeSaved() { try { localStorage.setItem('icewise-rutas', JSON.stringify(SAVED.list)); } catch (_) {} }
   function renderSaved() {
     const box = $('#sm-saved'); if (!box) return;
-    if (!SAVED.list.length) { box.innerHTML = '<p class="sm-hint">Aún no hay rutas guardadas.</p>'; return; }
+    if (!SAVED.list.length) { box.innerHTML = `<p class="sm-hint">${L('Aún no hay rutas guardadas.', 'No saved routes yet.')}</p>`; return; }
     box.innerHTML = SAVED.list.map((r, i) => {
       const E = r.est, run = r.run;
-      return `<div class="sm-route${ROUTE.savedId === r.id ? ' is-on' : ''}"><div class="sm-rt"><b>${r.name}</b><span>${r.pts.length} pts · ${fmtDist(E.d3)} · ≈ ${fmtDur(E.total)}</span>` +
-        (run ? `<span class="sm-run">Medido: ${fmtDist(run.d3)} en ${fmtDur(run.dt)}${run.drills ? ` (con ${run.drills} perforaci${run.drills > 1 ? 'ones' : 'ón'})` : ''}</span>` : '') +
-        `</div><span class="sm-rb"><button type="button" class="btn btn--sm" data-load="${i}">Cargar</button><button type="button" class="sm-x" data-del="${i}" aria-label="Borrar ${r.name}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`;
+      return `<div class="sm-route${ROUTE.savedId === r.id ? ' is-on' : ''}"><div class="sm-rt"><b>${r.name.replace(/^Ruta /, L('Ruta ', 'Route '))}</b><span>${r.pts.length} pts · ${fmtDist(E.d3)} · ≈ ${fmtDur(E.total)}</span>` +
+        (run ? `<span class="sm-run">${L(`Medido: ${fmtDist(run.d3)} en ${fmtDur(run.dt)}${run.drills ? ` (con ${run.drills} perforaci${run.drills > 1 ? 'ones' : 'ón'})` : ''}`, `Measured: ${fmtDist(run.d3)} in ${fmtDur(run.dt)}${run.drills ? ` (with ${run.drills} drill hole${run.drills > 1 ? 's' : ''})` : ''}`)}</span>` : '') +
+        `</div><span class="sm-rb"><button type="button" class="btn btn--sm" data-load="${i}">${L('Cargar', 'Load')}</button><button type="button" class="sm-x" data-del="${i}" aria-label="${L('Borrar', 'Delete')} ${r.name}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`;
     }).join('');
     box.querySelectorAll('[data-load]').forEach(b => b.addEventListener('click', () => { const r = SAVED.list[+b.dataset.load];
       ROUTE.pts = r.pts.map(p => ({ x: p.x, z: p.z })); ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; ROUTE.savedId = r.id; routeMarks(); setRouteUI(); toast(`${r.name} cargada.`); }));
@@ -1931,13 +1997,13 @@
   function routeEstimateHTML() {
     if (!ROUTE.pts.length) return '';
     const R = S.rover, pend = ROUTE.pts.slice(ROUTE.active ? ROUTE.i : 0), E = estimateRoute(pend, R.x, R.z, R.heading);
-    let h = `<div class="sm-kv"><span>${ROUTE.active ? 'Falta recorrer' : 'Recorrido desde el rover'}</span><b>${fmtDist(E.d3)}</b></div>` +
-      `<div class="sm-kv"><span>Conducción</span><b>${fmtDur(E.drive + E.turn)}</b></div>` +
-      `<div class="sm-kv"><span>Mediciones (20 min por punto)</span><b>${fmtDur(E.meas)}</b></div>` +
-      `<div class="sm-kv sm-tot"><span>Duración estimada</span><b>${fmtDur(E.total)}</b></div>` +
-      `<p class="sm-hint">Energía de la marcha ≈ ${fmt(E.wh, 0)} Wh. Si perfora en un punto, +${fmtDur(drillHours() * 3600)} por perforación. A ${warp}× son ${fmtDur(E.total / warp)} reales.</p>`;
-    if (E.blocked > 0) h += `<p class="sm-warn">${fmtDist(E.blocked)} con subidas de más de 24°: el rover tendrá que rodear y tardará más.</p>`;
-    if (ROUTE.run && ROUTE.run.done) { const r = ROUTE.run; h += `<p class="sm-run">Último recorrido medido: ${fmtDist(r.d3)} en ${fmtDur(r.dt)} (estimado ${fmtDur(r.estTotal)})${r.drills ? ` · ${r.drills} perforaci${r.drills > 1 ? 'ones' : 'ón'}` : ''}.</p>`; }
+    let h = `<div class="sm-kv"><span>${ROUTE.active ? L('Falta recorrer', 'Left to travel') : L('Recorrido desde el rover', 'Distance from the rover')}</span><b>${fmtDist(E.d3)}</b></div>` +
+      `<div class="sm-kv"><span>${L('Conducción', 'Driving')}</span><b>${fmtDur(E.drive + E.turn)}</b></div>` +
+      `<div class="sm-kv"><span>${L('Mediciones (20 min por punto)', 'Measurements (20 min per point)')}</span><b>${fmtDur(E.meas)}</b></div>` +
+      `<div class="sm-kv sm-tot"><span>${L('Duración estimada', 'Estimated duration')}</span><b>${fmtDur(E.total)}</b></div>` +
+      `<p class="sm-hint">${L(`Energía de la marcha ≈ ${fmt(E.wh, 0)} Wh. Si perfora en un punto, +${fmtDur(drillHours() * 3600)} por perforación. A ${warp}× son ${fmtDur(E.total / warp)} reales.`, `Driving energy ≈ ${fmt(E.wh, 0)} Wh. If it drills at a point, +${fmtDur(drillHours() * 3600)} per drill hole. At ${warp}× that is ${fmtDur(E.total / warp)} of real time.`)}</p>`;
+    if (E.blocked > 0) h += `<p class="sm-warn">${fmtDist(E.blocked)} ${L('con subidas de más de 24°: el rover tendrá que rodear y tardará más.', 'with climbs steeper than 24°: the rover will have to go around and take longer.')}</p>`;
+    if (ROUTE.run && ROUTE.run.done) { const r = ROUTE.run; h += `<p class="sm-run">${L(`Último recorrido medido: ${fmtDist(r.d3)} en ${fmtDur(r.dt)} (estimado ${fmtDur(r.estTotal)})${r.drills ? ` · ${r.drills} perforaci${r.drills > 1 ? 'ones' : 'ón'}` : ''}.`, `Last measured run: ${fmtDist(r.d3)} in ${fmtDur(r.dt)} (estimated ${fmtDur(r.estTotal)})${r.drills ? ` · ${r.drills} drill hole${r.drills > 1 ? 's' : ''}` : ''}.`)}</p>`; }
     return h;
   }
 
@@ -1951,16 +2017,16 @@
     if ($('#sim-ctrl').hidden) return;
     const R = S.rover, bat = R.battery / sim.ROVER.cap, slope = W.slopeAt(R.x, R.z), kmh = Math.abs(R.speed) * 3.6, cargo = R.cargoReg + R.cargoIce;
     const dSt = Math.hypot(R.x - W.station.x, R.z - W.station.z), los = losStation();
-    set('sc-bat', `${fmt(bat * 100, 0)} %`); bar('sc-bat-bar', bat); set('sc-bat-s', `gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`);
-    set('sc-temp', `${fmt(R.sysT - 273.15, 0)} °C`); bar('sc-temp-bar', (R.sysT - 233) / 80); set('sc-temp-s', `interior · exterior ${fmt(R.Tenv || 0, 0)} K (${fmt((R.Tenv || 0) - 273.15, 0)} °C)`);
-    set('sc-slope', `${fmt(slope, 0)}°`); bar('sc-slope-bar', slope / 25); set('sc-slope-s', slope > 15 ? 'más de 15°: no perfora aquí' : 'límite para perforar: 15°');
-    set('sc-speed', `${fmt(kmh, 1)} km/h`); bar('sc-speed-bar', Math.abs(R.speed) / Math.max(0.01, P.vmax)); set('sc-speed-s', `máxima ${fmt(P.vmax * 3.6, 1)} km/h`);
-    set('sc-drill', `${fmt(R.drillDepth, 2)} m`); bar('sc-drill-bar', R.drillDepth / Math.max(0.01, P.drillDepth)); set('sc-drill-s', `de ${fmt(P.drillDepth, 2)} m · ${S.totals.holes} perforaciones`);
-    set('sc-cargo', `${fmt(cargo, 1)} kg`); bar('sc-cargo-bar', cargo / P.cargoCap); set('sc-cargo-s', `de ${fmt(P.cargoCap, 0)} kg · hielo ${fmt(R.cargoIce, 2)} kg`);
-    set('sc-link', los ? 'Directa' : 'Bloqueada'); bar('sc-link-bar', los ? 1 : 0); set('sc-link-s', `${los ? 'línea de vista con la estación' : 'el relieve tapa la antena de la estación'} · ${fmt(dSt, 0)} m`);
+    set('sc-bat', `${fmt(bat * 100, 0)}${L(' %', '%')}`); bar('sc-bat-bar', bat); set('sc-bat-s', L(`gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`, `using ${fmt(R.power, 0)} W · receiving ${fmt(R.solar + (R.charge || 0), 0)} W`));
+    set('sc-temp', `${fmt(R.sysT - 273.15, 0)} °C`); bar('sc-temp-bar', (R.sysT - 233) / 80); set('sc-temp-s', L(`interior · exterior ${fmt(R.Tenv || 0, 0)} K (${fmt((R.Tenv || 0) - 273.15, 0)} °C)`, `inside · outside ${fmt(R.Tenv || 0, 0)} K (${fmt((R.Tenv || 0) - 273.15, 0)} °C)`));
+    set('sc-slope', `${fmt(slope, 0)}°`); bar('sc-slope-bar', slope / 25); set('sc-slope-s', slope > 15 ? L('más de 15°: no perfora aquí', 'over 15°: it will not drill here') : L('límite para perforar: 15°', 'drilling limit: 15°'));
+    set('sc-speed', `${fmt(kmh, 1)} km/h`); bar('sc-speed-bar', Math.abs(R.speed) / Math.max(0.01, P.vmax)); set('sc-speed-s', L(`máxima ${fmt(P.vmax * 3.6, 1)} km/h`, `max ${fmt(P.vmax * 3.6, 1)} km/h`));
+    set('sc-drill', `${fmt(R.drillDepth, 2)} m`); bar('sc-drill-bar', R.drillDepth / Math.max(0.01, P.drillDepth)); set('sc-drill-s', L(`de ${fmt(P.drillDepth, 2)} m · ${S.totals.holes} perforaciones`, `of ${fmt(P.drillDepth, 2)} m · ${S.totals.holes} drill holes`));
+    set('sc-cargo', `${fmt(cargo, 1)} kg`); bar('sc-cargo-bar', cargo / P.cargoCap); set('sc-cargo-s', L(`de ${fmt(P.cargoCap, 0)} kg · hielo ${fmt(R.cargoIce, 2)} kg`, `of ${fmt(P.cargoCap, 0)} kg · ice ${fmt(R.cargoIce, 2)} kg`));
+    set('sc-link', los ? L('Directa', 'Direct') : L('Bloqueada', 'Blocked')); bar('sc-link-bar', los ? 1 : 0); set('sc-link-s', `${los ? L('línea de vista con la estación', 'line of sight to the station') : L('el relieve tapa la antena de la estación', 'the terrain blocks the station antenna')} · ${fmt(dSt, 0)} m`);
     $('#sc-link').classList.toggle('warn', !los); $('#sc-slope').classList.toggle('warn', slope > 15); $('#sc-bat').classList.toggle('warn', bat < P.reserve / 100 + 0.05);
     set('sc-task', TASKS[R.task] || R.task);
-    set('sc-odo', fmtDist(ODO.d3)); set('sc-odo-s', `esta salida ${fmtDist(ODO.trip)} · ruedas (horizontal) ${fmtDist(S.totals.dist)} · a la estación ${fmtDist(dSt)} en línea recta`);
+    set('sc-odo', fmtDist(ODO.d3)); set('sc-odo-s', L(`esta salida ${fmtDist(ODO.trip)} · ruedas (horizontal) ${fmtDist(S.totals.dist)} · a la estación ${fmtDist(dSt)} en línea recta`, `this outing ${fmtDist(ODO.trip)} · wheels (horizontal) ${fmtDist(S.totals.dist)} · to the station ${fmtDist(dSt)} in a straight line`));
   }
   function updateSpeedBadge() {
     const el = $('#sim-speed'); if (!el) return;
@@ -1988,7 +2054,7 @@
     const st = $('#sim-stage');
     if (fsElement()) { const x = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (x && x.then) x.then(onFullscreen, onFullscreen); else setTimeout(onFullscreen, 300); return; }
     const req = st.requestFullscreen || st.webkitRequestFullscreen; if (!req) return;
-    const r = req.call(st); if (r && r.then) r.then(onFullscreen, () => toast('El navegador no permitió la pantalla completa.')); else setTimeout(onFullscreen, 300);
+    const r = req.call(st); if (r && r.then) r.then(onFullscreen, () => toast(L('El navegador no permitió la pantalla completa.', 'The browser did not allow full screen.'))); else setTimeout(onFullscreen, 300);
   }
   function onFullscreen() {
     let t = $('#toast');                                                       // los avisos tienen que verse también en pantalla completa
@@ -2013,7 +2079,7 @@
     const home = { parent: el.parentNode, next: el.nextSibling };
     const grip = document.createElement('span'); grip.className = 'win-grip'; grip.setAttribute('aria-hidden', 'true');
     grip.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M11 5L5 11M11 8.5L8.5 11"/></svg>';
-    el.appendChild(grip); el.classList.add('win'); head.title = 'Arrastra para mover · doble clic para devolverlo a su sitio';
+    el.appendChild(grip); el.classList.add('win'); head.title = L('Arrastra para mover · doble clic para devolverlo a su sitio', 'Drag to move · double-click to put it back');
     const front = () => { el.style.zIndex = String(5 + (++WIN.z % 50)); };
     const float = () => {
       if (el.classList.contains('is-float')) return;
@@ -2066,7 +2132,7 @@
     cv.addEventListener('click', ev => {
       const r = cv.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * W.SIZE - W.HALF, z = (ev.clientY - r.top) / r.height * W.SIZE - W.HALF;
       if (MAP.mode === 'medir') { if (!MEAS.a || MEAS.b) { MEAS.a = { x, z }; MEAS.b = null; } else MEAS.b = { x, z }; measure(); return; }
-      if (ROUTE.pts.length >= 12) { toast('Máximo 12 puntos de paso.'); return; }
+      if (ROUTE.pts.length >= 12) { toast(L('Máximo 12 puntos de paso.', 'Maximum 12 waypoints.')); return; }
       if (ROUTE.active && ROUTE.i >= ROUTE.pts.length) { ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; }
       ROUTE.pts.push({ x, z }); if (ROUTE.active && S.rover.route) S.rover.route.push({ x, z }); routeMarks(); setRouteUI();
     });
@@ -2077,7 +2143,7 @@
       if (ROUTE.i >= ROUTE.pts.length) ROUTE.i = 0;
       if (ROUTE.i === 0) ROUTE.run = { done: false, d30: ODO.d3, odo0: S.totals.dist, t0: S.t, h0: S.totals.holes, estTotal: estimateRoute(ROUTE.pts, S.rover.x, S.rover.z, S.rover.heading).total };
       ROUTE.active = true; ROUTE.paused = false; sim.cmd.followRoute(ROUTE.pts, ROUTE.i); setModeUI('auto'); hideIntro(); if (!S.running) toggleRun();
-      routeMarks(); setRouteUI(); toast('El rover recorre la ruta: en cada punto mide el hielo y decide si perforar.');
+      routeMarks(); setRouteUI(); toast(L('El rover recorre la ruta: en cada punto mide el hielo y decide si perforar.', 'The rover is following the route: at each point it measures the ice and decides whether to drill.'));
     });
     $('#sm-clear').addEventListener('click', () => { if (ROUTE.active) sim.cmd.stopRoute(); ROUTE.pts = []; ROUTE.i = 0; ROUTE.sent = -1; ROUTE.active = false; ROUTE.savedId = null; ROUTE.run = null; routeMarks(); setRouteUI(); renderSaved(); });
     // pestañas del mapa: Ruta / Medir A → B
@@ -2090,7 +2156,7 @@
       if (!ROUTE.pts.length) return; const st = W.station, n = SAVED.list.reduce((m, r) => Math.max(m, +((/\d+$/.exec(r.name) || [0])[0])), 0) + 1;
       const id = 'r' + Date.now().toString(36), e = estimateRoute(ROUTE.pts, st.x + 10, st.z + 8, 0.9);
       SAVED.list.push({ id, name: `Ruta ${n}`, pts: ROUTE.pts.map(p => ({ x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 })), est: { d3: e.d3, total: e.total } });
-      ROUTE.savedId = id; storeSaved(); renderSaved(); toast(`Ruta ${n} guardada en este navegador.`);
+      ROUTE.savedId = id; storeSaved(); renderSaved(); toast(L(`Ruta ${n} guardada en este navegador.`, `Route ${n} saved in this browser.`));
     });
     loadSaved(); renderSaved(); setMeasureUI();
     window.addEventListener('keydown', e => {
@@ -2129,7 +2195,7 @@
     if (qName !== qBefore) { OPT.prT = now; OPT.ft.length = 0; return; }           // acaba de bajar de nivel: medir de nuevo
     if (fps < 30 && pr > minPr + 0.01) pr = Math.max(minPr, pr * 0.85); else if (fps > 55 && pr < maxPr - 0.01) pr = Math.min(maxPr, pr / 0.85); else return;
     OPT.prT = now; renderer.setPixelRatio(pr); resize(); if (sky) sky.U.pr.value = pr; renderer.shadowMap.needsUpdate = true;
-    set('sim-qres', pr < maxPr - 0.01 ? `Resolución adaptada a tu equipo: ${Math.round(pr / maxPr * 100)} %` : '');
+    set('sim-qres', pr < maxPr - 0.01 ? L(`Resolución adaptada a tu equipo: ${Math.round(pr / maxPr * 100)} %`, `Resolution adapted to your device: ${Math.round(pr / maxPr * 100)}%`) : '');
   }
   function frame(now) {
     requestAnimationFrame(frame);
@@ -2170,7 +2236,7 @@
     FST.calls = renderer.info.render.calls; FST.tris = renderer.info.render.triangles; FST.n++;
     if (camMode === 'rovercam' && now - (frame.hud || 0) > 150) { frame.hud = now; updateRoverHUD(); }
     updateLabels();
-    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); updateControl(); updateSpeedBadge(); if (now - (frame.map || 0) > 400) { frame.map = now; drawMap(); } if (!$('#sim-map').hidden && ROUTE.pts.length && now - (frame.est || 0) > 1000) { frame.est = now; set('sm-est', routeEstimateHTML()); set('sm-count', ROUTE.pts.length ? `${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}` : 'Sin puntos de paso'); } }
+    if (now - lastUI > 200) { lastUI = now; updateUI(); drawCore(); updateProcess(); updateControl(); updateSpeedBadge(); if (now - (frame.map || 0) > 400) { frame.map = now; drawMap(); } if (!$('#sim-map').hidden && ROUTE.pts.length && now - (frame.est || 0) > 1000) { frame.est = now; set('sm-est', routeEstimateHTML()); set('sm-count', ROUTE.pts.length ? L(`${ROUTE.pts.length} punto${ROUTE.pts.length > 1 ? 's' : ''} de paso${ROUTE.active ? ` · yendo al ${ROUTE.i + 1}` : ''}`, `${ROUTE.pts.length} waypoint${ROUTE.pts.length > 1 ? 's' : ''}${ROUTE.active ? ` · heading to ${ROUTE.i + 1}` : ''}`) : L('Sin puntos de paso', 'No waypoints')); } }
     if (now - lastChart > 1200) { lastChart = now; updateCharts(); }
   }
   // Postprocesado: escena HDR (antialiasing de 4 muestras) → oclusión ambiental (GTAO) → brillo (bloom) → acabado de cámara
@@ -2206,8 +2272,8 @@
   function qualityUI() {
     const stage = $('#sim-stage'); if (stage) stage.classList.toggle('is-lowq', qName === 'baja');   // Baja: vidrio sin desenfoque (más ligero)
     $$('#sim-quality button').forEach(b => b.setAttribute('aria-pressed', String(qAuto ? b.dataset.q === 'auto' : b.dataset.q === qName)));
-    const lbl = { maxima: 'Máxima', alta: 'Alta', media: 'Media', baja: 'Baja' }[qName];
-    set('sim-qauto', qAuto ? `Automática: ahora en ${lbl}. Baja sola si tu equipo va lento.` : '');
+    const lbl = L({ maxima: 'Máxima', alta: 'Alta', media: 'Media', baja: 'Baja' }, { maxima: 'Maximum', alta: 'High', media: 'Medium', baja: 'Low' })[qName];
+    set('sim-qauto', qAuto ? L(`Automática: ahora en ${lbl}. Baja sola si tu equipo va lento.`, `Automatic: now on ${lbl}. It lowers itself if your device runs slowly.`) : '');
   }
   // Calidad automática: si tras bajar la resolución al mínimo del nivel sigue por debajo de ~26 fps durante dos
   // mediciones seguidas (~6 s), baja un nivel. Nunca sube sola (evita saltos de calidad); la persona puede elegir.
@@ -2217,7 +2283,7 @@
     if (++OPT.bad < 2) return;
     const next = Q_ORDER[Q_ORDER.indexOf(qName) + 1]; if (!next) return;
     applyQuality(next, true);
-    toast(`Calidad bajada a ${{ alta: 'Alta', media: 'Media', baja: 'Baja' }[next]} para que la simulación vaya fluida.`);
+    toast(L(`Calidad bajada a ${{ alta: 'Alta', media: 'Media', baja: 'Baja' }[next]} para que la simulación vaya fluida.`, `Quality lowered to ${{ alta: 'High', media: 'Medium', baja: 'Low' }[next]} so the simulation runs smoothly.`));
   }
   function resize() {
     const host = $('#sim-view'), w = host.clientWidth, h = host.clientHeight;
@@ -2240,7 +2306,7 @@
   // =====================================================================
   // PANEL DE CONTROL
   // =====================================================================
-  function clockStr(t) { const d = Math.floor(t / 86400) + 1, hh = Math.floor(t % 86400 / 3600), mm = Math.floor(t % 3600 / 60); return `Día ${d} · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
+  function clockStr(t) { const d = Math.floor(t / 86400) + 1, hh = Math.floor(t % 86400 / 3600), mm = Math.floor(t % 3600 / 60); return `${L('Día', 'Day')} ${d} · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
   const doseFromSlider = v => Math.pow(10, -5 + 7 * v / 100);
   const sliderFromDose = d => (Math.log10(d) + 5) / 7 * 100;
   function doseStr(d) { return d < 1e-3 ? `${fmt(d * 1e6, d < 1e-5 ? 1 : 0)} µGy/h` : d < 1 ? `${fmt(d * 1e3, 1)} mGy/h` : `${fmt(d, d < 10 ? 1 : 0)} Gy/h`; }
@@ -2297,13 +2363,13 @@
   function hideIntro() { const i = $('#sim-intro'); if (i) i.hidden = true; }
 
   const WHATIF = [
-    { t: '¿Y si el rover es muy exigente?', d: 'Umbral de hielo 6 %', apply: () => { const b = P.iceThreshold; P.iceThreshold = 6; showEffect('iceThreshold', b, 6); }, tab: 'tab-rover' },
-    { t: '¿Y si no guarda batería para volver?', d: 'Reserva 0 % y bodega de 100 kg', apply: () => { const b = P.reserve; P.reserve = 0; P.cargoCap = 100; showEffect('reserve', b, 0); }, tab: 'tab-rover', warp: 600 },
-    { t: '¿Y si el horno pierde mucho calor?', d: 'Eficiencia de calentamiento 20 %', apply: () => { const b = P.etaH; P.etaH = 0.2; showEffect('etaH', b, 0.2); }, tab: 'tab-plant' },
-    { t: '¿Y si sacamos los microbios al exterior?', d: 'Vacío, −40 °C, radiación lunar', apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
-    { t: '¿Y si los irradiamos fuerte?', d: 'Fuente de 100 Gy/h en la cámara', apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
-    { t: '¿Y si apagamos el biofiltro?', d: 'Solo filtros químicos traídos de la Tierra', apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
-    { t: '¿Y si lo conduzco yo?', d: 'W A S D para conducir · Espacio para perforar', apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
+    { t: L('¿Y si el rover es muy exigente?', 'What if the rover is very demanding?'), d: L('Umbral de hielo 6 %', 'Ice threshold 6%'), apply: () => { const b = P.iceThreshold; P.iceThreshold = 6; showEffect('iceThreshold', b, 6); }, tab: 'tab-rover' },
+    { t: L('¿Y si no guarda batería para volver?', 'What if it keeps no battery to return?'), d: L('Reserva 0 % y bodega de 100 kg', '0% reserve and a 100 kg cargo bay'), apply: () => { const b = P.reserve; P.reserve = 0; P.cargoCap = 100; showEffect('reserve', b, 0); }, tab: 'tab-rover', warp: 600 },
+    { t: L('¿Y si el horno pierde mucho calor?', 'What if the oven loses a lot of heat?'), d: L('Eficiencia de calentamiento 20 %', 'Heating efficiency 20%'), apply: () => { const b = P.etaH; P.etaH = 0.2; showEffect('etaH', b, 0.2); }, tab: 'tab-plant' },
+    { t: L('¿Y si sacamos los microbios al exterior?', 'What if we take the microbes outside?'), d: L('Vacío, −40 °C, radiación lunar', 'Vacuum, −40 °C, lunar radiation'), apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
+    { t: L('¿Y si los irradiamos fuerte?', 'What if we irradiate them hard?'), d: L('Fuente de 100 Gy/h en la cámara', 'A 100 Gy/h source in the chamber'), apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
+    { t: L('¿Y si apagamos el biofiltro?', 'What if we turn off the biofilter?'), d: L('Solo filtros químicos traídos de la Tierra', 'Only chemical filters brought from Earth'), apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
+    { t: L('¿Y si lo conduzco yo?', 'What if I drive it myself?'), d: L('W A S D para conducir · Espacio para perforar', 'W A S D to drive · Space to drill'), apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
   ];
 
   function bindUI() {
@@ -2311,7 +2377,7 @@
     $('#sim-start').addEventListener('click', () => { toggleRun(); hideIntro(); });
     $('#sim-intro-start').addEventListener('click', () => { hideIntro(); if (!S.running) toggleRun(); });
     $('#sim-intro-skip').addEventListener('click', () => { hideIntro(); setCam('overview'); });
-    $('#sim-reset').addEventListener('click', () => { sim.cmd.resetAll(); Object.assign(P, IceSim.DEFAULT_P); syncSliders(); setModeUI('auto'); setCam(camMode); lastChart = 0; updateUI(); toggleRunLabel(); toast('Simulación y valores restablecidos.'); });
+    $('#sim-reset').addEventListener('click', () => { sim.cmd.resetAll(); Object.assign(P, IceSim.DEFAULT_P); syncSliders(); setModeUI('auto'); setCam(camMode); lastChart = 0; updateUI(); toggleRunLabel(); toast(L('Simulación y valores restablecidos.', 'Simulation and values reset.')); });
     $$('#sim-warp button').forEach(b => b.addEventListener('click', () => { warp = +b.dataset.w; $$('#sim-warp button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
     // Selector de cámara: un botón muestra la vista actual y abre la lista
     const camBtn = $('#sim-cam-btn'), camMenu = $('#sim-cam');
@@ -2338,8 +2404,8 @@
     qbtn.addEventListener('click', () => { qpop.hidden = !qpop.hidden; qbtn.setAttribute('aria-expanded', String(!qpop.hidden)); });
     document.addEventListener('click', e => { if (!qpop.hidden && !e.target.closest('.sim-qwrap')) { qpop.hidden = true; qbtn.setAttribute('aria-expanded', 'false'); } });
     $$('#sim-quality button').forEach(b => b.addEventListener('click', () => {
-      if (b.dataset.q === 'auto') { applyQuality(guessQuality(renderer.getContext()), true); toast('Calidad gráfica automática: se ajusta a tu equipo.'); }
-      else { applyQuality(b.dataset.q); toast('Calidad gráfica: ' + b.textContent + '.'); }
+      if (b.dataset.q === 'auto') { applyQuality(guessQuality(renderer.getContext()), true); toast(L('Calidad gráfica automática: se ajusta a tu equipo.', 'Automatic graphics quality: it adapts to your device.')); }
+      else { applyQuality(b.dataset.q); toast(L('Calidad gráfica: ', 'Graphics quality: ') + b.textContent + '.'); }
     }));
     qualityUI();
     layer('#ov-ice', [iceMesh, crystals]); layer('#ov-det', [detMesh]); layer('#ov-psr', [psrMesh]); layer('#ov-trail', [trail, holesGroup]);
@@ -2360,9 +2426,9 @@
     $$('#bio-mode button').forEach(b => b.addEventListener('click', () => { const before = P.chamber; P.chamber = b.dataset.v; syncSliders(); showEffect('chamber', before, P.chamber); }));
     $('#bio-light').addEventListener('change', e => { P.light = e.target.checked; });
     $('#bio-purif').addEventListener('change', e => { const b = P.bioPurif; P.bioPurif = e.target.checked; showEffect('bioPurif', b, P.bioPurif); });
-    $('#p-regen').addEventListener('change', e => { P.adsRegen = e.target.checked; toast(P.adsRegen ? 'El horno regenerará el filtro químico cuando esté libre (hipótesis).' : 'Sin regeneración: el filtro químico se gasta y, al acabarse, el agua sale contaminada.'); });
-    $('#bio-inoc').addEventListener('click', () => { sim.cmd.inoculate(); toast('Cámara re-inoculada con las tres especies.'); });
-    $('#bio-spe').addEventListener('click', () => { sim.cmd.solarEvent(); toast('Evento solar: +0,05 Gy/h durante 10 h.'); });
+    $('#p-regen').addEventListener('change', e => { P.adsRegen = e.target.checked; toast(P.adsRegen ? L('El horno regenerará el filtro químico cuando esté libre (hipótesis).', 'The oven will regenerate the chemical filter when it is free (hypothesis).') : L('Sin regeneración: el filtro químico se gasta y, al acabarse, el agua sale contaminada.', 'No regeneration: the chemical filter wears out and, once it runs out, the water comes out contaminated.')); });
+    $('#bio-inoc').addEventListener('click', () => { sim.cmd.inoculate(); toast(L('Cámara re-inoculada con las tres especies.', 'Chamber re-inoculated with the three species.')); });
+    $('#bio-spe').addEventListener('click', () => { sim.cmd.solarEvent(); toast(L('Evento solar: +0,05 Gy/h durante 10 h.', 'Solar event: +0.05 Gy/h for 10 h.')); });
     // Teclado: modo manual → W A S D conduce el rover y las flechas mueven la cámara;
     // modo autónomo → W A S D (o las flechas) mueven la cámara por el mapa (Shift = rápido)
     const host = $('#sim-view');
@@ -2391,7 +2457,7 @@
   }
   function toggleRun() { if (S.running) sim.cmd.pause(); else sim.cmd.start(); toggleRunLabel(); }
   function toggleRunLabel() {
-    const b = $('#sim-start'); b.querySelector('span').textContent = S.running ? 'Pausar' : 'Iniciar';
+    const b = $('#sim-start'); b.querySelector('span').textContent = S.running ? L('Pausar', 'Pause') : L('Iniciar', 'Start');
     b.querySelector('.ic-play').style.display = S.running ? 'none' : ''; b.querySelector('.ic-pause').style.display = S.running ? '' : 'none';
   }
 
@@ -2400,56 +2466,57 @@
 
   function updateUI() {
     const R = S.rover, Pl = S.plant, B = S.bio;
-    const taskTxt = (TASKS[R.task] || R.task) + (R.task === 'drill' ? ` · ${fmt(R.drillDepth, 2)} de ${fmt(P.drillDepth, 2)} m` : R.task === 'characterize' ? ` · ${Math.round(R.charT / 12)} %` : '');
+    const taskTxt = (TASKS[R.task] || R.task) + (R.task === 'drill' ? ` · ${fmt(R.drillDepth, 2)} ${L('de', 'of')} ${fmt(P.drillDepth, 2)} m` : R.task === 'characterize' ? ` · ${Math.round(R.charT / 12)} %` : '');
     set('hud-clock', clockStr(S.t)); set('hud-task', taskTxt); updateCoreVis(); updateColonyPanel();
-    set('hud-bat', `Batería ${fmt(R.battery / sim.ROVER.cap * 100, 0)} %`); set('hud-temp', `Exterior ${fmt(R.Tenv || 0, 0)} K · rover ${fmt(R.sysT - 273.15, 0)} °C`);
-    set('hud-water', `Agua limpia ${fmt(S.totals.water, 2)} L · en la colonia ${fmt(S.colony.water, 2)} L${S.totals.rejected > 0 ? ` · contaminada ${fmt(S.totals.rejected, 2)} L` : ''}`);
+    set('hud-bat', L(`Batería ${fmt(R.battery / sim.ROVER.cap * 100, 0)} %`, `Battery ${fmt(R.battery / sim.ROVER.cap * 100, 0)}%`)); set('hud-temp', L(`Exterior ${fmt(R.Tenv || 0, 0)} K · rover ${fmt(R.sysT - 273.15, 0)} °C`, `Outside ${fmt(R.Tenv || 0, 0)} K · rover ${fmt(R.sysT - 273.15, 0)} °C`));
+    set('hud-water', L(`Agua limpia ${fmt(S.totals.water, 2)} L · en la colonia ${fmt(S.colony.water, 2)} L${S.totals.rejected > 0 ? ` · contaminada ${fmt(S.totals.rejected, 2)} L` : ''}`, `Clean water ${fmt(S.totals.water, 2)} L · in the colony ${fmt(S.colony.water, 2)} L${S.totals.rejected > 0 ? ` · contaminated ${fmt(S.totals.rejected, 2)} L` : ''}`));
     const hb = $('#hud-bat'); if (hb) hb.classList.toggle('warn', R.battery / sim.ROVER.cap < P.reserve / 100 + 0.05);
-    set('m-water', `${fmt(S.totals.water, 2)}<small>L</small>`); set('m-ice', `${fmt(S.colony.water, 2)}<small>L</small>`); set('m-ice-l', `En la colonia · ${fmt(S.colony.water / sim.COLONY.demandKgDay, 1)} días de reserva`);
+    set('m-water', `${fmt(S.totals.water, 2)}<small>L</small>`); set('m-ice', `${fmt(S.colony.water, 2)}<small>L</small>`); set('m-ice-l', L(`En la colonia · ${fmt(S.colony.water / sim.COLONY.demandKgDay, 1)} días de reserva`, `In the colony · ${fmt(S.colony.water / sim.COLONY.demandKgDay, 1)} days of reserve`));
     set('m-holes', `${S.totals.holes}`); set('m-dist', `${fmt(S.totals.dist / 1000, 2)}<small>km</small>`);
     set('m-spec', S.totals.water > 0 ? `${fmt(S.totals.kWhPlant / S.totals.water, 1)}<small>kWh/L</small>` : '—');
     const known = S.know.n.reduce((a, n) => a + (n > 0 ? 1 : 0), 0); set('m-cov', `${fmt(known / (W.KG * W.KG) * 100, 0)}<small>%</small>`);
     set('r-task', taskTxt); set('r-bat', `${fmt(R.battery, 0)} / ${sim.ROVER.cap} Wh`); bar('r-bat-bar', R.battery / sim.ROVER.cap);
-    set('r-pow', `gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`);
-    set('r-temp', `${fmt(R.sysT - 273.15, 0)} °C · calefacción ${fmt(R.heater, 0)} W`);
-    set('r-cargo', `${fmt(R.cargoReg + R.cargoIce, 1)} / ${fmt(P.cargoCap, 0)} kg (hielo ${fmt(R.cargoIce, 2)} kg)`); bar('r-cargo-bar', (R.cargoReg + R.cargoIce) / P.cargoCap);
-    set('r-sensor', R.lastReading != null ? `${fmt(R.lastReading, 1)} % de hielo equivalente` : '—');
-    const stTxt = { 'vacío': 'Vacío: esperando muestras', calentando: 'Calentando las muestras', sublimando: 'El hielo se convierte en vapor', completado: 'Lote terminado' }[Pl.state] || Pl.state;
-    set('p-state', (Pl.regen ? 'Regenerando el filtro químico' : stTxt) + (Pl.queue.length ? ` · ${Pl.queue.length} en cola` : ''));
+    set('r-pow', L(`gasta ${fmt(R.power, 0)} W · recibe ${fmt(R.solar + (R.charge || 0), 0)} W`, `using ${fmt(R.power, 0)} W · receiving ${fmt(R.solar + (R.charge || 0), 0)} W`));
+    set('r-temp', `${fmt(R.sysT - 273.15, 0)} °C · ${L('calefacción', 'heating')} ${fmt(R.heater, 0)} W`);
+    set('r-cargo', `${fmt(R.cargoReg + R.cargoIce, 1)} / ${fmt(P.cargoCap, 0)} kg (${L('hielo', 'ice')} ${fmt(R.cargoIce, 2)} kg)`); bar('r-cargo-bar', (R.cargoReg + R.cargoIce) / P.cargoCap);
+    set('r-sensor', R.lastReading != null ? L(`${fmt(R.lastReading, 1)} % de hielo equivalente`, `${fmt(R.lastReading, 1)}% equivalent ice`) : '—');
+    const stTxt = L({ 'vacío': 'Vacío: esperando muestras', calentando: 'Calentando las muestras', sublimando: 'El hielo se convierte en vapor', completado: 'Lote terminado' },
+      { 'vacío': 'Empty: waiting for samples', calentando: 'Heating the samples', sublimando: 'The ice is turning into vapour', completado: 'Batch finished' })[Pl.state] || Pl.state;
+    set('p-state', (Pl.regen ? L('Regenerando el filtro químico', 'Regenerating the chemical filter') : stTxt) + (Pl.queue.length ? L(` · ${Pl.queue.length} en cola`, ` · ${Pl.queue.length} queued`) : ''));
     set('p-T', `${fmt(Pl.T, 0)} K (${fmt(Pl.T - 273.15, 0)} °C)`); bar('p-T-bar', (Pl.T - 40) / 220);
     set('p-ice', `${fmt(Pl.ice, 2)} kg`); set('p-cap', `${fmt(Pl.captured, 2)} kg`); set('p-tank', `${fmt(Pl.tank, 2)} L`); bar('p-tank-bar', Pl.tank / 30);
-    set('p-power', `Reparto de energía solar (${fmt(P.solarW, 0)} W): horno ${fmt(Pl.heater, 0)} W · carga del rover ${fmt(R.charge || 0, 0)} W · cámara bio ${fmt(B.power, 0)} W`);
+    set('p-power', L(`Reparto de energía solar (${fmt(P.solarW, 0)} W): horno ${fmt(Pl.heater, 0)} W · carga del rover ${fmt(R.charge || 0, 0)} W · cámara bio ${fmt(B.power, 0)} W`, `Solar power split (${fmt(P.solarW, 0)} W): oven ${fmt(Pl.heater, 0)} W · rover charging ${fmt(R.charge || 0, 0)} W · bio chamber ${fmt(B.power, 0)} W`));
     const q = Pl.quality, act = i => sim.bioActivity(i);
-    [['dper', 0], ['pext', 1]].forEach(([id, i]) => { bar(`act-${id}`, P.bioPurif ? act(i) : 0); set(`act-${id}-v`, P.bioPurif ? `${fmt(act(i) * 100, 0)} %` : 'apagado'); });
-    set('act-plac-v', !P.bioPurif ? 'apagado' : Pl.lastResidual > 5 ? 'alerta: agua sucia' : Pl.quality ? 'agua limpia' : 'esperando agua');
-    set('q-flow', q ? `100 → <strong>${fmt(q.after, 0)}</strong> → <strong>${fmt(q.final, 1)}</strong>` : 'Aún no se ha tratado ningún lote');
-    set('q-ok', q ? (q.ok ? 'Apta para uso técnico' : 'Contaminada: se reprocesa') : '—');
+    [['dper', 0], ['pext', 1]].forEach(([id, i]) => { bar(`act-${id}`, P.bioPurif ? act(i) : 0); set(`act-${id}-v`, P.bioPurif ? `${fmt(act(i) * 100, 0)}${L(' %', '%')}` : L('apagado', 'off')); });
+    set('act-plac-v', !P.bioPurif ? L('apagado', 'off') : Pl.lastResidual > 5 ? L('alerta: agua sucia', 'alert: dirty water') : Pl.quality ? L('agua limpia', 'clean water') : L('esperando agua', 'waiting for water'));
+    set('q-flow', q ? `100 → <strong>${fmt(q.after, 0)}</strong> → <strong>${fmt(q.final, 1)}</strong>` : L('Aún no se ha tratado ningún lote', 'No batch has been treated yet'));
+    set('q-ok', q ? (q.ok ? L('Apta para uso técnico', 'Fit for technical use') : L('Contaminada: se reprocesa', 'Contaminated: reprocessed')) : '—');
     const qe = document.getElementById('q-ok'); if (qe) qe.className = 'verdict ' + (q ? (q.ok ? 'pass' : 'fail') : '');
-    set('q-ads', P.adsRegen ? `${fmt(Pl.adsorbent, 2)} kg listos · ${fmt(Pl.adsSpent, 2)} por regenerar · ${fmt(Pl.adsLost, 2)} perdidos` : `${fmt(Pl.adsorbent, 2)} kg restantes · ${fmt(Pl.adsSaved, 2)} kg ahorrados`); bar('q-ads-bar', Pl.adsorbent / 3);
-    set('q-rem', q && q.bio ? `NH₃ ${fmt(q.rN * 100, 0)} % · azufre y orgánicos ${fmt(q.rS * 100, 0)} % · mercurio ${fmt(q.rHg * 100, 0)} %` : q ? 'Biofiltro apagado: 0 %' : '—');
-    set('p-quality', q ? `Último lote: contaminantes 100 → ${fmt(q.final, 1)} · ${q.ok ? 'apta para uso técnico' : 'contaminada'} · adsorbente ${fmt(Pl.adsorbent, 2)} kg` : 'Aún no se ha tratado ningún lote');
+    set('q-ads', P.adsRegen ? L(`${fmt(Pl.adsorbent, 2)} kg listos · ${fmt(Pl.adsSpent, 2)} por regenerar · ${fmt(Pl.adsLost, 2)} perdidos`, `${fmt(Pl.adsorbent, 2)} kg ready · ${fmt(Pl.adsSpent, 2)} to regenerate · ${fmt(Pl.adsLost, 2)} lost`) : L(`${fmt(Pl.adsorbent, 2)} kg restantes · ${fmt(Pl.adsSaved, 2)} kg ahorrados`, `${fmt(Pl.adsorbent, 2)} kg left · ${fmt(Pl.adsSaved, 2)} kg saved`)); bar('q-ads-bar', Pl.adsorbent / 3);
+    set('q-rem', q && q.bio ? L(`NH₃ ${fmt(q.rN * 100, 0)} % · azufre y orgánicos ${fmt(q.rS * 100, 0)} % · mercurio ${fmt(q.rHg * 100, 0)} %`, `NH₃ ${fmt(q.rN * 100, 0)}% · sulphur and organics ${fmt(q.rS * 100, 0)}% · mercury ${fmt(q.rHg * 100, 0)}%`) : q ? L('Biofiltro apagado: 0 %', 'Biofilter off: 0%') : '—');
+    set('p-quality', q ? L(`Último lote: contaminantes 100 → ${fmt(q.final, 1)} · ${q.ok ? 'apta para uso técnico' : 'contaminada'} · adsorbente ${fmt(Pl.adsorbent, 2)} kg`, `Last batch: contaminants 100 → ${fmt(q.final, 1)} · ${q.ok ? 'fit for technical use' : 'contaminated'} · adsorbent ${fmt(Pl.adsorbent, 2)} kg`) : L('Aún no se ha tratado ningún lote', 'No batch has been treated yet'));
     set('b-T', `${fmt(B.T, 1)} °C`); set('b-V', `${fmt(B.V, 1)} mL`); set('b-S', `${fmt(B.S * 100, 0)} %`);
     set('b-dose', doseStr((P.chamber === 'outside' ? 1.3e-5 : P.dose) + (B.spe > 0 ? 0.05 : 0)));
     sim.SPECIES.forEach((s, i) => {
       const n = B.N[i];
       set(`b-n-${s.id}`, s.kind === 'lichen' ? `${fmt(n, 2)} %` : n <= 0 ? '0' : `10<sup>${fmt(Math.log10(n), 1)}</sup>`);
-      set(`b-st-${s.id}`, B.status[i]);
+      set(`b-st-${s.id}`, bioTxt(B.status[i]));
       const el = document.getElementById(`b-st-${s.id}`); if (el) el.className = 'verdict ' + (B.status[i] === 'Creciendo' ? 'pass' : B.status[i] === 'Muriendo' || B.status[i] === 'Extinto' ? 'fail' : '');
     });
     const lg = $('#sim-log'), key = S.log.length + '|' + (S.log[S.log.length - 1] || {}).t;
     if (lg && lg.dataset.n !== key) {
       lg.dataset.n = key;
-      lg.innerHTML = S.log.slice(-40).map(e => `<div class="e ${e.kind}"><span class="ts">${clockStr(e.t).replace('Día ', 'D')}</span><span class="msg">${e.msg}</span></div>`).join('');
+      lg.innerHTML = S.log.slice(-40).map(e => `<div class="e ${e.kind}"><span class="ts">${clockStr(e.t).replace(L('Día ', 'Day '), 'D')}</span><span class="msg">${e.msg}</span></div>`).join('');
       lg.scrollTop = lg.scrollHeight;
     }
-    if (R.task === 'dead' && S.running) { toggleRun(); toast('El rover se quedó sin energía. Sube la reserva de batería y pulsa Reiniciar.'); }
+    if (R.task === 'dead' && S.running) { toggleRun(); toast(L('El rover se quedó sin energía. Sube la reserva de batería y pulsa Reiniciar.', 'The rover ran out of power. Raise the battery reserve and press Reset.')); }
   }
 
   // Barra del proceso: perforación → … → colonia, con la etapa activa resaltada
   const STEPS = [
-    { id: 'drill', t: 'Perforar', cam: 'rover' }, { id: 'carry', t: 'Transportar', cam: 'rover' }, { id: 'oven', t: 'Horno', cam: 'station' },
-    { id: 'trap', t: 'Trampa fría', cam: 'station' }, { id: 'bio', t: 'Biofiltro', cam: 'station' }, { id: 'filter', t: 'Filtros + UV', cam: 'station' },
-    { id: 'tank', t: 'Tanque', cam: 'station' }, { id: 'colony', t: 'Colonia', cam: 'colony' }
+    { id: 'drill', t: L('Perforar', 'Drill'), cam: 'rover' }, { id: 'carry', t: L('Transportar', 'Carry'), cam: 'rover' }, { id: 'oven', t: L('Horno', 'Oven'), cam: 'station' },
+    { id: 'trap', t: L('Trampa fría', 'Cold trap'), cam: 'station' }, { id: 'bio', t: L('Biofiltro', 'Biofilter'), cam: 'station' }, { id: 'filter', t: L('Filtros + UV', 'Filters + UV'), cam: 'station' },
+    { id: 'tank', t: L('Tanque', 'Tank'), cam: 'station' }, { id: 'colony', t: L('Colonia', 'Colony'), cam: 'colony' }
   ];
   function buildProcess() {
     const el = $('#sim-process'); if (!el) return;
@@ -2465,11 +2532,11 @@
       bio: recent && P.bioPurif, filter: recent, tank: recent || Pl.tank > 0.05, colony: S.t - C.flowT < 600
     };
     const val = {
-      drill: R.task === 'drill' ? `${fmt(R.drillDepth, 2)} m` : `${S.totals.holes} perf.`,
+      drill: R.task === 'drill' ? `${fmt(R.drillDepth, 2)} m` : `${S.totals.holes} ${L('perf.', 'holes')}`,
       carry: `${fmt(R.cargoReg + R.cargoIce, 1)} kg`,
-      oven: Pl.state === 'vacío' ? 'en espera' : `${fmt(Pl.T, 0)} K`,
-      trap: `${fmt(Pl.captured, 2)} kg hielo`,
-      bio: !P.bioPurif ? 'apagado' : q ? `100 → ${fmt(q.after, 0)}` : '—',
+      oven: Pl.state === 'vacío' ? L('en espera', 'standby') : `${fmt(Pl.T, 0)} K`,
+      trap: `${fmt(Pl.captured, 2)} kg ${L('hielo', 'ice')}`,
+      bio: !P.bioPurif ? L('apagado', 'off') : q ? `100 → ${fmt(q.after, 0)}` : '—',
       filter: q ? `→ ${fmt(q.final, 1)}` : '—',
       tank: `${fmt(Pl.tank, 2)} L`,
       colony: `${fmt(C.water, 1)} L`
@@ -2491,7 +2558,7 @@
         series: [
           { name: 'D. peraridilitoris', color: charts.PALETTE.ivory, data: H.bio[0].map((n, i) => ({ x: xs[i], y: n > 0 ? Math.log10(n) : 0 })) },
           { name: 'P. extremorientalis', color: '#8796f2', data: H.bio[1].map((n, i) => ({ x: xs[i], y: n > 0 ? Math.log10(n) : 0 })) }
-        ], xLabel: 'Horas simuladas', yLabel: 'log₁₀ células/mL', yMin: 0, yMax: 9.5, width: 380, height: 210, xFmt: v => fmt(v, 0), yFmt: v => fmt(v, 0)
+        ], xLabel: L('Horas simuladas', 'Simulated hours'), yLabel: L('log₁₀ células/mL', 'log₁₀ cells/mL'), yMin: 0, yMax: 9.5, width: 380, height: 210, xFmt: v => fmt(v, 0), yFmt: v => fmt(v, 0)
       });
     }
   }
@@ -2499,7 +2566,8 @@
   // ---------- Pantalla de carga: cada etapa informa de su avance; al terminar se compilan los shaders y empieza ----------
   const LOAD = {
     order: ['motor', 'relieve', 'cielo', 'modelos', 'rocas', 'luz', 'shaders'],
-    label: { motor: 'Motor gráfico (Three.js r170)', relieve: 'Relieve real de Shackleton (NASA LOLA)', cielo: 'Cielo y Tierra (mapas de NASA)', modelos: 'Rover y estación (Blender)', rocas: 'Rocas y regolito escaneados', luz: 'Iluminación del relieve lejano', shaders: 'Preparando sombras y efectos' },
+    label: L({ motor: 'Motor gráfico (Three.js r170)', relieve: 'Relieve real de Shackleton (NASA LOLA)', cielo: 'Cielo y Tierra (mapas de NASA)', modelos: 'Rover y estación (Blender)', rocas: 'Rocas y regolito escaneados', luz: 'Iluminación del relieve lejano', shaders: 'Preparando sombras y efectos' },
+      { motor: 'Graphics engine (Three.js r170)', relieve: 'Real Shackleton terrain (NASA LOLA)', cielo: 'Sky and Earth (NASA maps)', modelos: 'Rover and station (Blender)', rocas: 'Scanned rocks and regolith', luz: 'Lighting the distant terrain', shaders: 'Preparing shadows and effects' }),
     done: {}, total: {}, finished: false, t0: 0
   };
   LOAD.order.forEach(k => { LOAD.done[k] = 0; LOAD.total[k] = 1; });
@@ -2518,7 +2586,7 @@
     }).join('');
     const pct = Math.round(sum / LOAD.order.length * 100);
     $('#sl-fill').style.width = pct + '%'; $('#sl-pct').textContent = pct + ' %';
-    $('#sl-now').textContent = now ? LOAD.label[now] + '…' : 'Listo';
+    $('#sl-now').textContent = now ? LOAD.label[now] + '…' : L('Listo', 'Ready');
   }
   function watchLoad() {
     const tick = () => {
@@ -2558,13 +2626,13 @@
   }
   function init() {
     const host = $('#sim-view'); if (!host) return;
-    if (!window.THREE || !THREE.OrbitControls) { host.innerHTML = '<p class="sim-fallback">No se pudo cargar el motor 3D (Three.js).</p>'; return; }
+    if (!window.THREE || !THREE.OrbitControls) { host.innerHTML = `<p class="sim-fallback">${L('No se pudo cargar el motor 3D (Three.js).', 'The 3D engine (Three.js) could not be loaded.')}</p>`; return; }
     try {
       const c = document.createElement('canvas'), gl = c.getContext('webgl2'); if (!gl) throw 0;
       if (qAuto) { qName = guessQuality(gl); Q = QUALITY[qName]; }
       const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();   // liberar el contexto de prueba
     }
-    catch (_) { host.innerHTML = '<p class="sim-fallback">Tu navegador no admite WebGL 2, necesario para la simulación 3D.</p>'; return; }
+    catch (_) { host.innerHTML = `<p class="sim-fallback">${L('Tu navegador no admite WebGL 2, necesario para la simulación 3D.', 'Your browser does not support WebGL 2, which the 3D simulation needs.')}</p>`; return; }
     LOAD.t0 = performance.now(); renderLoader();
     IceEnv.onAsset = cat => { if (LOAD.done[cat] != null) loadAdd(cat); };
     // se deja pintar la pantalla de carga antes del trabajo pesado

@@ -43,14 +43,21 @@
     els.forEach(e => io.observe(e));
   }
 
-  const PIPE = [
+  const PIPE = L([
     { t: 'Explorar', d: 'El rover sale de la estación solar y entra en la oscuridad con sus propias luces.' },
     { t: 'Detectar', d: 'Un sensor de neutrones nota el hidrógeno del hielo bajo el suelo.' },
     { t: 'Medir', d: 'Se detiene, mide más tiempo y estima cuánto hielo hay.' },
     { t: 'Decidir', d: '¿Hay suficiente hielo, el terreno es seguro y queda batería para volver?' },
     { t: 'Perforar', d: 'Taladra 1 m y guarda las muestras en cartuchos fríos.' },
     { t: 'Convertir y limpiar', d: 'Un horno convierte el hielo en vapor. El agua obtenida pasa por un biofiltro de microorganismos y por filtros químicos.' }
-  ];
+  ], [
+    { t: 'Explore', d: 'The rover leaves the solar station and drives into the darkness with its own lights.' },
+    { t: 'Detect', d: 'A neutron sensor picks up the hydrogen of the ice beneath the ground.' },
+    { t: 'Measure', d: 'It stops, measures for longer and estimates how much ice there is.' },
+    { t: 'Decide', d: 'Is there enough ice, is the terrain safe and is there battery left to return?' },
+    { t: 'Drill', d: 'It drills 1 m and stores the samples in cold cartridges.' },
+    { t: 'Convert and clean', d: 'An oven turns the ice into vapour. The water obtained passes through a microorganism biofilter and chemical filters.' }
+  ]);
   function initPipeline() {
     const el = $('#pipeline'); if (!el) return;
     el.innerHTML = PIPE.map((p, i) => `<a href="#simulacion" class="step reveal"><span class="n">${String(i + 1).padStart(2, '0')}</span><div class="t">${p.t}</div><div class="d">${p.d}</div></a>`).join('');
@@ -60,7 +67,7 @@
   function initRefs() {
     const ol = $('#ref-list'); if (!ol) return;
     ol.innerHTML = IceData.REFS.filter(r => KEY_REFS.includes(r.id)).map(r =>
-      `<li id="ref-${r.id}"><span class="n">·</span><span>${r.text}<br><a href="${r.url}" target="_blank" rel="noopener">${r.url.replace(/^https?:\/\//, '')}</a></span></li>`).join('');
+      `<li id="ref-${r.id}"><span class="n">·</span><span>${L(r.text, r.en || r.text)}<br><a href="${r.url}" target="_blank" rel="noopener">${r.url.replace(/^https?:\/\//, '')}</a></span></li>`).join('');
   }
 
   document.addEventListener('DOMContentLoaded', () => {

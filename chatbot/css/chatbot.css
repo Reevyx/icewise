@@ -114,6 +114,16 @@ body {
     color: var(--ivory);
 }
 
+/* Idioma (solo con el chat abierto solo; dentro de la web manda el botón de la página) */
+.btn-lang {
+    display: inline-flex; align-items: center; gap: 1px; margin-left: 4px;
+    padding: 2px; border-radius: 40px; border: 1px solid var(--line-mid);
+    background: transparent; cursor: pointer; font-size: 11px; letter-spacing: .06em;
+}
+.btn-lang span { padding: 3px 7px; border-radius: 40px; color: var(--ash); }
+.btn-lang span.on { background: var(--ivory); color: var(--onyx); }
+.embed .btn-lang { display: none; }
+
 /* Altavoz: leer en voz alta también las respuestas escritas */
 .btn-altavoz {
     display: grid;

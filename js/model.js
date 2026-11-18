@@ -10,6 +10,7 @@
    ========================================================================= */
 (function (root) {
   'use strict';
+  const L = root.L || ((es) => es);   // idioma de la página (js/i18n.js); en Node, español
 
   // ---------- Constantes físicas y de material ----------
   const C = {
@@ -73,53 +74,53 @@
   // ---------- Parámetros por defecto y metadatos ----------
   // tag: 'doc' | 'med' | 'sup'.  src: texto corto de procedencia mostrado en la UI.
   const PARAMS = [
-    { group: 'Depósito', key: 'iceWt', label: 'Concentración de hielo', unit: '% en masa', min: 0.2, max: 30, step: 0.1, def: 5.6, tag: 'med',
-      src: 'LCROSS: 5,6 ± 2,9 % en la pluma de Cabeus [3]. Promedios orbitales ~1–2 % [2]; superficie expuesta hasta ~30 % en algunos píxeles [6].' },
-    { group: 'Depósito', key: 'dryLayer', label: 'Capa seca superior', unit: 'm', min: 0, max: 0.6, step: 0.01, def: 0.10, tag: 'sup',
-      src: 'Espesor incierto (cm a decenas de cm). Supuesto modificable.' },
-    { group: 'Depósito', key: 'depth', label: 'Profundidad de extracción', unit: 'm', min: 0.2, max: 2.0, step: 0.05, def: 1.0, tag: 'doc',
-      src: 'Clase de 1 m de taladros de vuelo: TRIDENT (PRIME-1/VIPER) y ProSEED (PROSPECT) [21][22].' },
-    { group: 'Depósito', key: 'T0', label: 'Temperatura inicial', unit: 'K', min: 25, max: 120, step: 1, def: 40, tag: 'med',
-      src: 'Diviner: ~38 K subsuperficial estimado en el sitio LCROSS; mínimos locales de 29 K [4].' },
+    { group: L('Depósito', 'Deposit'), key: 'iceWt', label: L('Concentración de hielo', 'Ice concentration'), unit: L('% en masa', 'wt %'), min: 0.2, max: 30, step: 0.1, def: 5.6, tag: 'med',
+      src: L('LCROSS: 5,6 ± 2,9 % en la pluma de Cabeus [3]. Promedios orbitales ~1–2 % [2]; superficie expuesta hasta ~30 % en algunos píxeles [6].', 'LCROSS: 5.6 ± 2.9% in the Cabeus plume [3]. Orbital averages ~1–2% [2]; exposed surface up to ~30% in some pixels [6].') },
+    { group: L('Depósito', 'Deposit'), key: 'dryLayer', label: L('Capa seca superior', 'Dry top layer'), unit: 'm', min: 0, max: 0.6, step: 0.01, def: 0.10, tag: 'sup',
+      src: L('Espesor incierto (cm a decenas de cm). Supuesto modificable.', 'Uncertain thickness (cm to tens of cm). Adjustable assumption.') },
+    { group: L('Depósito', 'Deposit'), key: 'depth', label: L('Profundidad de extracción', 'Extraction depth'), unit: 'm', min: 0.2, max: 2.0, step: 0.05, def: 1.0, tag: 'doc',
+      src: L('Clase de 1 m de taladros de vuelo: TRIDENT (PRIME-1/VIPER) y ProSEED (PROSPECT) [21][22].', '1 m class of flight drills: TRIDENT (PRIME-1/VIPER) and ProSEED (PROSPECT) [21][22].') },
+    { group: L('Depósito', 'Deposit'), key: 'T0', label: L('Temperatura inicial', 'Initial temperature'), unit: 'K', min: 25, max: 120, step: 1, def: 40, tag: 'med',
+      src: L('Diviner: ~38 K subsuperficial estimado en el sitio LCROSS; mínimos locales de 29 K [4].', 'Diviner: ~38 K estimated subsurface at the LCROSS site; local minima of 29 K [4].') },
 
-    { group: 'Excavación', key: 'area', label: 'Sección excavada por ciclo', unit: 'm²', min: 0.005, max: 0.25, step: 0.005, def: 0.05, tag: 'sup',
-      src: 'Supuesto de diseño: barrena/cuchara de ~25 cm de diámetro equivalente.' },
-    { group: 'Excavación', key: 'cycles', label: 'Ciclos por lote', unit: '', min: 1, max: 40, step: 1, def: 5, tag: 'sup',
-      src: 'Supuesto de operación.' },
-    { group: 'Excavación', key: 'eExc', label: 'Energía específica de excavación', unit: 'Wh/kg', min: 0.5, max: 20, step: 0.5, def: 3, tag: 'sup',
-      src: 'Alta incertidumbre: el regolito cementado por hielo puede ser mucho más resistente que el seco. Sin datos de vuelo.' },
-    { group: 'Excavación', key: 'etaTr', label: 'Retención en transferencia', unit: '%', min: 70, max: 100, step: 1, def: 97, tag: 'sup',
-      src: 'Fracción de material y hielo que llega al horno (sublimación/derrame en tránsito).' },
+    { group: L('Excavación', 'Excavation'), key: 'area', label: L('Sección excavada por ciclo', 'Area excavated per cycle'), unit: 'm²', min: 0.005, max: 0.25, step: 0.005, def: 0.05, tag: 'sup',
+      src: L('Supuesto de diseño: barrena/cuchara de ~25 cm de diámetro equivalente.', 'Design assumption: auger/scoop of ~25 cm equivalent diameter.') },
+    { group: L('Excavación', 'Excavation'), key: 'cycles', label: L('Ciclos por lote', 'Cycles per batch'), unit: '', min: 1, max: 40, step: 1, def: 5, tag: 'sup',
+      src: L('Supuesto de operación.', 'Operating assumption.') },
+    { group: L('Excavación', 'Excavation'), key: 'eExc', label: L('Energía específica de excavación', 'Specific excavation energy'), unit: 'Wh/kg', min: 0.5, max: 20, step: 0.5, def: 3, tag: 'sup',
+      src: L('Alta incertidumbre: el regolito cementado por hielo puede ser mucho más resistente que el seco. Sin datos de vuelo.', 'High uncertainty: ice-cemented regolith may be much stronger than dry regolith. No flight data.') },
+    { group: L('Excavación', 'Excavation'), key: 'etaTr', label: L('Retención en transferencia', 'Transfer retention'), unit: '%', min: 70, max: 100, step: 1, def: 97, tag: 'sup',
+      src: L('Fracción de material y hielo que llega al horno (sublimación/derrame en tránsito).', 'Fraction of material and ice that reaches the oven (sublimation/spillage in transit).') },
 
-    { group: 'Procesamiento', key: 'Tp', label: 'Temperatura de proceso', unit: 'K', min: 180, max: 400, step: 5, def: 250, tag: 'sup',
-      src: 'Por encima de ~200 K la sublimación en vacío es rápida (Hertz–Knudsen).' },
-    { group: 'Procesamiento', key: 'Pheat', label: 'Potencia del calentador', unit: 'W', min: 50, max: 3000, step: 50, def: 500, tag: 'sup',
-      src: 'Dentro de un PSR no hay luz solar: requiere baterías, cable desde el borde iluminado o fuente nuclear.' },
-    { group: 'Procesamiento', key: 'Pbase', label: 'Potencia de base del sistema', unit: 'W', min: 0, max: 400, step: 10, def: 80, tag: 'sup',
-      src: 'Aviónica, control térmico y comunicaciones durante el procesamiento.' },
-    { group: 'Procesamiento', key: 'etaH', label: 'Eficiencia de calentamiento', unit: '%', min: 15, max: 95, step: 1, def: 50, tag: 'sup',
-      src: 'Fracción de energía eléctrica que llega al material (pérdidas radiativas y conductivas).' },
-    { group: 'Procesamiento', key: 'etaRel', label: 'Fracción de hielo liberada', unit: '%', min: 40, max: 100, step: 1, def: 90, tag: 'sup',
-      src: 'El regolito es mal conductor (~10⁻³ W/m·K) [12]: el núcleo del lote puede no alcanzar Tp.' },
-    { group: 'Procesamiento', key: 'etaCap', label: 'Eficiencia de captura de vapor', unit: '%', min: 40, max: 99, step: 1, def: 85, tag: 'sup',
-      src: 'Vapor condensado en la trampa fría frente a fugas y re-depósito en conductos.' },
-    { group: 'Procesamiento', key: 'etaPur', label: 'Rendimiento de purificación', unit: '%', min: 60, max: 99, step: 1, def: 92, tag: 'sup',
-      src: 'Rechazo de salmuera/concentrado al eliminar NH₃, H₂S, SO₂, CH₃OH y Hg detectados por LCROSS [3][5].' }
+    { group: L('Procesamiento', 'Processing'), key: 'Tp', label: L('Temperatura de proceso', 'Process temperature'), unit: 'K', min: 180, max: 400, step: 5, def: 250, tag: 'sup',
+      src: L('Por encima de ~200 K la sublimación en vacío es rápida (Hertz–Knudsen).', 'Above ~200 K, sublimation in a vacuum is fast (Hertz–Knudsen).') },
+    { group: L('Procesamiento', 'Processing'), key: 'Pheat', label: L('Potencia del calentador', 'Heater power'), unit: 'W', min: 50, max: 3000, step: 50, def: 500, tag: 'sup',
+      src: L('Dentro de un PSR no hay luz solar: requiere baterías, cable desde el borde iluminado o fuente nuclear.', 'There is no sunlight inside a PSR: it needs batteries, a cable from the sunlit rim or a nuclear source.') },
+    { group: L('Procesamiento', 'Processing'), key: 'Pbase', label: L('Potencia de base del sistema', 'System base power'), unit: 'W', min: 0, max: 400, step: 10, def: 80, tag: 'sup',
+      src: L('Aviónica, control térmico y comunicaciones durante el procesamiento.', 'Avionics, thermal control and communications during processing.') },
+    { group: L('Procesamiento', 'Processing'), key: 'etaH', label: L('Eficiencia de calentamiento', 'Heating efficiency'), unit: '%', min: 15, max: 95, step: 1, def: 50, tag: 'sup',
+      src: L('Fracción de energía eléctrica que llega al material (pérdidas radiativas y conductivas).', 'Fraction of electrical energy that reaches the material (radiative and conductive losses).') },
+    { group: L('Procesamiento', 'Processing'), key: 'etaRel', label: L('Fracción de hielo liberada', 'Fraction of ice released'), unit: '%', min: 40, max: 100, step: 1, def: 90, tag: 'sup',
+      src: L('El regolito es mal conductor (~10⁻³ W/m·K) [12]: el núcleo del lote puede no alcanzar Tp.', 'Regolith is a poor conductor (~10⁻³ W/m·K) [12]: the core of the batch may not reach Tp.') },
+    { group: L('Procesamiento', 'Processing'), key: 'etaCap', label: L('Eficiencia de captura de vapor', 'Vapour capture efficiency'), unit: '%', min: 40, max: 99, step: 1, def: 85, tag: 'sup',
+      src: L('Vapor condensado en la trampa fría frente a fugas y re-depósito en conductos.', 'Vapour condensed in the cold trap versus leaks and re-deposition in ducts.') },
+    { group: L('Procesamiento', 'Processing'), key: 'etaPur', label: L('Rendimiento de purificación', 'Purification yield'), unit: '%', min: 60, max: 99, step: 1, def: 92, tag: 'sup',
+      src: L('Rechazo de salmuera/concentrado al eliminar NH₃, H₂S, SO₂, CH₃OH y Hg detectados por LCROSS [3][5].', 'Brine/concentrate rejected when removing the NH₃, H₂S, SO₂, CH₃OH and Hg detected by LCROSS [3][5].') }
   ];
 
   const DEFAULTS = Object.fromEntries(PARAMS.map(p => [p.key, p.def]));
 
   const SCENARIOS = {
     desfavorable: {
-      label: 'Desfavorable', note: 'Concentración baja, hielo bajo una capa seca gruesa, proceso con más pérdidas.',
+      label: L('Desfavorable', 'Unfavourable'), note: L('Concentración baja, hielo bajo una capa seca gruesa, proceso con más pérdidas.', 'Low concentration, ice under a thick dry layer, a process with more losses.'),
       values: { iceWt: 1.0, dryLayer: 0.30, depth: 1.0, T0: 40, area: 0.05, cycles: 5, eExc: 6, etaTr: 92, Tp: 250, Pheat: 500, Pbase: 80, etaH: 35, etaRel: 75, etaCap: 70, etaPur: 88 }
     },
     intermedio: {
-      label: 'Intermedio', note: 'Concentración medida por LCROSS en Cabeus, supuestos de proceso moderados.',
+      label: L('Intermedio', 'Intermediate'), note: L('Concentración medida por LCROSS en Cabeus, supuestos de proceso moderados.', 'Concentration measured by LCROSS at Cabeus, moderate process assumptions.'),
       values: { ...DEFAULTS }
     },
     favorable: {
-      label: 'Favorable', note: 'Depósito rico y somero, proceso optimizado. Optimista pero físicamente posible.',
+      label: L('Favorable', 'Favourable'), note: L('Depósito rico y somero, proceso optimizado. Optimista pero físicamente posible.', 'Rich, shallow deposit, optimised process. Optimistic but physically possible.'),
       values: { iceWt: 10.0, dryLayer: 0.05, depth: 1.0, T0: 60, area: 0.05, cycles: 5, eExc: 2, etaTr: 98, Tp: 250, Pheat: 500, Pbase: 80, etaH: 65, etaRel: 95, etaCap: 92, etaPur: 95 }
     }
   };
@@ -195,13 +196,13 @@
 
     // 8) Advertencias de coherencia física
     const warnings = [];
-    if (poreSaturation > 1) warnings.push(`El hielo supera la porosidad disponible (${(poreSaturation * 100).toFixed(0)} % de saturación): implica hielo en exceso de poros (segregado o masivo), un escenario no confirmado en la Luna.`);
-    if (p.dryLayer >= p.depth) warnings.push('La capa seca es igual o mayor que la profundidad de extracción: no se recolecta material con hielo.');
-    if (Tp < 180) warnings.push('Temperatura de proceso muy baja: la sublimación sería extremadamente lenta.');
-    if (tProc > 14 * 86400) warnings.push(`El procesamiento tardaría ${(tProc / 86400).toFixed(1)} días con la potencia elegida; supera la autonomía típica de una batería de rover.`);
-    if (E_reg > E_latent && mReleased > 0) warnings.push('Calentar el regolito consume más energía que sublimar el hielo: concentraciones bajas penalizan fuertemente la eficiencia energética.');
-    if (p.T0 < 60) warnings.push('A T < 100 K el ajuste lineal de cp del hielo sobrestima el calor sensible (efecto < 2 % sobre la energía total).');
-    if (warnings.length === 0) warnings.push('Sin incoherencias físicas detectadas para estos parámetros.');
+    if (poreSaturation > 1) warnings.push(L(`El hielo supera la porosidad disponible (${(poreSaturation * 100).toFixed(0)} % de saturación): implica hielo en exceso de poros (segregado o masivo), un escenario no confirmado en la Luna.`, `The ice exceeds the available porosity (${(poreSaturation * 100).toFixed(0)}% saturation): this implies excess pore ice (segregated or massive), a scenario not confirmed on the Moon.`));
+    if (p.dryLayer >= p.depth) warnings.push(L('La capa seca es igual o mayor que la profundidad de extracción: no se recolecta material con hielo.', 'The dry layer is equal to or deeper than the extraction depth: no icy material is collected.'));
+    if (Tp < 180) warnings.push(L('Temperatura de proceso muy baja: la sublimación sería extremadamente lenta.', 'Very low process temperature: sublimation would be extremely slow.'));
+    if (tProc > 14 * 86400) warnings.push(L(`El procesamiento tardaría ${(tProc / 86400).toFixed(1)} días con la potencia elegida; supera la autonomía típica de una batería de rover.`, `Processing would take ${(tProc / 86400).toFixed(1)} days at the chosen power; that exceeds the typical endurance of a rover battery.`));
+    if (E_reg > E_latent && mReleased > 0) warnings.push(L('Calentar el regolito consume más energía que sublimar el hielo: concentraciones bajas penalizan fuertemente la eficiencia energética.', 'Heating the regolith uses more energy than subliming the ice: low concentrations strongly penalise energy efficiency.'));
+    if (p.T0 < 60) warnings.push(L('A T < 100 K el ajuste lineal de cp del hielo sobrestima el calor sensible (efecto < 2 % sobre la energía total).', 'At T < 100 K the linear fit of ice cp overestimates sensible heat (effect < 2% on total energy).'));
+    if (warnings.length === 0) warnings.push(L('Sin incoherencias físicas detectadas para estos parámetros.', 'No physical inconsistencies detected for these parameters.'));
 
     return {
       params: p,
@@ -229,12 +230,12 @@
   function decide(dep, opts = {}) {
     const th = { pIce: 0.6, wt: 2.0, depthToIce: 0.6, slope: 15, energyMargin: 0.25, specific: 6, ...opts };
     const criteria = [
-      { k: 'Probabilidad de hielo (fusión de sensores)', v: `${Math.round(dep.pIce * 100)} %`, ok: dep.pIce >= th.pIce, req: `≥ ${Math.round(th.pIce * 100)} %` },
-      { k: 'Concentración estimada', v: `${dep.wt.toFixed(1)} ± ${dep.wtSigma.toFixed(1)} %`, ok: dep.wt - dep.wtSigma >= th.wt * 0.5 && dep.wt >= th.wt, req: `≥ ${th.wt} %` },
-      { k: 'Profundidad hasta el hielo', v: `${dep.depthToIce.toFixed(2)} m`, ok: dep.depthToIce <= th.depthToIce, req: `≤ ${th.depthToIce} m` },
-      { k: 'Pendiente del terreno', v: `${dep.slope.toFixed(0)}°`, ok: dep.slope <= th.slope, req: `≤ ${th.slope}°` },
-      { k: 'Margen energético tras el lote', v: `${Math.round(dep.energyMargin * 100)} %`, ok: dep.energyMargin >= th.energyMargin, req: `≥ ${Math.round(th.energyMargin * 100)} %` },
-      { k: 'Energía específica estimada', v: isFinite(dep.specific) ? `${dep.specific.toFixed(1)} kWh/kg` : '—', ok: dep.specific <= th.specific, req: `≤ ${th.specific} kWh/kg` }
+      { k: L('Probabilidad de hielo (fusión de sensores)', 'Ice probability (sensor fusion)'), v: `${Math.round(dep.pIce * 100)} %`, ok: dep.pIce >= th.pIce, req: `≥ ${Math.round(th.pIce * 100)} %` },
+      { k: L('Concentración estimada', 'Estimated concentration'), v: `${dep.wt.toFixed(1)} ± ${dep.wtSigma.toFixed(1)} %`, ok: dep.wt - dep.wtSigma >= th.wt * 0.5 && dep.wt >= th.wt, req: `≥ ${th.wt} %` },
+      { k: L('Profundidad hasta el hielo', 'Depth to ice'), v: `${dep.depthToIce.toFixed(2)} m`, ok: dep.depthToIce <= th.depthToIce, req: `≤ ${th.depthToIce} m` },
+      { k: L('Pendiente del terreno', 'Terrain slope'), v: `${dep.slope.toFixed(0)}°`, ok: dep.slope <= th.slope, req: `≤ ${th.slope}°` },
+      { k: L('Margen energético tras el lote', 'Energy margin after the batch'), v: `${Math.round(dep.energyMargin * 100)} %`, ok: dep.energyMargin >= th.energyMargin, req: `≥ ${Math.round(th.energyMargin * 100)} %` },
+      { k: L('Energía específica estimada', 'Estimated specific energy'), v: isFinite(dep.specific) ? `${dep.specific.toFixed(1)} kWh/kg` : '—', ok: dep.specific <= th.specific, req: `≤ ${th.specific} kWh/kg` }
     ];
     const passed = criteria.filter(c => c.ok).length;
     return { criteria, passed, total: criteria.length, go: passed === criteria.length };
