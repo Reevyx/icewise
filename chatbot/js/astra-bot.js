@@ -1,10 +1,10 @@
 // ============================================================================
-// NÚCLEO DEL CHATBOT ASTRA (CONTROLADOR PRINCIPAL)
+// NÚCLEO DEL CHATBOT KILLA (CONTROLADOR PRINCIPAL)
 // ============================================================================
 // Integrado en ICEWISE desde astra-chatbot-standalone.zip. Mismas funciones que el original:
 // texto, voz (dictado y lectura en voz alta), zona horaria por país, reglas locales y API externa opcional.
 //
-// · Conversación por voz: al pulsar el micrófono, ASTRA escucha, responde en voz alta y vuelve a
+// · Conversación por voz: al pulsar el micrófono, KILLA escucha, responde en voz alta y vuelve a
 //   escuchar sola, hasta que se pulsa de nuevo el botón (o se escribe).
 // · IA: se llama al servidor intermedio (chatbot/servidor) SIN clave; la clave vive solo en el servidor.
 //   Si el servidor no está configurado o falla, se responde con las reglas locales: siempre funciona.
@@ -43,7 +43,7 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         { idioma: tzManager.getContextoHorario().idiomaVoz }
     );
-    // El país elegido decide la variante de español con la que ASTRA entiende y habla
+    // El país elegido decide la variante de español con la que KILLA entiende y habla
     document.getElementById("select-pais")?.addEventListener("change", () => voiceManager.setIdioma(tzManager.getContextoHorario().idiomaVoz));
 
     function actualizarBotonVoz() {
@@ -51,9 +51,9 @@ document.addEventListener("DOMContentLoaded", () => {
         btnVoz.classList.toggle("escuchando", escuchando);
         btnVoz.classList.toggle("conversando", conversacion && !escuchando);
         btnVoz.setAttribute("aria-pressed", String(activo));
-        const etiqueta = activo ? L("Terminar la conversación por voz", "End the voice conversation") : L("Hablar por voz con ASTRA", "Talk to ASTRA by voice");
+        const etiqueta = activo ? L("Terminar la conversación por voz", "End the voice conversation") : L("Hablar por voz con KILLA", "Talk to KILLA by voice");
         btnVoz.title = etiqueta; btnVoz.setAttribute("aria-label", etiqueta);
-        inputChat.placeholder = escuchando ? L("Te escucho…", "I'm listening…") : (conversacion && voiceManager.hablando() ? L("ASTRA está hablando…", "ASTRA is speaking…") : PLACEHOLDER);
+        inputChat.placeholder = escuchando ? L("Te escucho…", "I'm listening…") : (conversacion && voiceManager.hablando() ? L("KILLA está hablando…", "KILLA is speaking…") : PLACEHOLDER);
     }
 
     function manejarErrorVoz(codigo) {
@@ -91,9 +91,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const coincide = (texto, kw) => kw.startsWith("=")
         ? new RegExp("(^|[^a-z0-9ñ])" + escRegex(kw.slice(1)) + "([^a-z0-9ñ]|$)").test(texto)
         : new RegExp("(^|[^a-z0-9ñ])" + escRegex(kw)).test(texto);
-    const EN = window.ASTRA_LANG === "en";
+    const PAGINA_EN = window.ASTRA_LANG === "en";
 
-    function respuestaLocal(textoLimpio, mensajeUsuario, contexto) {
+    // KILLA responde en el idioma en que le escriben, sea cual sea el de la página.
+    // Detector sencillo: signos y letras propias del español y palabras muy frecuentes de cada idioma.
+    // Si el mensaje es ambiguo (p. ej. "1+1" o "ICEWISE"), se usa el idioma de la página.
+    const PAL_ES = new Set("que qué como cómo cuanto cuánto cuanta cuánta cuantos donde dónde cual cuál quien quién por para porque el la los las un una unos del al es son esta está estan están hay y o pero con sin de en mi tu tus su sus yo me te se lo le nos eres soy puedes puede hola gracias agua hielo luna sol tierra cuando cuándo explica explicame dime hace hacen sirve funciona tiene tienen mas más muy tambien también ahora hoy".split(" "));
+    const PAL_EN = new Set("the what how much many where which who why is are was were do does did can could would should will a an of to in on at for with without and or but my your his her its our their i you he she it we they me hello hi hey thanks thank water ice moon sun earth when explain tell make made work works has have more very also now today please about this that".split(" "));
+    function detectarIdioma(texto) {
+        const t = String(texto).toLowerCase();
+        let es = (t.match(/[¿¡ñ]/g) || []).length * 2 + (t.match(/[áéíóú]/g) || []).length;
+        let en = 0;
+        for (const p of t.normalize("NFC").split(/[^a-záéíóúüñ']+/)) { if (PAL_ES.has(p)) es++; if (PAL_EN.has(p)) en++; }
+        if (/\b(what's|it's|i'm|don't|can't|you're)\b/.test(t)) en += 2;
+        if (es === en) return null;
+        return es > en ? "es" : "en";
+    }
+
+    function respuestaLocal(textoLimpio, mensajeUsuario, contexto, EN) {
+        const T = (es, en) => EN ? en : es;
         for (const item of ASTRA_KNOWLEDGE.respuestasPredefinidas) {
             const claves = EN ? (item.keywordsEn || []) : item.keywords;
             const resp = EN && item.respuestaEn ? item.respuestaEn : item.respuesta;
@@ -102,11 +118,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
         // Respuesta por defecto si no coincide ninguna palabra clave
-        return L("Todavía no sé responder eso sin conexión con la IA. Prueba a preguntarme por el <strong>rover</strong>, el <strong>hielo</strong>, el <strong>biofiltro</strong>, la <strong>colonia</strong> o cuánta <strong>agua</strong> produce ICEWISE.",
+        return T("Todavía no sé responder eso sin conexión con la IA. Prueba a preguntarme por el <strong>rover</strong>, el <strong>hielo</strong>, el <strong>biofiltro</strong>, la <strong>colonia</strong> o cuánta <strong>agua</strong> produce ICEWISE.",
             "I can't answer that yet without a connection to the AI. Try asking me about the <strong>rover</strong>, the <strong>ice</strong>, the <strong>biofilter</strong>, the <strong>colony</strong> or how much <strong>water</strong> ICEWISE produces.");
     }
 
-    async function generarRespuestaBot(mensajeUsuario) {
+    async function generarRespuestaBot(mensajeUsuario, EN) {
         const contexto = tzManager.getContextoHorario();
         const textoLimpio = mensajeUsuario.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
         const api = ASTRA_KNOWLEDGE.apiConfig || {};
@@ -121,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         mensaje: mensajeUsuario,
-                        idioma: EN ? "en" : "es",       // idioma de la página: la IA responde en él
+                        idioma: EN ? "en" : "es",       // idioma del mensaje (o de la página si es ambiguo): la IA responde en él
                         contextoHorario: contexto,
                         historial: historial.slice(-4)   // lo reciente basta para seguir la conversación y ahorra cuota
                     }),
@@ -133,16 +149,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     return escaparHTML(data.respuesta).replace(/\n/g, "<br>");
                 }
                 if (res.status === 429 && data.error) return escaparHTML(data.error);
-                console.warn("Servidor de ASTRA:", res.status, data.error || "");
+                console.warn("Servidor de KILLA:", res.status, data.error || "");
             } catch (error) {
-                console.warn("Sin conexión con el servidor de ASTRA; uso las respuestas locales.", error.name);
+                console.warn("Sin conexión con el servidor de KILLA; uso las respuestas locales.", error.name);
             } finally {
                 clearTimeout(espera);
             }
         }
 
         // 2. Motor de reglas locales: también es el respaldo si el servidor falla (GitHub Pages siempre funciona)
-        return respuestaLocal(textoLimpio, mensajeUsuario, contexto);
+        return respuestaLocal(textoLimpio, mensajeUsuario, contexto, EN);
     }
 
     async function procesarMensajeUsuario(usarVoz = false) {
@@ -151,10 +167,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         agregarMensajeDOM(texto, "user");
         inputChat.value = "";
-        const pensando = agregarMensajeDOM(`<span class="puntos" aria-label="${L("ASTRA está pensando", "ASTRA is thinking")}"><i></i><i></i><i></i></span>`, "bot");
+        const pensando = agregarMensajeDOM(`<span class="puntos" aria-label="${L("KILLA está pensando", "KILLA is thinking")}"><i></i><i></i><i></i></span>`, "bot");
         pensando.classList.add("pensando");
 
-        const respuesta = await generarRespuestaBot(texto);
+        const idioma = detectarIdioma(texto) || (PAGINA_EN ? "en" : "es");
+        const respuesta = await generarRespuestaBot(texto, idioma === "en");
         pensando.remove();
         agregarMensajeDOM(respuesta, "bot");
         historial.push({ role: "user", content: texto }, { role: "assistant", content: aTextoPlano(respuesta) });
@@ -165,7 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
             voiceManager.speak(respuesta, () => {
                 actualizarBotonVoz();
                 if (conversacion) setTimeout(() => { if (conversacion) voiceManager.startListening(); }, 300);   // manos libres
-            });
+            }, idioma);
             actualizarBotonVoz();
         }
     }
@@ -189,11 +206,11 @@ document.addEventListener("DOMContentLoaded", () => {
         actualizarBotonVoz();
     });
 
-    // Altavoz: activado, ASTRA lee en voz alta también lo que responde por escrito. Se recuerda en este navegador.
+    // Altavoz: activado, KILLA lee en voz alta también lo que responde por escrito. Se recuerda en este navegador.
     function setAltavoz(on, avisar) {
         altavoz = on;
         btnAltavoz.setAttribute("aria-pressed", String(on));
-        const t = on ? L("Altavoz activado: ASTRA lee en voz alta sus respuestas (pulsa para silenciar)", "Speaker on: ASTRA reads its answers aloud (press to mute)") : L("Altavoz: leer en voz alta también las respuestas escritas", "Speaker: also read written answers aloud");
+        const t = on ? L("Altavoz activado: KILLA lee en voz alta sus respuestas (pulsa para silenciar)", "Speaker on: KILLA reads its answers aloud (press to mute)") : L("Altavoz: leer en voz alta también las respuestas escritas", "Speaker: also read written answers aloud");
         btnAltavoz.title = t; btnAltavoz.setAttribute("aria-label", t);
         try { localStorage.setItem("astra-altavoz", on ? "1" : "0"); } catch (_) {}
         if (on && avisar) voiceManager.desbloquearVoz();       // solo con un clic real (Safari lo exige)
@@ -207,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const panelVoz = document.getElementById("panel-voz");
     const selVoz = document.getElementById("sel-voz");
     const notaVoz = document.getElementById("nota-voz");
-    const PAISES = EN
+    const PAISES = PAGINA_EN
         ? { US: "USA", GB: "UK", AU: "Australia", CA: "Canada", IN: "India", IE: "Ireland", NZ: "New Zealand", ZA: "South Africa", SG: "Singapore", PH: "Philippines", NG: "Nigeria", KE: "Kenya", HK: "Hong Kong", TZ: "Tanzania" }
         : { MX: "México", ES: "España", PE: "Perú", AR: "Argentina", CO: "Colombia", CL: "Chile", US: "EE. UU.", VE: "Venezuela", BO: "Bolivia", EC: "Ecuador", UY: "Uruguay", PY: "Paraguay", CR: "Costa Rica", CU: "Cuba", DO: "Rep. Dominicana", GT: "Guatemala", HN: "Honduras", NI: "Nicaragua", PA: "Panamá", PR: "Puerto Rico", SV: "El Salvador", GQ: "Guinea Ecuatorial", "419": "Latinoamérica" };
     const nombreVoz = (v) => {
@@ -236,7 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnVozCfg.addEventListener("click", () => abrirPanelVoz(panelVoz.hidden));
     document.addEventListener("click", (e) => { if (!panelVoz.hidden && !e.target.closest("#panel-voz, #btn-voz-cfg")) abrirPanelVoz(false); });
     panelVoz.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); abrirPanelVoz(false); btnVozCfg.focus(); } });
-    const probarVoz = () => { voiceManager.desbloquearVoz(); voiceManager.speak(L("Hola, soy ASTRA. Así sueno con esta voz.", "Hi, I am ASTRA. This is how I sound with this voice.")); };
+    const probarVoz = () => { voiceManager.desbloquearVoz(); voiceManager.speak(L("Hola, soy KILLA. Así sueno con esta voz.", "Hi, I am KILLA. This is how I sound with this voice.")); };
     selVoz.addEventListener("change", () => {
         voiceManager.setVozPreferida(selVoz.value);
         try { localStorage.setItem("astra-voz", selVoz.value); } catch (_) {}

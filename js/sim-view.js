@@ -23,7 +23,10 @@
   let Q = QUALITY[qName];
   function guessQuality(gl) {
     let gpu = '';
-    try { const ext = gl.getExtension('WEBGL_debug_renderer_info'); gpu = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || ''); } catch (_) {}
+    try {
+      gpu = String(gl.getParameter(gl.RENDERER) || '');
+      if (!gpu || /^(WebKit WebGL|Mozilla|WebGL)/i.test(gpu)) { const ext = gl.getExtension('WEBGL_debug_renderer_info'); if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || gpu); }
+    } catch (_) {}
     const mobile = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
     let q;
     if (/SwiftShader|llvmpipe|softpipe|Software|Basic Render|Microsoft Basic/i.test(gpu)) q = 'baja';             // sin tarjeta gráfica
@@ -739,6 +742,9 @@
     $('#sw-exit').addEventListener('click', () => setCam('colony'));
   }
   function bindColony() {
+    const advBtn = $('#col-adv-btn'), panelCol = $('#sim-colony');
+    const setAdv = (on) => { panelCol.classList.toggle('show-adv', on); advBtn.setAttribute('aria-expanded', String(on)); try { localStorage.setItem('icewise-col-adv', on ? '1' : '0'); } catch (_) {} };
+    if (advBtn) { advBtn.addEventListener('click', () => setAdv(!panelCol.classList.contains('show-adv'))); setAdv((() => { try { return localStorage.getItem('icewise-col-adv') === '1'; } catch (_) { return false; } })()); }
     $('#col-sectores').innerHTML = Object.entries(COLONIA).map(([k, s]) => `<button type="button" data-s="${k}" aria-pressed="false"><b>${s.code}</b><span>${s.short}</span></button>`).join('');
     $$('#col-sectores button').forEach(b => b.addEventListener('click', () => colonySelect(b.dataset.s)));
     $$('#col-capas input[data-capa]').forEach(i => i.addEventListener('change', () => colonyCapa(i.dataset.capa, i.checked)));
@@ -2363,13 +2369,13 @@
   function hideIntro() { const i = $('#sim-intro'); if (i) i.hidden = true; }
 
   const WHATIF = [
-    { t: L('¿Y si el rover es muy exigente?', 'What if the rover is very demanding?'), d: L('Umbral de hielo 6 %', 'Ice threshold 6%'), apply: () => { const b = P.iceThreshold; P.iceThreshold = 6; showEffect('iceThreshold', b, 6); }, tab: 'tab-rover' },
-    { t: L('¿Y si no guarda batería para volver?', 'What if it keeps no battery to return?'), d: L('Reserva 0 % y bodega de 100 kg', '0% reserve and a 100 kg cargo bay'), apply: () => { const b = P.reserve; P.reserve = 0; P.cargoCap = 100; showEffect('reserve', b, 0); }, tab: 'tab-rover', warp: 600 },
-    { t: L('¿Y si el horno pierde mucho calor?', 'What if the oven loses a lot of heat?'), d: L('Eficiencia de calentamiento 20 %', 'Heating efficiency 20%'), apply: () => { const b = P.etaH; P.etaH = 0.2; showEffect('etaH', b, 0.2); }, tab: 'tab-plant' },
-    { t: L('¿Y si sacamos los microbios al exterior?', 'What if we take the microbes outside?'), d: L('Vacío, −40 °C, radiación lunar', 'Vacuum, −40 °C, lunar radiation'), apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
-    { t: L('¿Y si los irradiamos fuerte?', 'What if we irradiate them hard?'), d: L('Fuente de 100 Gy/h en la cámara', 'A 100 Gy/h source in the chamber'), apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
-    { t: L('¿Y si apagamos el biofiltro?', 'What if we turn off the biofilter?'), d: L('Solo filtros químicos traídos de la Tierra', 'Only chemical filters brought from Earth'), apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
-    { t: L('¿Y si lo conduzco yo?', 'What if I drive it myself?'), d: L('W A S D para conducir · Espacio para perforar', 'W A S D to drive · Space to drill'), apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
+    { t: L('¿Y si el rover es muy exigente?', 'What if the rover is very demanding?'), d: L('Umbral de hielo 6 %', 'Ice threshold 6%'), x: L('Descarta las zonas pobres: perfora menos veces, pero cada muestra trae más hielo.', 'It skips poor areas: fewer drill holes, but each sample brings more ice.'), apply: () => { const b = P.iceThreshold; P.iceThreshold = 6; showEffect('iceThreshold', b, 6); }, tab: 'tab-rover' },
+    { t: L('¿Y si no guarda batería para volver?', 'What if it keeps no battery to return?'), d: L('Reserva 0 % y bodega de 100 kg', '0% reserve and a 100 kg cargo bay'), x: L('Puede quedarse sin energía dentro del cráter, donde no hay sol para recargar.', 'It may run out of power inside the crater, where there is no sunlight to recharge.'), apply: () => { const b = P.reserve; P.reserve = 0; P.cargoCap = 100; showEffect('reserve', b, 0); }, tab: 'tab-rover', warp: 600 },
+    { t: L('¿Y si el horno pierde mucho calor?', 'What if the oven loses a lot of heat?'), d: L('Eficiencia de calentamiento 20 %', 'Heating efficiency 20%'), x: L('Cada litro de agua cuesta mucha más energía y los lotes tardan más.', 'Each litre of water costs much more energy and batches take longer.'), apply: () => { const b = P.etaH; P.etaH = 0.2; showEffect('etaH', b, 0.2); }, tab: 'tab-plant' },
+    { t: L('¿Y si sacamos los microbios al exterior?', 'What if we take the microbes outside?'), d: L('Vacío, −40 °C, radiación lunar', 'Vacuum, −40 °C, lunar radiation'), x: L('Sin agua líquida ni aire, las bacterias dejan de crecer y el biofiltro deja de limpiar.', 'Without liquid water or air, the bacteria stop growing and the biofilter stops cleaning.'), apply: () => { const b = P.chamber; P.chamber = 'outside'; showEffect('chamber', b, 'outside'); }, tab: 'tab-bio', warp: 600 },
+    { t: L('¿Y si los irradiamos fuerte?', 'What if we irradiate them hard?'), d: L('Fuente de 100 Gy/h en la cámara', 'A 100 Gy/h source in the chamber'), x: L('Deinococcus resiste; Pseudomonas muere y el amoníaco deja de eliminarse.', 'Deinococcus survives; Pseudomonas dies and ammonia is no longer removed.'), apply: () => { const b = P.dose; Object.assign(P, { chamber: 'inside', Tc: 30, dose: 100 }); showEffect('dose', b, 100); }, tab: 'tab-bio' },
+    { t: L('¿Y si apagamos el biofiltro?', 'What if we turn off the biofilter?'), d: L('Solo filtros químicos traídos de la Tierra', 'Only chemical filters brought from Earth'), x: L('Los filtros químicos se gastan rápido y, al acabarse, el agua sale contaminada.', 'The chemical filters wear out fast and, once they run out, the water comes out contaminated.'), apply: () => { const b = P.bioPurif; P.bioPurif = false; showEffect('bioPurif', b, false); }, tab: 'tab-bio', warp: 2400 },
+    { t: L('¿Y si lo conduzco yo?', 'What if I drive it myself?'), d: L('W A S D para conducir · Espacio para perforar', 'W A S D to drive · Space to drill'), x: L('Tomas el control del rover: tú decides dónde perforar.', 'You take control of the rover: you decide where to drill.'), apply: () => { sim.cmd.setMode('manual'); setModeUI('manual'); setCam('rover'); $('#sim-view').focus(); }, tab: 'tab-rover' }
   ];
 
   function bindUI() {
@@ -2415,8 +2421,20 @@
       const on = e => { e.preventDefault(); keys[b.dataset.k] = true; }, off = () => { keys[b.dataset.k] = false; };
       b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
     });
-    $('#sim-whatif').innerHTML = WHATIF.map((w, i) => `<button class="whatif" data-i="${i}"><span class="t">${w.t}</span><span class="d">${w.d}</span></button>`).join('');
-    $$('#sim-whatif .whatif').forEach(b => b.addEventListener('click', () => {
+    // «¿Qué pasa si…?»: cada pregunta se despliega con lo que va a pasar y un botón para probarlo (solo una abierta a la vez)
+    const CHEV = '<svg class="wi-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    $('#sim-whatif').innerHTML = WHATIF.map((w, i) => `<div class="wi">
+      <button type="button" class="wi-q" id="wi-q-${i}" aria-expanded="false" aria-controls="wi-b-${i}"><span class="t">${w.t}</span>${CHEV}</button>
+      <div class="wi-b" id="wi-b-${i}" role="region" aria-labelledby="wi-q-${i}"><div class="wi-in">
+        <span class="wi-d">${w.d}</span><p>${w.x}</p>
+        <button type="button" class="btn btn--sm btn--primary wi-go" data-i="${i}" tabindex="-1">${L('Probar este caso', 'Try this case')}</button>
+      </div></div></div>`).join('');
+    const wiItems = $$('#sim-whatif .wi');
+    wiItems.forEach(it => $('.wi-q', it).addEventListener('click', () => {
+      const open = !it.classList.contains('is-open');
+      wiItems.forEach(o => { const on = o === it && open; o.classList.toggle('is-open', on); $('.wi-q', o).setAttribute('aria-expanded', String(on)); $('.wi-go', o).tabIndex = on ? 0 : -1; });
+    }));
+    $$('#sim-whatif .wi-go').forEach(b => b.addEventListener('click', () => {
       const w = WHATIF[+b.dataset.i]; w.apply(); syncSliders(); hideIntro();
       if (w.warp) { warp = w.warp; $$('#sim-warp button').forEach(x => x.setAttribute('aria-pressed', String(+x.dataset.w === warp))); }
       if (!S.running) toggleRun();

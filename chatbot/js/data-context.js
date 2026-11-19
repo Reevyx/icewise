@@ -7,7 +7,7 @@
 // simulación de ICEWISE; lo simulado, los supuestos y las hipótesis se dicen como tales.
 // En inglés se usan keywordsEn y respuestaEn (una palabra clave que empieza por "=" exige la palabra entera).
 const ASTRA_KNOWLEDGE = {
-    nombre: "ASTRA",
+    nombre: "KILLA",
     version: "1.1-icewise",
     respuestasPredefinidas: [
         {
@@ -103,14 +103,14 @@ const ASTRA_KNOWLEDGE = {
         {
             keywords: ["quien eres", "que haces", "que puedes", "ayuda"],
             keywordsEn: ["who are you", "what do you do", "what can you", "help"],
-            respuestaEn: "I am <strong>ASTRA</strong>, the ICEWISE assistant. I can answer by text or voice about the rover, the ice, the plant, the biofilter, the colony and the water, and tell you the time in your country.",
-            respuesta: "Soy <strong>ASTRA</strong>, el asistente de ICEWISE. Puedo responderte por texto o por voz sobre el rover, el hielo, la planta, el biofiltro, la colonia y el agua, y decirte la hora de tu país."
+            respuestaEn: "I am <strong>KILLA</strong>, the ICEWISE assistant. I can answer by text or voice about the rover, the ice, the plant, the biofilter, the colony and the water, and tell you the time in your country.",
+            respuesta: "Soy <strong>KILLA</strong>, el asistente de ICEWISE. Puedo responderte por texto o por voz sobre el rover, el hielo, la planta, el biofiltro, la colonia y el agua, y decirte la hora de tu país."
         },
         {
             keywords: ["hola", "buenos dias", "buenas tardes", "buenas noches", "saludos"],
             keywordsEn: ["=hi", "hello", "hey", "good morning", "good afternoon", "good evening", "greetings"],
-            respuestaEn: "Hi! I am ASTRA. Ask me about the rover, the ice, the biofilter, the colony or how much water ICEWISE produces.",
-            respuesta: "¡Hola! Soy ASTRA. Pregúntame por el rover, el hielo, el biofiltro, la colonia o cuánta agua produce ICEWISE."
+            respuestaEn: "Hi! I am KILLA. Ask me about the rover, the ice, the biofilter, the colony or how much water ICEWISE produces.",
+            respuesta: "¡Hola! Soy KILLA. Pregúntame por el rover, el hielo, el biofiltro, la colonia o cuánta agua produce ICEWISE."
         },
         {
             keywords: ["hora", "fecha", "tiempo", "horario", "pais"],
@@ -123,7 +123,7 @@ const ASTRA_KNOWLEDGE = {
     // AQUÍ NUNCA VA UNA CLAVE DE API: este archivo es público en GitHub Pages. La IA gratuita (Workers AI)
     // no usa clave, y una clave de pago, si existiera, viviría solo en el servidor como secreto.
     // Aquí solo va la dirección del servidor, que no es secreta. Si el servidor no está configurado
-    // o falla, ASTRA responde con las reglas locales de arriba.
+    // o falla, KILLA responde con las reglas locales de arriba.
     apiConfig: {
         usarApiExterna: true,
         endpoint: "https://astra-icewise.rone-robot.workers.dev"   // p. ej. "https://astra-icewise.TU-USUARIO.workers.dev"

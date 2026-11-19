@@ -4,7 +4,7 @@
 // Funciona en GitHub Pages (HTTPS). Dictado: Chrome, Edge y Safari (Firefox no lo tiene: se avisa
 // y se puede escribir). Lectura en voz alta: todos los navegadores modernos.
 // Cada país usa su variante de español para entender y para hablar.
-// En inglés (window.ASTRA_LANG, js/lang.js) ASTRA entiende y habla inglés de EE. UU. en todos los países.
+// En inglés (window.ASTRA_LANG, js/lang.js) KILLA entiende y habla inglés de EE. UU. en todos los países.
 const ASTRA_EN = (window.ASTRA_LANG || "es") === "en";
 const IDIOMA_BASE = ASTRA_EN ? "en-US" : "es-ES";
 const ZONAS_HORARIAS = {
@@ -154,7 +154,7 @@ class VoiceManager {
         return /natural|neural/i.test(v.name);
     }
 
-    // Voces del idioma de ASTRA (español o inglés): primero las naturales, luego las del país elegido, luego el resto
+    // Voces del idioma de la página (español o inglés): primero las naturales, luego las del país elegido, luego el resto
     vocesEspanol() {
         const todas = this.soportaVoz ? window.speechSynthesis.getVoices() : [];
         const id = this.idioma.toLowerCase();
@@ -188,8 +188,17 @@ class VoiceManager {
         if (this.soportaVoz) window.speechSynthesis.cancel();
     }
 
+    // Voz para un idioma distinto al de la página (KILLA responde en el idioma en que le escriben)
+    vozDeIdioma(lang) {
+        const todas = this.soportaVoz ? window.speechSynthesis.getVoices() : [];
+        const re = lang === "en" ? /^en([-_]|$)/i : /^es([-_]|$)/i;
+        const voces = todas.filter((v) => re.test(v.lang));
+        return voces.find((v) => VoiceManager.esNatural(v)) || voces[0] || null;
+    }
+
     // Lee el texto en voz alta. onEnd se llama al terminar (o si no se puede hablar).
-    speak(text, onEnd) {
+    // lang ("es" | "en"): idioma de la respuesta; si no es el de la página, se usa una voz de ese idioma.
+    speak(text, onEnd, lang) {
         if (!this.soportaVoz) { onEnd?.(); return; }
         window.speechSynthesis.cancel();
         // Texto sin etiquetas HTML (con un documento aparte, que no ejecuta nada)
@@ -203,10 +212,12 @@ class VoiceManager {
             const ultimo = trozos[trozos.length - 1];
             if (ultimo && (ultimo + f).length < 180) trozos[trozos.length - 1] = ultimo + f; else trozos.push(f);
         });
-        const voz = this.elegirVoz();
+        const otro = lang && lang !== (ASTRA_EN ? "en" : "es");
+        const voz = otro ? this.vozDeIdioma(lang) : this.elegirVoz();
+        const langVoz = otro ? (lang === "en" ? "en-US" : "es-ES") : this.idioma;
         trozos.forEach((trozo, i) => {
             const utterance = new SpeechSynthesisUtterance(trozo.trim());
-            utterance.lang = voz ? voz.lang : this.idioma;
+            utterance.lang = voz ? voz.lang : langVoz;
             if (voz) utterance.voice = voz;
             if (i === trozos.length - 1) { utterance.onend = () => onEnd?.(); utterance.onerror = () => onEnd?.(); }
             window.speechSynthesis.speak(utterance);

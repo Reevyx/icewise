@@ -27,24 +27,24 @@
     hours: { label: L('Tiempo de procesamiento (h)', 'Processing time (h)'), get: r => r.time.hours, fmt: v => `${fmt(v, 0)} h` }
   };
 
+  const chartW = (el, max) => { const c = el && el.closest('.dv-chart'); const w = c ? c.clientWidth - 44 : max; return Math.round(Math.max(320, Math.min(max, w || max))); };
   function range(a, b, s) { const out = []; for (let v = a; v <= b + 1e-9; v += s) out.push(+v.toFixed(4)); return out; }
 
   // ---------- Controles ----------
   function buildControls() {
     const box = $('#lab-params');
     if (!box) return;
-    let html = '', group = '';
-    const BASIC = ['iceWt', 'dryLayer', 'Pheat', 'etaH', 'etaCap'];
-    M.PARAMS.forEach(p => {
-      const adv = !BASIC.includes(p.key);
-      if (p.group !== group) { group = p.group; html += `<div class="param-group-title${adv && ![L('Depósito', 'Deposit'), L('Procesamiento', 'Processing')].includes(group) ? ' param--adv' : ''}">${group}</div>`; }
-      html += `<div class="param${adv ? ' param--adv' : ''}">
+    // Las 15 variables en tres grupos plegables (Depósito abierto; los otros se abren con un toque)
+    const grupos = [];
+    M.PARAMS.forEach(p => { let g = grupos.find(x => x.name === p.group); if (!g) grupos.push(g = { name: p.group, items: [] }); g.items.push(p); });
+    box.innerHTML = grupos.map((g, gi) => `<details class="dv-group"${gi === 0 ? ' open' : ''}>
+      <summary><span class="dv-gn">${String(gi + 1).padStart(2, '0')}</span>${g.name}<span class="dv-gc">${g.items.length}</span></summary>
+      <div class="dv-gbody">${g.items.map(p => `<div class="param">
         <div class="param-head"><label for="p-${p.key}">${p.label}</label><output id="o-${p.key}" for="p-${p.key}"></output></div>
         <input type="range" id="p-${p.key}" data-key="${p.key}" min="${p.min}" max="${p.max}" step="${p.step}" value="${params[p.key]}" aria-describedby="s-${p.key}">
         <div class="param-meta"><span class="src" id="s-${p.key}">${p.src}</span>${tag(p.tag)}</div>
-      </div>`;
-    });
-    box.innerHTML = html;
+      </div>`).join('')}</div>
+    </details>`).join('');
     $$('input[type=range]', box).forEach(inp => {
       inp.addEventListener('input', () => {
         params[inp.dataset.key] = parseFloat(inp.value);
@@ -103,31 +103,47 @@
       + (r.params.iceWt < 2 ? ' With so little ice, almost all the energy heats rock: it is not worth it.' : ''));
   }
 
+  // Indicadores: el número se desliza con un muelle hasta su nuevo valor (se puede interrumpir moviendo otra variable)
+  // y debajo se compara con el escenario medido por LCROSS. ↓ en energía o tiempo es mejor; ↑ en agua es mejor.
+  const BASE = M.run(M.SCENARIOS.intermedio.values);
+  function kpi(id, value, html, base, lowerIsBetter) {
+    const el = $(`#k-${id}`); if (!el) return;
+    Ice.springNumber(el, value, html);
+    const d = $(`#d-${id}`); if (!d || base === undefined) return;
+    const rel = isFinite(value) && isFinite(base) && base !== 0 ? (value - base) / Math.abs(base) : 0;
+    if (Math.abs(rel) < 0.005) { d.textContent = L('igual que LCROSS', 'same as LCROSS'); d.className = 'd'; return; }
+    const good = lowerIsBetter ? rel < 0 : rel > 0;
+    d.textContent = `${rel > 0 ? '↑' : '↓'} ${fmt(Math.abs(rel) * 100, Math.abs(rel) < 0.1 ? 1 : 0)}${L(' %', '%')} ${L('vs. LCROSS', 'vs. LCROSS')}`;
+    d.className = 'd ' + (good ? 'good' : 'bad');
+  }
   function renderKPIs(r) {
     renderSummary(r);
-    const set = (id, v) => { const el = $(id); if (el) el.innerHTML = v; };
-    set('#k-ice', `${fmtAuto(r.mass.ice)}<small>kg</small>`);
-    set('#k-pur', `${fmtAuto(r.mass.purified)}<small>L</small>`);
-    set('#k-energy', `${fmt(r.kWh.total, 1)}<small>kWh</small>`);
-    set('#k-spec', `${isFinite(r.specific) ? fmt(r.specific, 2) : '—'}<small>kWh/L</small>`);
-    set('#k-time', fmtDuration(r.time.hours).replace(/ (\S+)$/, '<small>$1</small>'));
-    set('#k-rec', `${fmt(r.recoveryOverall * 100, 1)}<small>%</small>`);
-    set('#k-mass', `${fmt(r.mass.wet, 0)}<small>kg</small>`);
-    set('#k-thermo', `${isFinite(r.thermoMin) ? fmt(r.thermoMin, 2) : '—'}<small>kWh/L</small>`);
+    const unit = (u) => `<small>${u}</small>`, b = BASE;
+    kpi('pur', r.mass.purified, v => `${fmtAuto(v)}${unit('L')}`, b.mass.purified, false);
+    kpi('spec', r.specific, v => `${isFinite(v) ? fmt(v, 2) : '—'}${unit('kWh/L')}`, b.specific, true);
+    const pk = (id, h) => { const e = $(id); if (e) e.innerHTML = h; };
+    pk('#pk-pur', `${fmtAuto(r.mass.purified)} L`); pk('#pk-spec', `${isFinite(r.specific) ? fmt(r.specific, 2) : '—'} kWh/L`);
+    kpi('energy', r.kWh.total, v => `${fmt(v, 1)}${unit('kWh')}`, b.kWh.total, true);
+    kpi('time', r.time.hours, v => fmtDuration(v).replace(/ (\S+)$/, '<small>$1</small>'), b.time.hours, true);
+    kpi('ice', r.mass.ice, v => `${fmtAuto(v)}${unit('kg')}`, b.mass.ice, false);
+    kpi('recov', r.mass.recovered, v => `${fmtAuto(v)}${unit('L')}`, b.mass.recovered, false);
+    kpi('rec', r.recoveryOverall * 100, v => `${fmt(v, 1)}${unit('%')}`, b.recoveryOverall * 100, false);
+    kpi('mass', r.mass.wet, v => `${fmt(v, 0)}${unit('kg')}`, b.mass.wet, false);
+    kpi('thermo', r.thermoMin, v => `${isFinite(v) ? fmt(v, 2) : '—'}${unit('kWh/L')}`);
   }
 
   function renderFlow(r) {
     const el = $('#chart-flow'); if (!el) return;
     const m = r.mass;
     charts.flowBars(el, [
-      { label: 'Hielo in situ', value: m.ice, kind: 'stock', note: 'Masa de hielo contenida en el material excavado.' },
-      { label: 'Pérdida en transferencia', value: m.lossTransfer, kind: 'loss', note: 'Sublimación o derrame entre taladro y horno.' },
-      { label: 'Hielo no liberado', value: m.lossResidual, kind: 'loss', note: 'Permanece en el residuo por mala conducción térmica.' },
-      { label: 'Vapor no capturado', value: m.lossCapture, kind: 'loss', note: 'Fugas y re-depósito en conductos.' },
-      { label: 'Agua recuperada', value: m.recovered, kind: 'stock', note: 'Condensado en la trampa fría. No es potable.' },
-      { label: 'Rechazo de purificación', value: m.lossPurif, kind: 'loss', note: 'Concentrado con NH₃, H₂S, SO₂, Hg, partículas.' },
-      { label: 'Agua purificada', value: m.purified, kind: 'stock', highlight: true, note: 'Calidad técnica. Apta para consumo solo tras verificación analítica.' }
-    ]);
+      { label: L('Hielo en el suelo', 'Ice in the soil'), value: m.ice, kind: 'stock', note: L('Masa de hielo contenida en el material excavado.', 'Mass of ice contained in the excavated material.') },
+      { label: L('Pérdida en transferencia', 'Transfer loss'), value: m.lossTransfer, kind: 'loss', note: L('Sublimación o derrame entre taladro y horno.', 'Sublimation or spillage between drill and oven.') },
+      { label: L('Hielo no liberado', 'Ice not released'), value: m.lossResidual, kind: 'loss', note: L('Permanece en el residuo por mala conducción térmica.', 'Stays in the residue because of poor heat conduction.') },
+      { label: L('Vapor no capturado', 'Vapour not captured'), value: m.lossCapture, kind: 'loss', note: L('Fugas y re-depósito en conductos.', 'Leaks and re-deposition in ducts.') },
+      { label: L('Agua recuperada', 'Water recovered'), value: m.recovered, kind: 'stock', note: L('Condensado en la trampa fría. No es potable.', 'Condensed in the cold trap. Not drinkable.') },
+      { label: L('Rechazo de purificación', 'Purification reject'), value: m.lossPurif, kind: 'loss', note: L('Concentrado con NH₃, H₂S, SO₂, Hg, partículas.', 'Concentrate with NH₃, H₂S, SO₂, Hg, particles.') },
+      { label: L('Agua purificada', 'Purified water'), value: m.purified, kind: 'stock', highlight: true, note: L('Calidad técnica. Apta para consumo solo tras verificación analítica.', 'Technical grade. Drinkable only after laboratory verification.') }
+    ], (() => { const w = chartW(el, 760); return { width: w, labelW: w < 520 ? 150 : 210 }; })());
   }
 
   function renderEnergy(r) {
@@ -157,8 +173,9 @@
     const ys = series.flatMap(s => s.data.map(d => d.y)).filter(isFinite);
     const yMax = met.max ? Math.min(met.max, Math.max(...ys) * 1.05) : Math.max(...ys) * 1.08;
     charts.lineChart(el, {
+      width: chartW(el, 760), height: chartW(el, 760) < 520 ? 300 : 320,
       series, xLabel: sw.label, yLabel: met.label.split('(')[0].trim(), yMin: 0, yMax,
-      yFmt: v => fmtAuto(v), marker: { x: params[sweepKey], label: L('actual', 'current') },
+      yFmt: v => v === 0 ? '0' : fmtAuto(v), marker: { x: params[sweepKey], label: L('actual', 'current') },
       band: sweepKey === 'iceWt' ? { x1: 2.7, x2: 8.5, label: L('Rango LCROSS (5,6 ± 2,9 %)', 'LCROSS range (5.6 ± 2.9%)') } : null,
       aria: L(`${met.label} en función de ${sw.label}`, `${met.label} as a function of ${sw.label}`)
     });
@@ -170,15 +187,16 @@
     const el = $('#lab-warnings'); if (!el) return;
     const okOnly = r.warnings.length === 1 && r.warnings[0].startsWith(L('Sin incoherencias', 'No physical'));
     el.innerHTML = r.warnings.map(w => `<li class="${okOnly ? 'ok' : ''}">${w}</li>`).join('');
-    const sat = $('#k-sat'); if (sat) sat.textContent = `${fmt(r.pore.saturation * 100, 0)} %`;
-    const por = $('#k-por'); if (por) por.textContent = `${fmt(r.pore.porosity * 100, 0)} %`;
+    const pc = L(' %', '%');
+    const sat = $('#k-sat'); if (sat) sat.textContent = `${fmt(r.pore.saturation * 100, 0)}${pc}`;
+    const por = $('#k-por'); if (por) por.textContent = `${fmt(r.pore.porosity * 100, 0)}${pc}`;
     const flux = $('#k-flux'); if (flux) flux.textContent = `${fmt(r.flux * 1000, 2)} g/m²·s`;
   }
 
   function renderAudit(r) {
     const el = $('#lab-audit'); if (!el) return;
     const e = r.energy, k = v => fmt(v / 3.6e6, 2) + ' kWh';
-    const rows = [
+    const rows = L([
       ['Regolito seco en la capa con hielo', `${fmt(r.mass.dry, 1)} kg`, 'sim', 'Calculado: ciclos × sección × ∫ρ(z)dz'],
       ['Sobrecarga seca excavada', `${fmt(r.mass.overburden, 1)} kg`, 'sim', 'Calculado'],
       ['Densidad media de la capa', `${fmt(r.pore.rhoAvg, 0)} kg/m³`, 'doc', 'Perfil de Hayne et al. 2017'],
@@ -187,7 +205,16 @@
       ['Pérdidas del calentador', k(e.heatLoss), 'sup', 'Depende de η supuesta'],
       ['Energía total del lote', k(e.total), 'sim', 'Suma de términos'],
       ['Flujo máximo de sublimación (superficie libre)', `${fmt(r.flux * 1000, 2)} g/m²·s`, 'doc', 'Hertz–Knudsen con P_sat de Murphy & Koop 2005']
-    ];
+    ], [
+      ['Dry regolith in the icy layer', `${fmt(r.mass.dry, 1)} kg`, 'sim', 'Calculated: cycles × area × ∫ρ(z)dz'],
+      ['Dry overburden excavated', `${fmt(r.mass.overburden, 1)} kg`, 'sim', 'Calculated'],
+      ['Mean density of the layer', `${fmt(r.pore.rhoAvg, 0)} kg/m³`, 'doc', 'Profile from Hayne et al. 2017'],
+      ['Energy to heat the regolith', k(e.reg), 'sim', 'Integral of documented cp(T)'],
+      ['Sublimation energy', k(e.latent), 'sim', 'Documented L_sub × mass released'],
+      ['Heater losses', k(e.heatLoss), 'sup', 'Depends on the assumed η'],
+      ['Total batch energy', k(e.total), 'sim', 'Sum of terms'],
+      ['Maximum sublimation flux (free surface)', `${fmt(r.flux * 1000, 2)} g/m²·s`, 'doc', 'Hertz–Knudsen with P_sat from Murphy & Koop 2005']
+    ]);
     el.innerHTML = rows.map(([a, b, t, c]) => `<tr><td>${a}<span class="muted caption">${c}</span></td><td class="num">${b}</td><td>${tag(t)}</td></tr>`).join('');
   }
 
@@ -196,12 +223,12 @@
     const res = ['desfavorable', 'intermedio', 'favorable'].map(k => ({ k, r: M.run(M.SCENARIOS[k].values) }));
     const el = $('#chart-scen');
     if (el) charts.groupedBars(el, res.map(x => ({ label: M.SCENARIOS[x.k].label, values: [x.r.mass.ice, x.r.mass.purified] })),
-      [{ name: 'Hielo in situ (kg)', color: P.slate }, { name: 'Agua purificada (kg)', color: P.ivory }],
-      { legend: $('#legend-scen'), yFmt: v => fmt(v, 0), aria: 'Hielo in situ y agua purificada por escenario' });
+      [{ name: L('Hielo en el suelo (kg)', 'Ice in the soil (kg)'), color: P.slate }, { name: L('Agua purificada (kg)', 'Purified water (kg)'), color: P.cobalt }],
+      { legend: $('#legend-scen'), width: 420, height: 230, yFmt: v => fmt(v, 0), aria: L('Hielo en el suelo y agua purificada por escenario', 'Ice in the soil and purified water per scenario') });
     const el2 = $('#chart-scen-e');
     if (el2) charts.groupedBars(el2, res.map(x => ({ label: M.SCENARIOS[x.k].label, values: [x.r.specific] })),
-      [{ name: 'kWh por litro de agua purificada', color: P.cobalt }],
-      { legend: $('#legend-scen-e'), yFmt: v => fmt(v, 1), aria: 'Energía específica por escenario' });
+      [{ name: L('kWh por litro de agua purificada', 'kWh per litre of purified water'), color: '#8fa0ff' }],
+      { legend: $('#legend-scen-e'), width: 420, height: 230, yFmt: v => fmt(v, 1), aria: L('Energía específica por escenario', 'Specific energy per scenario') });
     const tb = $('#scen-table');
     if (tb) {
       const row = (label, f, t) => `<tr><td>${label} ${t ? tag(t) : ''}</td>${res.map(x => `<td class="num">${f(x.r)}</td>`).join('')}</tr>`;
@@ -223,13 +250,16 @@
   // ---------- Exportar ----------
   function toCSV() {
     const r = M.run(params);
-    const lines = [['parametro', 'valor', 'unidad', 'procedencia']];
+    const lines = [L(['parametro', 'valor', 'unidad', 'procedencia'], ['parameter', 'value', 'unit', 'source'])];
     M.PARAMS.forEach(p => lines.push([p.label, params[p.key], p.unit, Ice.TAG_TEXT[p.tag]]));
     lines.push([]);
-    lines.push(['resultado (SIMULADO)', 'valor', 'unidad']);
-    [['Hielo in situ', r.mass.ice, 'kg'], ['Agua recuperada', r.mass.recovered, 'kg'], ['Agua purificada', r.mass.purified, 'kg'],
+    lines.push(L(['resultado (SIMULADO)', 'valor', 'unidad'], ['result (SIMULATED)', 'value', 'unit']));
+    L([['Hielo en el suelo', r.mass.ice, 'kg'], ['Agua recuperada', r.mass.recovered, 'kg'], ['Agua purificada', r.mass.purified, 'kg'],
      ['Energia total', r.kWh.total, 'kWh'], ['Energia especifica', r.specific, 'kWh/L'], ['Tiempo de procesamiento', r.time.hours, 'h'],
-     ['Recuperacion global', r.recoveryOverall * 100, '%']].forEach(x => lines.push([x[0], x[1].toFixed(4), x[2]]));
+     ['Recuperacion global', r.recoveryOverall * 100, '%']],
+     [['Ice in the soil', r.mass.ice, 'kg'], ['Water recovered', r.mass.recovered, 'kg'], ['Purified water', r.mass.purified, 'kg'],
+     ['Total energy', r.kWh.total, 'kWh'], ['Specific energy', r.specific, 'kWh/L'], ['Processing time', r.time.hours, 'h'],
+     ['Overall recovery', r.recoveryOverall * 100, '%']]).forEach(x => lines.push([x[0], x[1].toFixed(4), x[2]]));
     return lines.map(l => l.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   }
 
@@ -254,14 +284,23 @@
     const dl = $('#lab-export');
     if (dl) dl.addEventListener('click', () => {
       const blob = new Blob(['﻿' + toCSV()], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'icewise-escenario.csv'; a.click();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = L('icewise-escenario.csv', 'icewise-scenario.csv'); a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      toast('CSV descargado: parámetros, procedencia y resultados simulados.');
+      toast(L('CSV descargado: parámetros, procedencia y resultados simulados.', 'CSV downloaded: parameters, sources and simulated results.'));
+    });
+    initTabs(); initPeek();
+    const pdf = $('#lab-pdf');
+    if (pdf) pdf.addEventListener('click', () => window.IceReport && IceReport.generar(pdf));
+    const reset = $('#lab-reset');
+    if (reset) reset.addEventListener('click', () => {
+      activeScenario = 'intermedio'; params = { ...M.SCENARIOS.intermedio.values };
+      markScenario(); updateOutputs(); compute();
+      toast(L('Variables restablecidas al escenario medido por LCROSS.', 'Variables reset to the scenario measured by LCROSS.'));
     });
     const toMission = $('#lab-to-mission');
     if (toMission) toMission.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('icewise:useParams', { detail: { ...params } }));
-      toast('Parámetros de proceso enviados a la simulación de misión.');
+      toast(L('Parámetros de proceso enviados a la simulación de misión.', 'Process parameters sent to the mission simulation.'));
       document.getElementById('simulacion').scrollIntoView({ behavior: 'smooth' });
     });
     markScenario();
@@ -270,5 +309,42 @@
     let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { compute(); renderScenarioCompare(); }, 200); });
   }
 
-  window.IceLab = { init, getParams: () => ({ ...params }) };
+  // ---------- Un solo gráfico a la vista, elegido con pestañas (menos ruido; siempre junto a las variables) ----------
+  const NOTES = {
+    flow: L('kg por lote: de la roca al agua limpia', 'kg per batch: from rock to clean water'),
+    energy: L('kWh por lote, por etapa del proceso', 'kWh per batch, by process stage'),
+    sweep: L('Qué pasa si mueves solo una variable; el punto azul es tu caso', 'What happens if you move a single variable; the blue dot is your case'),
+    scen: L('Los tres escenarios de referencia, lado a lado', 'The three reference scenarios, side by side')
+  };
+  function initTabs() {
+    const tabs = $$('#dv-tabs [role=tab]'); if (!tabs.length) return;
+    const show = (t, focus) => {
+      tabs.forEach(x => { const on = x === t; x.setAttribute('aria-selected', String(on)); x.tabIndex = on ? 0 : -1;
+        const pane = document.getElementById(x.getAttribute('aria-controls')); if (pane) { pane.hidden = !on; if (on) { pane.classList.remove('is-in'); void pane.offsetWidth; pane.classList.add('is-in'); } } });
+      const key = t.id.replace('dvt-', ''); const n = $('#dv-chart-note'); if (n) n.textContent = NOTES[key] || '';
+      if (focus) t.focus();
+      try { localStorage.setItem('icewise-dv-tab', t.id); } catch (_) {}
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => show(t));
+      t.addEventListener('keydown', e => {
+        const k = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (!k) return;
+        e.preventDefault(); show(tabs[(i + k + tabs.length) % tabs.length], true);
+      });
+    });
+    let saved = null; try { saved = localStorage.getItem('icewise-dv-tab'); } catch (_) {}
+    show(tabs.find(t => t.id === saved) || tabs[0]);
+  }
+  // En pantallas estrechas el resultado queda arriba; mientras mueves variables más abajo, una barra fija lo repite
+  function initPeek() {
+    const peek = $('#dv-peek'), kpis = $('#dv-kpis'), vars = $('.dv-vars');
+    if (!peek || !kpis || !vars || !('IntersectionObserver' in window)) return;
+    let kpiVisible = true, varsVisible = false;
+    const upd = () => peek.classList.toggle('is-on', !kpiVisible && varsVisible && innerWidth <= 1000);
+    new IntersectionObserver(es => { kpiVisible = es[0].isIntersecting; upd(); }).observe(kpis);
+    new IntersectionObserver(es => { varsVisible = es[0].isIntersecting; upd(); }, { rootMargin: '-30% 0px -30% 0px' }).observe(vars);
+    addEventListener('resize', upd);
+  }
+
+  window.IceLab = { init, getParams: () => ({ ...params }), getScenario: () => activeScenario };
 })();

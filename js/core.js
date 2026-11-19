@@ -59,6 +59,39 @@
   const tag = (kind, text) => `<span class="tag tag--${kind}">${text || TAG_TEXT[kind] || kind}</span>`;
   const cite = (...ids) => `<sup class="cite">[${ids.map(i => `<a href="#ref-${i}" aria-label="${L('Referencia', 'Reference')} ${i}">${i}</a>`).join(',')}]</sup>`;
 
+  // ---------------------------------------------------------------------
+  // Números que se deslizan hasta su valor con un muelle críticamente amortiguado (sin rebote).
+  // Si llega un valor nuevo a mitad de camino, sigue desde el número que se ve y conserva su velocidad.
+  // ---------------------------------------------------------------------
+  const reduceMotion = () => root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function springNumber(el, target, html, response = 0.45) {
+    const s = el.__sp || (el.__sp = { x: target, v: 0, raf: 0, last: 0 });
+    s.t = target; s.html = html;
+    if (!isFinite(target) || !isFinite(s.x) || reduceMotion() || !el.isConnected) { s.x = target; s.v = 0; el.innerHTML = html(target); return; }
+    if (s.raf) return;
+    s.last = performance.now();
+    const w = 2 * Math.PI / response;
+    const tick = (now) => {
+      const dt = Math.min(0.05, Math.max(0, (now - s.last) / 1000)); s.last = now;   // el reloj de rAF puede ir por detrás de performance.now()
+      s.v += (-w * w * (s.x - s.t) - 2 * w * s.v) * dt; s.x += s.v * dt;
+      const done = Math.abs(s.x - s.t) < Math.abs(s.t) * 1e-4 + 1e-6 && Math.abs(s.v) < Math.abs(s.t) * 1e-3 + 1e-5;
+      if (done) { s.x = s.t; s.v = 0; }
+      el.innerHTML = s.html(s.x);
+      s.raf = done ? 0 : requestAnimationFrame(tick);
+    };
+    s.raf = requestAnimationFrame(tick);
+  }
+  // Cuenta desde 0 hasta el número que ya está escrito en el elemento (conserva el resto del texto y los decimales)
+  function countUp(el, response = 0.9) {
+    const m = /(\d+)([.,]\d+)?/.exec(el.textContent); if (!m) return;
+    const sep = m[2] ? m[2][0] : '', dec = m[2] ? m[2].length - 1 : 0, val = parseFloat(m[1] + (m[2] ? '.' + m[2].slice(1) : ''));
+    const pre = el.textContent.slice(0, m.index), post = el.textContent.slice(m.index + m[0].length);
+    const show = (v) => { const s = v.toFixed(dec); return pre + (sep === ',' ? s.replace('.', ',') : s) + post; };
+    if (reduceMotion()) return;
+    el.__sp = { x: 0, v: 0, raf: 0, last: 0 };
+    springNumber(el, val, (v) => show(v).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])), response);
+  }
+
   let toastTimer;
   function toast(msg) {
     let el = $('#toast');
@@ -183,9 +216,9 @@
       const w = Math.max(0, s.value) / total * W;
       if (w <= 0) return;
       const r = svgEl('rect', { x: x, y: 8, width: Math.max(w - 2, 0.5), height: H - 30, fill: s.color, rx: 2 }, svg);
-      r.addEventListener('mousemove', e => tip(`<strong>${s.label}</strong><br>${opts.valFmt ? opts.valFmt(s.value) : fmtAuto(s.value)} · ${fmt(100 * s.value / total, 1)} %${s.note ? `<br><span style="color:#c3c3cc">${s.note}</span>` : ''}`, e));
+      r.addEventListener('mousemove', e => tip(`<strong>${s.label}</strong><br>${opts.valFmt ? opts.valFmt(s.value) : fmtAuto(s.value)} · ${fmt(100 * s.value / total, 1)}${L(' %', '%')}${s.note ? `<br><span style="color:#c3c3cc">${s.note}</span>` : ''}`, e));
       r.addEventListener('mouseleave', () => tip(null));
-      if (w > 30) { const t = svgEl('text', { x: x + 4, y: H - 6 }, svg); t.textContent = `${fmt(100 * s.value / total, 0)} %`; }
+      if (w > 30) { const t = svgEl('text', { x: x + 4, y: H - 6 }, svg); t.textContent = `${fmt(100 * s.value / total, 0)}${L(' %', '%')}`; }
       x += w;
     });
     if (opts.legend) {
@@ -196,7 +229,7 @@
 
   /** Barras de flujo de masa (cascada de pérdidas). steps: [{label, value, kind:'stock'|'loss'}] */
   function flowBars(container, steps, opts = {}) {
-    const rowH = 32, W = 420, labelW = 150, H = steps.length * rowH + 8;
+    const rowH = 32, W = opts.width || 420, labelW = opts.labelW || 150, H = steps.length * rowH + 8;
     container.innerHTML = '';
     const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': L('Flujo de masa de agua', 'Water mass flow') }, container);
     const max = Math.max(...steps.map(s => s.value), 1e-9);
@@ -217,7 +250,7 @@
 
   /** Barras agrupadas para comparar escenarios. groups: [{label, values:[...]}], series:[{name,color}] */
   function groupedBars(container, groups, series, opts = {}) {
-    const W = 640, H = opts.height || 260, m = { t: 14, r: 10, b: 40, l: 56 };
+    const W = opts.width || 640, H = opts.height || 260, m = { t: 14, r: 10, b: 40, l: W < 500 ? 40 : 56 };
     container.innerHTML = '';
     const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': opts.aria || L('Comparación', 'Comparison') }, container);
     const max = Math.max(...groups.flatMap(g => g.values).filter(isFinite), 1e-9) * 1.1;
@@ -256,6 +289,6 @@
     return svg;
   }
 
-  root.Ice = { $, $$, clamp, lerp, ease, fmt, fmtAuto, fmtDuration, rng, createStore, tag, cite, toast, TAG_TEXT,
+  root.Ice = { $, $$, clamp, lerp, ease, fmt, fmtAuto, fmtDuration, rng, createStore, tag, cite, toast, TAG_TEXT, springNumber, countUp, reduceMotion,
     charts: { lineChart, stackedBar, flowBars, groupedBars, sparkline, tip, PALETTE, svgEl } };
 })(window);

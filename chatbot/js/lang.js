@@ -1,5 +1,5 @@
 // ============================================================================
-// IDIOMA DE ASTRA (inglés por defecto, español con el botón)
+// IDIOMA DE KILLA (inglés por defecto, español con el botón)
 // ============================================================================
 // Usa la misma preferencia que la web de ICEWISE (localStorage "icewise-lang"), así el chat siempre
 // habla el idioma de la página. ?lang=es / ?lang=en en la dirección lo fuerza.
@@ -20,17 +20,17 @@
 
     // Textos fijos de chatbot/index.html en inglés
     const EN = {
-        title: "ASTRA · ICEWISE Assistant",
+        title: "KILLA · ICEWISE Assistant",
         "#lbl-pais": "Country:",
-        "#lbl-voz": "ASTRA's voice",
+        "#lbl-voz": "KILLA's voice",
         "#btn-probar-voz": "Try voice",
         "#btn-enviar": "Send",
-        "#msg-inicio": "Hi, I am <strong>ASTRA</strong>. You can type to me or use the microphone button. How can I help you today?"
+        "#msg-inicio": "Hi, I am <strong>KILLA</strong>. You can type to me or use the microphone button. How can I help you today?"
     };
     const PAISES_EN = { peru: "Peru (PET)", espana: "Spain (CET)", mexico: "Mexico (CST)", colombia: "Colombia (COT)", argentina: "Argentina (ART)", chile: "Chile (CLT)", estados_unidos: "USA (EST)" };
     const ATRIB_EN = {
         "#btn-altavoz": "Speaker: also read written answers aloud",
-        "#btn-voz-cfg": "Choose ASTRA's voice",
+        "#btn-voz-cfg": "Choose KILLA's voice",
         "#btn-voz": "Talk by voice"
     };
 
@@ -39,7 +39,7 @@
         if (btn) {
             const otro = lang === "en" ? "es" : "en";
             btn.innerHTML = `<span${lang === "en" ? ' class="on"' : ""}>EN</span><span${lang === "es" ? ' class="on"' : ""}>ES</span>`;
-            const t = otro === "es" ? "Cambiar ASTRA a español" : "Switch ASTRA to English";
+            const t = otro === "es" ? "Cambiar KILLA a español" : "Switch KILLA to English";
             btn.title = t; btn.setAttribute("aria-label", t);
             btn.addEventListener("click", () => {
                 try { localStorage.setItem(KEY, otro); } catch (_) {}
@@ -52,7 +52,7 @@
         for (const sel in ATRIB_EN) { const el = document.querySelector(sel); if (el) { el.title = ATRIB_EN[sel]; el.setAttribute("aria-label", ATRIB_EN[sel]); } }
         document.querySelectorAll("#select-pais option").forEach((o) => { if (PAISES_EN[o.value]) o.textContent = PAISES_EN[o.value]; });
         const inp = document.getElementById("input-chat");
-        if (inp) { inp.placeholder = "Type a message or speak..."; inp.setAttribute("aria-label", "Message for ASTRA"); }
+        if (inp) { inp.placeholder = "Type a message or speak..."; inp.setAttribute("aria-label", "Message for KILLA"); }
     }
     // Este archivo se carga al final del <body>: el HTML ya existe y se traduce antes de que arranque el chat
     aplicar();

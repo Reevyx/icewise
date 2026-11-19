@@ -5,7 +5,7 @@ const es = require('./es-index.json'), en = require('./en-index.json');
 const etiquetas = (s) => (s.match(/<[^>]+>/g) || []).join('');
 const dic = {}; let errores = 0;
 for (const k of Object.keys(es)) {
-  if (!(k in en)) { console.log('Falta la traducción', k, es[k].slice(0, 60)); errores++; continue; }
+  if (!en[k]) { console.log('Falta la traducción', k, es[k].slice(0, 60)); errores++; continue; }
   if (etiquetas(es[k]) !== etiquetas(en[k])) { console.log('Etiquetas distintas en', k, '\n  es:', es[k].slice(0, 90), '\n  en:', en[k].slice(0, 90)); errores++; }
   if (es[k] !== en[k]) dic[es[k]] = en[k];
 }

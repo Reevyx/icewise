@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASTRA · Asistente de ICEWISE</title>
+    <title>KILLA · Asistente de ICEWISE</title>
     <meta name="theme-color" content="#171721">
-    <!-- Seguridad (CSP): solo scripts de esta web, fuentes de Google y conexiones a esta web o al servidor de ASTRA (workers.dev) -->
+    <!-- Seguridad (CSP): solo scripts de esta web, fuentes de Google y conexiones a esta web o al servidor de KILLA (workers.dev) -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <script src="js/embed.js?v=20261115c"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/chatbot.css?v=20261118a">
+    <link rel="stylesheet" href="css/chatbot.css?v=20261118k">
 </head>
 <body>
     <div class="chatbot-container">
         <header class="chatbot-header">
             <div class="header-title">
                 <span class="status-dot" aria-hidden="true"></span>
-                <h1>ASTRA Assistant</h1>
+                <h1>KILLA Assistant</h1>
                 <button id="btn-lang" type="button" class="btn-lang" translate="no"><span>EN</span><span class="on">ES</span></button>
             </div>
             <div class="timezone-selector">
@@ -38,12 +38,12 @@
                     <svg class="ic-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.5a8 8 0 0 1 0 11"/></svg>
                     <svg class="ic-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
                 </button>
-                <button id="btn-voz-cfg" type="button" class="btn-altavoz" aria-expanded="false" aria-controls="panel-voz" title="Elegir la voz de ASTRA" aria-label="Elegir la voz de ASTRA">
+                <button id="btn-voz-cfg" type="button" class="btn-altavoz" aria-expanded="false" aria-controls="panel-voz" title="Elegir la voz de KILLA" aria-label="Elegir la voz de KILLA">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
                 </button>
             </div>
             <div class="panel-voz" id="panel-voz" hidden>
-                <label for="sel-voz" id="lbl-voz">Voz de ASTRA</label>
+                <label for="sel-voz" id="lbl-voz">Voz de KILLA</label>
                 <select id="sel-voz"></select>
                 <div class="panel-voz-fila">
                     <button id="btn-probar-voz" type="button">Probar voz</button>
@@ -54,7 +54,7 @@
 
         <main id="chat-messages" class="chat-messages" aria-live="polite">
             <div class="message bot" id="msg-inicio">
-                Hola, soy <strong>ASTRA</strong>. Puedes escribirme o usar el botón de micrófono. ¿En qué te ayudo hoy?
+                Hola, soy <strong>KILLA</strong>. Puedes escribirme o usar el botón de micrófono. ¿En qué te ayudo hoy?
             </div>
         </main>
 
@@ -63,14 +63,14 @@
                 <svg class="ic-mic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
                 <svg class="ic-stop" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>
             </button>
-            <input type="text" id="input-chat" placeholder="Escribe un mensaje o habla..." autocomplete="off" aria-label="Mensaje para ASTRA">
+            <input type="text" id="input-chat" placeholder="Escribe un mensaje o habla..." autocomplete="off" aria-label="Mensaje para KILLA">
             <button id="btn-enviar" type="button">Enviar</button>
         </footer>
     </div>
 
-    <script src="js/lang.js?v=20261118a"></script>
-    <script src="js/data-context.js?v=20261118a"></script>
-    <script src="js/voice-timezone.js?v=20261118a"></script>
-    <script src="js/astra-bot.js?v=20261118a"></script>
+    <script src="js/lang.js?v=20261118k"></script>
+    <script src="js/data-context.js?v=20261118k"></script>
+    <script src="js/voice-timezone.js?v=20261118k"></script>
+    <script src="js/astra-bot.js?v=20261118k"></script>
 </body>
 </html>
