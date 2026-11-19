@@ -42,6 +42,7 @@
     const x = wide() ? (W - w) * 0.7 : 0;
     const y = wide() ? Math.max((H - h) / 2, Math.min(0, (H - h) * 0.4)) : H * 0.08;
     Object.assign(v.style, { width: w + 'px', height: h + 'px', left: x + 'px', top: y + 'px' });
+    host.style.setProperty('--vx', (x + w * (wide() ? 0.62 : 0.5)) + 'px'); host.style.setProperty('--vy', (y + h * 0.48) + 'px');   // centro del rover (botón ▶)
   }
   new ResizeObserver(layout).observe(host); layout();
 
@@ -60,8 +61,22 @@
   // ---------- reproducir solo a la vista ----------
   if (reduce.matches) return;
   let started = false;
-  const load = () => { if (started) return; started = true; v.preload = 'auto'; v.src = src.mp4; };
-  const play = () => { load(); const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+  const load = () => { if (started) return; started = true; v.preload = 'auto'; v.src = src.mp4; v.load(); };
+  // Si el navegador bloquea la reproducción automática (iPhone en modo de bajo consumo o con ahorro de datos),
+  // aparece un botón ▶ sobre el vídeo y además se reintenta con el primer toque en cualquier parte de la página.
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'rs-play'; btn.hidden = true;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  btn.setAttribute('aria-label', (window.L || ((e) => e))('Reproducir el vídeo del rover', 'Play the rover video'));
+  host.appendChild(btn);
+  const blocked = () => {
+    btn.hidden = false;
+    const retry = () => { const q = v.play(); if (q && q.then) q.then(() => { btn.hidden = true; }).catch(() => {}); };
+    ['touchend', 'click'].forEach((ev) => document.addEventListener(ev, retry, { once: true, passive: true }));
+  };
+  btn.addEventListener('click', (e) => { e.stopPropagation(); v.play().then(() => { btn.hidden = true; }).catch(() => {}); });
+  v.addEventListener('playing', () => { btn.hidden = true; });
+  const play = () => { load(); const p = v.play(); if (p && p.catch) p.catch((err) => { if (err && err.name === 'NotAllowedError') blocked(); }); };
   const inView = () => { const r = host.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; };
   new IntersectionObserver((es) => { if (es[0].isIntersecting && !document.hidden) play(); else v.pause(); }, { threshold: 0.2 }).observe(host);
   new IntersectionObserver((es, io) => { if (es[0].isIntersecting) { load(); io.disconnect(); } }, { rootMargin: '100% 0px' }).observe(sec);   // se descarga un poco antes de llegar

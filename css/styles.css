@@ -1283,3 +1283,100 @@ figure.media.ix-pre.ix-in img, .st-media.ix-pre.ix-in img { scale: 1; transition
 .rs-video { position: absolute; display: block; object-fit: cover; background: #000;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 80%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 80%, transparent 100%); }
 @media (max-width: 900px) { .rs-video { -webkit-mask-image: linear-gradient(180deg, #000 0, #000 60%, transparent 100%); mask-image: linear-gradient(180deg, #000 0, #000 60%, transparent 100%); } }
+
+/* ---------- Portada sin solapes en cualquier pantalla (laptops antiguas, zoom del navegador, móviles) ----------
+   Las cifras van en el flujo, debajo del contenido (antes iban con posición absoluta y en pantallas bajas se montaban
+   sobre los botones); el titular escala también con la altura de la pantalla. */
+.hero { flex-direction: column; align-items: stretch; justify-content: flex-start; }
+.hero > .container { flex: 1 0 auto; display: flex; align-items: center; }
+.hero-content { padding-top: calc(var(--nav-h) + clamp(16px, 4vh, 56px)); padding-bottom: clamp(12px, 2.5vh, 28px); }
+.hero-meta { position: relative; left: auto; right: auto; bottom: auto; padding-bottom: clamp(16px, 3vh, 30px); }
+.hero h1 .thin { font-size: clamp(40px, min(6.1vw, 10.2vh), 96px); }
+.hero .sub { font-size: clamp(15px, min(1.3vw, 2.25vh), 21px); }
+.hero .actions { margin-top: clamp(16px, 3vh, 32px); }
+.hero-facts .f .v { font-size: clamp(20px, min(2vw, 3.4vh), 30px); }
+@media (max-height: 760px) and (min-width: 761px) {
+  .hero h1 { margin-bottom: 12px; } .hero h1 .thin { margin-top: 12px; }
+  .hero-facts { gap: 28px; } .hero-facts .f .l { font-size: 11px; }
+}
+@media (max-width: 760px) {
+  .hero::before { background: linear-gradient(0deg, #000 0%, rgba(0, 0, 0, .82) 38%, rgba(0, 0, 0, 0) 70%); }   /* sin franja gris antes del rover */
+  .hero-content { padding-top: calc(var(--nav-h) + 40px); }
+}
+/* botón ▶ del vídeo del rover (solo si el navegador bloquea la reproducción automática) */
+.rs-play { position: absolute; z-index: 2; left: var(--vx, 50%); top: var(--vy, 40%); width: 68px; height: 68px; margin: -34px 0 0 -34px; border-radius: 50%;
+  display: grid; place-items: center; color: #0d0d15; background: rgba(245, 245, 247, .92); border: 0; cursor: pointer;
+  box-shadow: 0 10px 40px -8px rgba(82, 102, 235, .7); transition: transform .4s var(--ease-vc); }
+.rs-play svg { margin-left: 3px; }
+.rs-play:hover { transform: scale(1.06); }
+.rs-play[hidden] { display: none; }
+
+/* ---------- Enfoque STEAM: el logo separado letra a letra, cada una con su aplicación ---------- */
+.steam-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.steam-card { position: relative; padding: 24px 20px 26px; border-radius: 16px; background: var(--color-graphite-card); border: 1px solid var(--line-soft);
+  transition: transform .6s var(--ease-vc), border-color .4s ease, box-shadow .6s var(--ease-vc); }
+.steam-art { position: relative; height: 120px; margin-bottom: 18px; }
+.steam-ic { position: absolute; left: 0; top: 0; width: 64px; height: 64px; transition: transform .7s var(--ease-vc); }
+.steam-l { position: absolute; left: 44px; bottom: 0; height: 92px; width: auto; filter: drop-shadow(0 8px 22px rgba(0, 0, 0, .45)); transition: transform .7s var(--ease-vc); }
+.steam-card h3 { font-family: var(--font-impact); font-weight: 600; font-size: 20px; letter-spacing: -0.01em; color: var(--porcelain); margin: 0 0 8px; }
+.steam-card p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-ash-text); }
+@media (hover: hover) and (pointer: fine) {
+  .steam-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--c) 55%, transparent); box-shadow: 0 26px 50px -30px var(--c); }
+  .steam-card:hover .steam-ic { transform: rotate(-8deg) scale(1.06); }
+  .steam-card:hover .steam-l { transform: translateY(-4px); }
+}
+@media (max-width: 1100px) { .steam-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .steam-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .steam-card { padding: 18px 16px 20px; } .steam-art { height: 96px; } .steam-l { height: 72px; left: 38px; } .steam-ic { width: 52px; height: 52px; } }
+@media (max-width: 440px) { .steam-grid { grid-template-columns: 1fr; } }
+
+/* ---------- ODS ---------- */
+.ods-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ods-card { display: grid; grid-template-columns: 96px 1fr; gap: 16px; align-items: start; padding: 18px; border-radius: 16px; background: var(--color-graphite-card); border: 1px solid var(--line-soft);
+  transition: transform .6s var(--ease-vc), border-color .4s ease; }
+.ods-card img { width: 96px; height: 96px; border-radius: 6px; display: block; }
+.ods-card h3 { font-family: var(--font-impact); font-weight: 600; font-size: 17px; line-height: 1.25; letter-spacing: -0.01em; color: var(--porcelain); margin: 2px 0 6px; }
+.ods-card p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--color-ash-text); }
+.ods-nota { margin: 18px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--ash-dim, #8a8a96); max-width: 760px; }
+@media (hover: hover) and (pointer: fine) { .ods-card:hover { transform: translateY(-3px); border-color: rgba(169, 182, 255, .35); } }
+@media (max-width: 1100px) { .ods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ods-grid { grid-template-columns: 1fr; } .ods-card { grid-template-columns: 76px 1fr; } .ods-card img { width: 76px; height: 76px; } }
+
+/* ---------- Anexos (desplegable) ---------- */
+.anexos { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.anexos > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; padding: 26px 48px 26px 0; position: relative; }
+.anexos > summary::-webkit-details-marker { display: none; }
+.anexos > summary h2 { margin: 0; }
+.anexos-sub { font-size: 14px; color: var(--color-ash-text); }
+.anexos > summary::after { content: ""; position: absolute; right: 6px; top: 50%; width: 14px; height: 14px; margin-top: -10px; border-right: 2px solid var(--porcelain); border-bottom: 2px solid var(--porcelain);
+  transform: rotate(45deg); transition: transform .5s var(--ease-vc); }
+.anexos[open] > summary::after { transform: rotate(-135deg); margin-top: -2px; }
+.anexos > summary:hover .anexos-sub { color: var(--color-ivory-text); }
+.anexos > summary:focus-visible { outline: 2px solid var(--color-cobalt); outline-offset: 4px; border-radius: 8px; }
+.anexos .refs { padding-bottom: 24px; }
+@media (max-width: 1150px) { .moon-hint { display: none; } }
+
+/* ---------- STEAM: icono y letra lado a lado ---------- */
+.steam-art { display: flex; align-items: flex-end; gap: 12px; height: auto; min-height: 96px; }
+.steam-ic { position: static; width: 58px; height: 58px; flex: none; }
+.steam-l { position: static; height: 88px; }
+@media (max-width: 760px) { .steam-art { min-height: 80px; } .steam-ic { width: 48px; height: 48px; } .steam-l { height: 72px; } }
+
+/* ---------- Portada en móvil: la Luna arriba, el texto abajo y sin solaparse ---------- */
+@media (max-width: 760px) {
+  .hero > .container { align-items: flex-start; }
+  .hero-content { padding-top: calc(68px + 12px + min(80vw, 42vh) + 14px); }   /* debajo de la Luna (js/hero-moon.js) */
+  .hero h1 .thin { font-size: clamp(36px, 10.5vw, 52px); }
+  .hero .actions { gap: 10px; }
+  .hero .actions .btn { flex: 1 1 auto; justify-content: center; }
+  .hero-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .hero-facts .f { padding-left: 10px; }
+  .hero-facts .f .v { font-size: 20px; }
+  .hero-facts .f .l { font-size: 11px; max-width: none; }
+  .hero-credit { font-size: 10.5px; margin-top: 6px; }
+  .moon-pin { display: none; }
+}
+@media (max-width: 900px) {   /* misma disposición que js/hero-moon.js: la Luna arriba y el texto debajo */
+  .hero > .container { align-items: flex-start; }
+  .hero-content { padding-top: calc(68px + 12px + min(80vw, 42vh) + 14px); }
+  .moon-pin { display: none; }
+}

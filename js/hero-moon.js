@@ -289,12 +289,19 @@
     renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix();
     // Escritorio: la Luna a la derecha del texto. Pantallas estrechas: centrada y más arriba, siempre entera.
     const wide = W > 900, aspect = W / H, t15 = Math.tan(15 * DEG);
-    baseZ = Math.max(wide ? 5 : 4.6, 1.18 / (t15 * Math.min(aspect, 1.6)));
-    shiftX.t = wide ? 0.86 : 0; shiftY = wide ? 0 : 0.42 * baseZ / 4.6;
+    if (wide) { baseZ = Math.max(5, 1.18 / (t15 * Math.min(aspect, 1.6))); shiftX.t = 0.86; shiftY = 0; }
+    else {
+      // Pantallas estrechas: la Luna arriba, de diámetro D = min(80 % del ancho, 42 % del alto de la pantalla), y el texto
+      // empieza debajo (el CSS reserva ese mismo espacio: .hero-content padding-top). Así nunca se solapan.
+      const navH = 68, D = Math.min(0.8 * W, 0.42 * innerHeight), cy = navH + 12 + D / 2;
+      baseZ = H / (D * t15);                                     // diámetro en píxeles = H / (z · tan 15°)
+      shiftX.t = 0;
+      shiftY = ((H / 2 - cy) * baseZ * t15 / (H / 2)) / 0.65;      // la cámara mira al 35 % del ancla: se compensa
+    }
     if (!started) { shiftX.x = shiftX.t; zoom.x = baseZ; }
     // la Tierra, arriba a la derecha y lejos (solo en pantallas anchas, donde no tapa nada)
-    earth.visible = wide && earthOK;
-    if (earth.visible) { const d = baseZ + 9; earth.position.set(0.78 * d * t15 * aspect, 0.6 * d * t15, -9); }
+    earth.visible = W > 1150 && earthOK;
+    if (earth.visible) { const d = baseZ + 9; earth.position.set(0.78 * d * t15 * aspect, 0.44 * d * t15, -9); }
     onScroll();
     requestDraw();
   }
@@ -421,7 +428,7 @@
     v3.project(camera);
     const sx = (v3.x * 0.5 + 0.5) * W, sy = (-v3.y * 0.5 + 0.5) * H;
     satTag.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0)`;
-    satTag.classList.toggle('is-on', !hidden && extras.x > 0.6 && sy > 70 && sy < H - 60);
+    satTag.classList.toggle("is-on", !hidden && extras.x > 0.6 && sy > 130 && sy < H - 90);
     // etiqueta de la Tierra, a su izquierda
     if (earth.visible) {
       v3.copy(earth.position).project(camera);
