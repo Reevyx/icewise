@@ -261,8 +261,10 @@
     ready();
     const big = Math.max(innerWidth, innerHeight) * (devicePixelRatio || 1) > 1400;
     if (big && !local) load(base + 'luna-color-4k.jpg').then(t => { mat.uniforms.map.value = prep(t, false); }).catch(() => {});
-    if (!local) {                                       // la Tierra y el velo del cielo llegan después (no retrasan la Luna)
-      load(base + 'tierra-1k.jpg').then(t => { earthMat.uniforms.map.value = prep(t, false); earthOK = true; layout(); }).catch(() => {});
+    // la Tierra y el velo del cielo llegan después (no retrasan la Luna); con doble clic la Tierra va incrustada en luna-local.js
+    const tierra = local ? local.tierra : base + 'tierra-1k.jpg';
+    if (tierra) load(tierra).then(t => { earthMat.uniforms.map.value = prep(t, false); earthOK = true; layout(); }).catch(() => {});
+    if (!local) {
       const skyBase = new URL('../../sky/', base).href;
       load(skyBase + 'cielo_fondo_1k.png').then(t => { skyMat.uniforms.fondo.value = t; skyOK = true; requestDraw(); }).catch(() => {});
     }

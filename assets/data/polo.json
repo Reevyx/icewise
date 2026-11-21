@@ -1,0 +1,11 @@
+{
+ "source": "NASA LRO LOLA · PDS ldem_75s_240m (240 m/px) · recorte de ±400 km reducido por ICEWISE",
+ "N": 1024,
+ "sizeKm": 799.92,
+ "pxKm": 0.78117,
+ "hUnit": "m sobre 1737,4 km",
+ "sun": {
+  "azDeg": 120.0,
+  "elDeg": 1.2
+ }
+}

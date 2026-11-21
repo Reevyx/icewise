@@ -1400,3 +1400,288 @@ figure.media.ix-pre.ix-in img, .st-media.ix-pre.ix-in img { scale: 1; transition
 }
 @media (max-width: 350px) { .brand { font-size: 12px; letter-spacing: .05em; gap: 6px; } .nav-brand { gap: 6px; } .nav-flag { width: 18px; height: 12px; } .nav-actions .btn--sm { padding-left: 9px; padding-right: 9px; font-size: 12px; } }
 @media (max-width: 350px) { .nav .container { padding-left: 12px; padding-right: 12px; gap: 6px; } .lang-toggle span { padding: 0 7px; } .nav-actions { gap: 4px; } }
+
+/* =========================================================================
+   El reto · descenso al polo sur (js/reto.js)
+   ========================================================================= */
+.reto { position: relative; background: #000; --rx: max(24px, calc((100vw - 1248px) / 2 + 24px)); --ice: #dfe8ff; }
+/* al saltar desde el menú, la sección ocupa la pantalla entera (el menú flota encima; la barra de capítulos queda a la vista) */
+#reto { scroll-margin-top: calc(-1 * (var(--nav-h) + 16px)); }
+.reto-pista { position: relative; height: 100vh; height: 100svh; }
+.reto-escena { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.reto-lienzo, .reto-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.reto-lienzo:focus-visible { outline: 2px solid var(--cobalt-300); outline-offset: -6px; }
+.reto-respaldo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .35; filter: grayscale(1) contrast(1.1); }
+.reto--3d .reto-respaldo { display: none; }
+.reto-vineta { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 90% at 60% 45%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, .55) 100%), linear-gradient(0deg, rgba(0, 0, 0, .7) 0%, rgba(0, 0, 0, 0) 32%); }
+
+/* HUD */
+.reto-hud { position: absolute; top: calc(var(--nav-h) + 18px); left: var(--rx); right: var(--rx); display: flex; justify-content: space-between; align-items: flex-start;
+  pointer-events: none; font: 600 10.5px/1.4 var(--font-impact); letter-spacing: .16em; text-transform: uppercase; color: rgba(223, 232, 255, .62); }
+.reto-hud .rh-izq { display: grid; gap: 4px; padding-left: 12px; border-left: 1px solid rgba(169, 182, 255, .45); }
+.reto-hud .rh-t { color: var(--ice); }
+.reto-hud .rh-der { display: grid; gap: 4px; text-align: right; }
+.reto-hud .rh-der span { display: flex; gap: 10px; justify-content: flex-end; }
+.reto-hud i { font-style: normal; color: rgba(223, 232, 255, .42); }
+.reto-hud b { font-weight: 600; color: var(--ice); font-variant-numeric: tabular-nums; min-width: 9ch; }
+
+/* barra de capítulos (como la de un vídeo): pausa + un tramo por capítulo, proporcional a su duración */
+.reto-rail { position: absolute; left: var(--rx); right: max(var(--rx), 150px); bottom: 18px; display: flex; align-items: flex-end; gap: 6px; z-index: 4; }
+.reto-pausa { flex: none; display: grid; place-items: center; width: 38px; height: 38px; margin-right: 10px; border-radius: 50%; border: 1px solid rgba(223, 232, 255, .28);
+  background: rgba(8, 10, 18, .62); color: var(--ice); cursor: pointer; transition: background .3s ease, border-color .3s ease, transform .3s var(--ease-vc); }
+.reto-pausa:hover { background: rgba(82, 102, 235, .28); border-color: var(--cobalt-300); }
+.reto-pausa:active { transform: scale(.94); }
+.reto-pausa:focus-visible { outline: 2px solid var(--cobalt-300); outline-offset: 2px; }
+.reto-rail button[data-ir] { flex: 1 1 0; min-width: 0; display: grid; gap: 9px; justify-items: start; padding: 6px 0 8px; border: 0; background: none; cursor: pointer; text-align: left;
+  color: rgba(223, 232, 255, .42); font: 600 10.5px/1 var(--font-impact); letter-spacing: .14em; text-transform: uppercase; transition: color .3s ease; }
+.reto-rail button[data-ir] > span { display: inline-flex; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.reto-rail .rr-t { overflow: hidden; text-overflow: ellipsis; }
+.reto-rail button[data-ir]:hover, .reto-rail button[data-ir]:focus-visible, .reto-rail button[data-ir].is-on { color: var(--ice); }
+.reto-rail .rr-n { color: inherit; }
+.reto-rail button[data-ir].is-on .rr-n { color: var(--cobalt-300); }
+.reto-rail button[data-ir]:focus-visible { outline: 2px solid var(--cobalt-300); outline-offset: 2px; border-radius: 6px; }
+.rr-barra { display: block; width: 100%; height: 2px; border-radius: 2px; overflow: hidden; background: rgba(223, 232, 255, .16); transition: height .3s var(--ease-vc); }
+.rr-barra > i { display: block; height: 100%; background: var(--cobalt-300); transform-origin: left center; transform: scaleX(0); }
+.reto-rail button[data-ir]:hover .rr-barra { height: 4px; }
+.reto--pausa .rr-barra > i { background: rgba(223, 232, 255, .7); }
+
+/* leyenda de la escena: Sol, sombra permanente y rover */
+.reto-ley3d { position: absolute; left: var(--rx); bottom: 86px; z-index: 3; display: grid; gap: 8px; max-width: min(420px, 44vw); pointer-events: none; }
+.reto-ley3d .l3 { display: none; align-items: flex-start; gap: 10px; margin: 0; padding: 8px 12px; border-radius: 10px; background: rgba(6, 8, 16, .72); border: 1px solid rgba(169, 182, 255, .18);
+  font-size: 12px; line-height: 1.45; color: #d5dcf5; font-variant-numeric: tabular-nums; }
+.reto-ley3d .l3 i { flex: none; width: 10px; height: 10px; margin-top: 3px; border-radius: 50%; }
+.reto-ley3d .l3-sol i { background: #fff6e3; box-shadow: 0 0 10px 2px rgba(255, 240, 210, .55); }
+.reto-ley3d .l3-psr i { border-radius: 2px; background: rgba(44, 70, 214, .85); box-shadow: inset 0 0 0 1px #6f86ff; }
+.reto-ley3d .l3-rover i { background: var(--ice); box-shadow: 0 0 10px 2px rgba(190, 205, 255, .6); }
+.reto-ley3d.is-sol .l3-sol, .reto-ley3d.is-psr .l3-psr, .reto-ley3d.is-rover .l3-rover { display: flex; animation: retoLey .5s var(--ease-vc) both; }
+@keyframes retoLey { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* capítulos */
+.reto-capas { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.reto-cap { position: absolute; left: var(--rx); top: 50%; width: min(440px, calc(100vw - 2 * var(--rx) - 120px)); transform: translateY(calc(-50% + 18px)); opacity: 0;
+  transition: opacity .5s ease, transform .6s var(--ease-vc); pointer-events: none; }
+.reto-cap.is-on { opacity: 1; transform: translateY(-50%); pointer-events: auto; transition-delay: .08s; }
+.reto-cap[data-cap="0"] { top: auto; bottom: 13vh; width: min(760px, calc(100vw - 2 * var(--rx))); transform: translateY(18px); }
+.reto-cap[data-cap="0"].is-on { transform: none; }
+.reto-cap[data-cap="1"], .reto-cap[data-cap="3"] { left: auto; right: var(--rx); }
+.reto-cap[data-cap="4"] { top: calc(var(--nav-h) + 86px); transform: translateY(18px); width: min(380px, 40vw); }
+.reto-cap[data-cap="4"].is-on { transform: none; }
+/* cierre: texto abajo a la izquierda; el rover queda a la derecha con la cresta iluminada arriba */
+.reto-cap[data-cap="5"] { top: auto; bottom: 13vh; width: min(600px, calc(100vw - 2 * var(--rx))); transform: translateY(18px); }
+.reto-cap[data-cap="5"].is-on { transform: none; }
+.rc-k { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font: 600 11px/1 var(--font-impact); letter-spacing: .18em; text-transform: uppercase; color: rgba(223, 232, 255, .7); }
+.rc-n { color: var(--cobalt-300); }
+.rc-n::after { content: ""; display: inline-block; width: 22px; height: 1px; margin-left: 12px; vertical-align: middle; background: rgba(169, 182, 255, .5); }
+.rc-h { margin: 0; font-family: var(--font-impact); font-stretch: 100%; font-weight: 600; letter-spacing: -0.03em; line-height: 1.02; color: var(--porcelain); font-size: clamp(28px, 2.9vw, 44px); text-wrap: balance; }
+h2.rc-h { font-size: clamp(36px, 4.8vw, 72px); line-height: .98; }
+.rc-p { margin: 16px 0 0; font-size: clamp(15px, 1.1vw, 17px); line-height: 1.55; color: #c7c7cc; }
+.reto-cap[data-cap="5"] .rc-p { max-width: 520px; }
+.rc-baja { display: inline-flex; align-items: center; gap: 10px; margin: 26px 0 0; font: 600 10.5px/1 var(--font-impact); letter-spacing: .18em; text-transform: uppercase; color: rgba(223, 232, 255, .6); }
+.rc-baja-i { width: 1px; height: 28px; background: linear-gradient(180deg, rgba(223, 232, 255, 0), var(--ice)); animation: retoBaja 2.2s var(--ease-vc) infinite; transform-origin: top; }
+@keyframes retoBaja { 0% { transform: scaleY(0); opacity: 1; } 70% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+.rc-datos { margin: 22px 0 0; display: grid; gap: 0; border-top: 1px solid rgba(169, 182, 255, .22); }
+.rc-datos > div { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid rgba(169, 182, 255, .12); }
+.rc-datos dt { font-family: var(--font-impact); font-weight: 600; font-size: 22px; letter-spacing: -0.02em; color: var(--porcelain); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rc-datos dd { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--color-ash-text); }
+.rc-datos--3 { grid-template-columns: repeat(3, 1fr); border-top: 0; gap: 12px; }
+.rc-datos--3 > div { grid-template-columns: 1fr; gap: 4px; border: 0; border-top: 1px solid rgba(169, 182, 255, .22); padding-top: 10px; }
+.rc-nota { margin: 16px 0 0; font-size: 13px; color: rgba(223, 232, 255, .62); }
+.rc-aviso { margin: 16px 0 0; padding-left: 12px; border-left: 2px solid var(--cobalt-300); font-size: 13px; line-height: 1.5; color: #d5dcf5; }
+.rc-leyenda { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 11.5px; color: rgba(223, 232, 255, .7); }
+.rc-leyenda li { display: inline-flex; align-items: center; gap: 8px; }
+.rc-leyenda i { width: 14px; height: 8px; border-radius: 2px; }
+.lg-luz { background: linear-gradient(90deg, #8a93a8, #e8eeff); } .lg-sombra { background: #000; box-shadow: 0 0 0 1px rgba(223, 232, 255, .35); } .lg-borde { background: #4f6bff; height: 2px !important; }
+.rc-fuente { margin: 14px 0 0; font-size: 10.5px; line-height: 1.45; color: rgba(223, 232, 255, .42); }
+.rc-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.rc-dos > div { padding: 12px 14px; border-radius: 10px; background: rgba(10, 12, 22, .55); border: 1px solid rgba(169, 182, 255, .16); }
+.rc-dos .rc-no { border-style: dashed; border-color: rgba(169, 182, 255, .32); }
+.rc-dos h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font: 600 11px/1 var(--font-impact); letter-spacing: .14em; text-transform: uppercase; color: var(--ice); }
+.rc-dos h4::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ice); }
+.rc-dos .rc-no h4::before { background: none; box-shadow: inset 0 0 0 1px var(--ice); }
+.rc-dos p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--color-ash-text); }
+.rc-lectura { margin: 18px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; border-top: 1px solid rgba(169, 182, 255, .22); }
+.rc-lectura > div { padding: 9px 0; border-bottom: 1px solid rgba(169, 182, 255, .12); }
+.rc-lectura-ancho { grid-column: 1 / -1; }
+.rc-lectura dt { font: 600 10px/1 var(--font-impact); letter-spacing: .14em; text-transform: uppercase; color: rgba(223, 232, 255, .5); }
+.rc-lectura dd { margin: 6px 0 0; font-family: var(--font-impact); font-weight: 600; font-size: 17px; letter-spacing: -0.01em; color: var(--porcelain); font-variant-numeric: tabular-nums; }
+.rc-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+
+/* marcas del cráter */
+.reto-marcas { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.reto-marca { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 10px; padding: 6px; border: 0; background: none; cursor: pointer;
+  transform: translate(calc(-50% + 0px + var(--mx, 0px)), calc(-50% + var(--my, 0px))); opacity: 0; pointer-events: none; transition: opacity .4s ease; color: var(--ice); }
+.reto-marca.is-on { opacity: 1; pointer-events: auto; }
+.rm-p { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 12px 2px rgba(169, 190, 255, .75); flex: none; transition: transform .3s var(--ease-vc); }
+.rm-p::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px solid rgba(169, 190, 255, .6); animation: retoPulso 2.4s ease-out infinite; }
+@keyframes retoPulso { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+.rm-t { padding: 6px 10px; border-radius: 999px; background: rgba(8, 10, 18, .78); border: 1px solid rgba(169, 182, 255, .3); font: 600 11px/1 var(--font-impact); letter-spacing: .04em; white-space: nowrap;
+  opacity: .0; transform: translateX(-4px); transition: opacity .3s ease, transform .4s var(--ease-vc); }
+.reto-marca:hover .rm-t, .reto-marca:focus-visible .rm-t { opacity: 1; transform: none; }
+.reto-marca:hover .rm-p, .reto-marca:focus-visible .rm-p { transform: scale(1.35); }
+.reto-marca:focus-visible { outline: none; } .reto-marca:focus-visible .rm-t { box-shadow: 0 0 0 2px var(--cobalt-300); }
+@media (hover: none) { .reto-marca .rm-t { opacity: 1; transform: none; } }
+.reto-ficha { position: absolute; z-index: 5; right: var(--rx); bottom: 96px; width: min(320px, calc(100vw - 2 * var(--rx))); padding: 16px 18px 18px; border-radius: 12px;
+  background: rgba(8, 10, 18, .9); border: 1px solid rgba(169, 182, 255, .28); opacity: 0; transform: translateY(10px); transition: opacity .3s ease, transform .4s var(--ease-vc); }
+.reto-ficha.is-on { opacity: 1; transform: none; }
+.reto-ficha .rf-t { margin: 0 24px 8px 0; font: 600 16px/1.2 var(--font-impact); color: var(--porcelain); }
+.reto-ficha .rf-x { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--color-ash-text); }
+.rf-cerrar { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(223, 232, 255, .2); background: none; color: var(--ice); cursor: pointer; font-size: 16px; line-height: 1; }
+.rf-cerrar:hover { background: rgba(223, 232, 255, .08); }
+.reto-lat { position: absolute; left: 0; top: 0; z-index: 2; margin: -8px 0 0 6px; pointer-events: none; font: 600 10px/1 var(--font-impact); letter-spacing: .12em; color: rgba(223, 232, 255, .75); opacity: 0; transition: opacity .4s ease; }
+.reto-lat.is-on { opacity: 1; }
+
+/* retícula del foco */
+.reto-reticula { position: absolute; left: 0; top: 0; z-index: 2; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity .4s ease; }
+.reto-reticula.is-on { opacity: 1; }
+.rt-c { position: absolute; left: -38px; top: -38px; width: 76px; height: 76px; border-radius: 50%; border: 1px solid rgba(223, 232, 255, .55); }
+.rt-c::before, .rt-c::after { content: ""; position: absolute; background: rgba(223, 232, 255, .7); }
+.rt-c::before { left: 50%; top: -6px; bottom: -6px; width: 1px; margin-left: -.5px; -webkit-mask: linear-gradient(#000 0 10px, transparent 10px calc(100% - 10px), #000 calc(100% - 10px)); mask: linear-gradient(#000 0 10px, transparent 10px calc(100% - 10px), #000 calc(100% - 10px)); }
+.rt-c::after { top: 50%; left: -6px; right: -6px; height: 1px; margin-top: -.5px; -webkit-mask: linear-gradient(90deg, #000 0 10px, transparent 10px calc(100% - 10px), #000 calc(100% - 10px)); mask: linear-gradient(90deg, #000 0 10px, transparent 10px calc(100% - 10px), #000 calc(100% - 10px)); }
+.rt-l { position: absolute; left: 46px; top: -6px; font: 600 10px/1 var(--font-impact); letter-spacing: .16em; color: var(--ice); white-space: nowrap; }
+.reto-reticula.es-psr .rt-c { border-color: rgba(120, 146, 255, .85); }
+.reto-reticula.es-psr .rt-l { color: #a9b6ff; }
+
+/* tablets y móviles: paneles abajo, con su propio desplazamiento */
+@media (max-width: 900px) {
+  .reto-rail { left: 16px; right: 76px; bottom: 12px; } .reto-rail button[data-ir] > .rr-t { display: none; } .reto-pausa { width: 34px; height: 34px; margin-right: 6px; }
+  .reto-ley3d { left: 16px; right: 16px; bottom: auto; top: calc(var(--nav-h) + 58px); max-width: none; } .reto-ley3d .l3 { font-size: 11px; padding: 6px 10px; }
+  .reto-cap, .reto-cap[data-cap="1"], .reto-cap[data-cap="3"], .reto-cap[data-cap="4"] { left: 16px; right: 16px; width: auto; top: auto; bottom: 64px; transform: translateY(18px);
+    max-height: 56svh; overflow-y: auto; padding: 18px 16px; border-radius: 14px; background: rgba(4, 5, 10, .82); border: 1px solid rgba(169, 182, 255, .14); scrollbar-width: thin; }
+  .reto-cap.is-on, .reto-cap[data-cap="1"].is-on, .reto-cap[data-cap="3"].is-on, .reto-cap[data-cap="4"].is-on { transform: none; }
+  .reto-cap[data-cap="0"] { background: none; border: 0; padding: 0; bottom: 10vh; }
+  .reto-cap[data-cap="4"] .rc-p { display: none; }
+  .reto-cap[data-cap="5"] { left: 16px; right: 16px; width: auto; transform: translateY(18px); }
+  .reto-cap[data-cap="5"].is-on { transform: none; }
+  .rc-h { font-size: clamp(24px, 6.4vw, 32px); } h2.rc-h { font-size: clamp(32px, 9vw, 44px); }
+  .rc-datos > div { grid-template-columns: 78px 1fr; } .rc-datos dt { font-size: 18px; }
+  .rc-dos { grid-template-columns: 1fr; }
+  .reto-hud { font-size: 9.5px; } .reto-hud b { min-width: 0; }
+  .reto-ficha { right: 16px; left: 16px; width: auto; bottom: auto; top: calc(var(--nav-h) + 60px); }
+}
+@media (max-width: 440px) { .rc-datos--3 { grid-template-columns: 1fr 1fr 1fr; gap: 8px; } .rc-datos--3 dt { font-size: 17px; } }
+
+/* sin WebGL: capítulos en el flujo normal, sobre el mosaico del polo sur */
+.reto--estatico .reto-pista { height: auto; }
+.reto--estatico .reto-escena { position: relative; height: auto; padding: calc(var(--nav-h) + 40px) var(--rx) 80px; display: grid; gap: 48px; }
+.reto--estatico .reto-respaldo { opacity: .25; }
+.reto--estatico .reto-capas { position: relative; display: grid; gap: 56px; pointer-events: auto; }
+.reto--estatico .reto-cap { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto; width: auto; max-width: 640px; transform: none; opacity: 1; pointer-events: auto; text-align: left; }
+.reto--estatico .reto-hud, .reto--estatico .reto-rail, .reto--estatico .reto-ley3d, .reto--estatico .reto-marcas, .reto--estatico .reto-reticula, .reto--estatico .reto-vineta, .reto--estatico .reto-lat, .reto--estatico .rc-baja, .reto--estatico .reto-cap[data-cap="4"] { display: none; }
+@media (prefers-reduced-motion: reduce) { .reto-cap, .reto-marca, .reto-ficha { transition-duration: .01s; } .rc-baja-i, .rm-p::after { animation: none; } }
+
+/* ODS: cuatro objetivos, en dos columnas */
+.ods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .ods-grid { grid-template-columns: 1fr; } }
+
+/* fondo difuminado tras el texto de cada capítulo (escritorio), sin caja */
+@media (min-width: 901px) { .reto-cap[data-cap="1"]::before, .reto-cap[data-cap="2"]::before, .reto-cap[data-cap="3"]::before, .reto-cap[data-cap="4"]::before, .reto-cap[data-cap="5"]::before { content: ""; position: absolute; inset: -70px -90px; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(0, 0, 0, .78), rgba(0, 0, 0, .5) 55%, rgba(0, 0, 0, 0)); } }
+.reto-mapa { margin: 10px 0 0 10px; color: rgba(169, 182, 255, .9); }
+.reto-mapa[data-mapa="sh"] { margin: -24px 0 0 14px; color: var(--ice); font-size: 11px; }
+@media (max-width: 900px) { .rc-datos--3 > div { grid-template-columns: 1fr; gap: 2px; } .rc-datos--3 dd { font-size: 12px; } }
+
+/* «El reto»: etiqueta de LRO */
+.reto-sat { margin: -6px 0 0 12px; color: rgba(205, 214, 255, .85); }
+
+/* «El reto»: cursor propio (anillo con retraso que reacciona a lo que hay debajo) */
+.reto--cursor .reto-escena, .reto--cursor .reto-escena * { cursor: none !important; }
+.reto-cursor { position: absolute; left: 0; top: 0; z-index: 9; pointer-events: none; opacity: 0; transition: opacity .25s ease; will-change: transform; }
+.reto-cursor.is-on { opacity: 1; }
+.rc-anillo { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(223, 232, 255, .55);
+  transition: transform .45s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)), border-color .3s ease, background-color .3s ease; }
+.rc-punto { position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: var(--ice); box-shadow: 0 0 8px rgba(190, 205, 255, .8); }
+.rc-texto { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); font: 600 9.5px/1 var(--font-impact); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ice); white-space: nowrap; opacity: 0; transition: opacity .25s ease; }
+.reto-cursor.is-boton .rc-anillo { transform: scale(1.65); border-color: var(--cobalt-300); background: rgba(82, 102, 235, .14); }
+.reto-cursor.is-texto .rc-anillo { transform: scale(2.3); border-color: rgba(169, 182, 255, .65); background: rgba(8, 10, 18, .55); }
+.reto-cursor.is-texto .rc-texto { opacity: 1; }
+.reto-cursor.is-texto .rc-punto { opacity: 0; }
+.reto-cursor.is-pulsa .rc-anillo { transform: scale(.82); }
+
+/* «El reto»: botones magnéticos con un brillo que sigue al ratón por su borde */
+.reto .mg { position: relative; translate: var(--mgx, 0px) var(--mgy, 0px); transition: translate .5s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)); }
+.reto-rail button.mg { border-radius: 10px; }
+.reto .mg-luz { position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  background: radial-gradient(90px circle at var(--lx, 50%) var(--ly, 50%), rgba(205, 212, 255, .95), rgba(82, 102, 235, .45) 40%, rgba(82, 102, 235, 0) 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.reto .mg:hover .mg-luz, .reto .mg:focus-visible .mg-luz { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .reto .mg { translate: none; } }
+
+/* =========================================================================
+   «El reto»: tercer color (ámbar solar, solo en esta sección), cifras ancladas al 3D, frases de tráiler,
+   titulares que se revelan, tarjetas con inclinación y escaneo de luz en los datos.
+   El ámbar marca solo la luz y la energía (Sol, crestas iluminadas, estación solar); el Cobalt, el hielo y la oscuridad.
+   ========================================================================= */
+.reto { --solar: #f2a65a; --solar-200: #ffd3a3; --solar-glow: rgba(242, 166, 90, .55); }
+.reto-ley3d .l3-sol i { background: var(--solar); box-shadow: 0 0 12px 2px var(--solar-glow); }
+.reto-marca--sol .rm-p { background: var(--solar-200); box-shadow: 0 0 14px 3px var(--solar-glow); }
+.reto-marca--sol .rm-p::after { border-color: rgba(242, 166, 90, .7); }
+.reto-marca--sol .rm-t { border-color: rgba(242, 166, 90, .45); }
+
+/* cifras ancladas: una línea que se dibuja desde el lugar real hasta la cifra */
+.reto-guias { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; }
+.rg-linea { fill: none; stroke: rgba(195, 205, 255, .85); stroke-width: 1.2; filter: drop-shadow(0 0 4px rgba(120, 140, 255, .6)); transition: opacity .4s ease; }
+.rg-punto { fill: var(--ice, #dfe8ff); filter: drop-shadow(0 0 6px rgba(150, 170, 255, .9)); transition: opacity .4s ease; }
+.rg-linea.rg-sol { stroke: rgba(255, 196, 140, .95); filter: drop-shadow(0 0 5px rgba(242, 166, 90, .7)); }
+.rg-punto.rg-sol { fill: var(--solar-200); filter: drop-shadow(0 0 7px rgba(242, 166, 90, .95)); }
+.reto-cifra { position: absolute; left: 0; top: 0; z-index: 3; display: grid; gap: 4px; max-width: 320px; pointer-events: none; opacity: 0; filter: blur(8px);
+  transition: opacity .5s ease, filter .7s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)); will-change: transform; }
+.reto-cifra.is-on { opacity: 1; filter: none; }
+.reto-cifra b { font: 600 clamp(30px, 3.2vw, 52px)/1 var(--font-impact); letter-spacing: -0.035em; color: var(--porcelain); font-variant-numeric: tabular-nums; text-shadow: 0 0 24px rgba(120, 140, 255, .45); }
+.reto-cifra > span { font-size: 12.5px; line-height: 1.4; color: rgba(223, 232, 255, .75); max-width: 250px; }
+.reto-cifra--sol b { color: var(--solar-200); text-shadow: 0 0 26px var(--solar-glow); }
+@media (min-width: 901px) {
+  .reto--3d .reto-cap[data-cap="3"] .rc-datos--3, .reto--3d .reto-cap[data-cap="2"] .rc-datos > div:nth-child(2) { display: none; }
+}
+@media (max-width: 900px) { .reto-guias, .reto-cifra { display: none; } }
+
+/* frases de tráiler a pantalla completa (de desenfocadas a nítidas) */
+.reto-frase { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; pointer-events: none; padding: 0 var(--rx); }
+.reto-frase::before { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 45% at 50% 50%, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)); opacity: 0; transition: opacity .6s ease; }
+.reto-frase p { position: relative; margin: 0; max-width: 16ch; text-align: center; font: 600 clamp(40px, 6.2vw, 104px)/.98 var(--font-impact); letter-spacing: -0.045em; color: var(--porcelain); text-wrap: balance;
+  opacity: 0; filter: blur(22px); transform: scale(1.08); transition: opacity .55s ease, filter .9s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)), transform 2.2s cubic-bezier(.2, .7, .2, 1); }
+.reto-frase.is-on::before { opacity: 1; }
+.reto-frase.is-on p { opacity: 1; filter: none; transform: scale(1); }
+.reto-frase em { font-style: normal; }
+.reto-frase .fr-sol { color: var(--solar-200); text-shadow: 0 0 40px var(--solar-glow); }
+.reto-frase .fr-hielo { color: var(--cobalt-300); text-shadow: 0 0 40px rgba(82, 102, 235, .6); }
+.reto--frase .reto-cap.is-on { opacity: 0 !important; filter: blur(8px); }
+.reto--frase .reto-ley3d { opacity: 0; }
+
+/* titulares que se revelan palabra a palabra; el resto del capítulo entra en cascada */
+.reto--revela .rv-w { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 .02em .1em; margin: 0 -.02em -.1em; }
+.reto--revela .rv-i { display: inline-block; transform: translateY(112%) rotate(5deg); transform-origin: left bottom; opacity: 0;
+  translate: 0 calc(var(--lev, 0) * -5px); text-shadow: 0 0 calc(var(--lev, 0) * 26px) rgba(150, 170, 255, calc(var(--lev, 0) * .85));
+  transition: transform .95s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)), opacity .5s ease, translate .35s ease, text-shadow .35s ease;
+  transition-delay: calc(var(--i) * 55ms), calc(var(--i) * 55ms), 0s, 0s; }
+.reto--revela .reto-cap.is-on .rv-i { transform: none; opacity: 1; transition-delay: calc(var(--i) * 55ms + .1s), calc(var(--i) * 55ms + .1s), 0s, 0s; }
+.reto--revela .reto-cap :is(.rc-k, .rc-p, .rc-datos > div, .rc-dos > div, .rc-lectura, .rc-aviso, .rc-nota, .rc-leyenda, .rc-fuente, .rc-cta, .rc-baja) {
+  opacity: 0; translate: 0 14px; filter: blur(6px); transition: opacity .7s ease, translate .9s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)), filter .8s ease; }
+.reto--revela .reto-cap.is-on :is(.rc-k, .rc-p, .rc-datos > div, .rc-dos > div, .rc-lectura, .rc-aviso, .rc-nota, .rc-leyenda, .rc-fuente, .rc-cta, .rc-baja) { opacity: 1; translate: none; filter: none; }
+.reto--revela .reto-cap.is-on .rc-k { transition-delay: .05s; }
+.reto--revela .reto-cap.is-on .rc-p { transition-delay: .45s; }
+.reto--revela .reto-cap.is-on .rc-datos > div:nth-child(1), .reto--revela .reto-cap.is-on .rc-dos > div:nth-child(1), .reto--revela .reto-cap.is-on .rc-lectura { transition-delay: .6s; }
+.reto--revela .reto-cap.is-on .rc-datos > div:nth-child(2), .reto--revela .reto-cap.is-on .rc-dos > div:nth-child(2) { transition-delay: .72s; }
+.reto--revela .reto-cap.is-on .rc-datos > div:nth-child(3) { transition-delay: .84s; }
+.reto--revela .reto-cap.is-on :is(.rc-aviso, .rc-nota, .rc-leyenda, .rc-cta) { transition-delay: .95s; }
+.reto--revela .reto-cap.is-on :is(.rc-fuente, .rc-baja) { transition-delay: 1.1s; }
+
+/* escaneo de luz (ámbar) que recorre cada bloque de datos al aparecer */
+.reto .rc-datos > div, .reto .rc-dos > div, .reto .rc-lectura > div { position: relative; }
+.reto--3d :is(.rc-datos > div, .rc-dos > div, .rc-lectura > div)::before { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: 0; mix-blend-mode: screen;
+  background: linear-gradient(100deg, rgba(242, 166, 90, 0) 38%, rgba(255, 214, 170, .32) 48%, rgba(255, 240, 220, .45) 50%, rgba(242, 166, 90, 0) 62%); background-size: 260% 100%; background-position: 140% 0; }
+.reto--3d .reto-cap.is-on :is(.rc-datos > div, .rc-dos > div, .rc-lectura > div)::before { animation: retoEscaneo 1.5s cubic-bezier(.3, .6, .2, 1) var(--esc, .75s) both; }
+.reto--3d .reto-cap.is-on :is(.rc-datos > div, .rc-dos > div, .rc-lectura > div):nth-child(2)::before { --esc: .9s; }
+.reto--3d .reto-cap.is-on :is(.rc-datos > div, .rc-lectura > div):nth-child(3)::before { --esc: 1.05s; }
+.reto--3d .reto-cap.is-on .rc-lectura > div:nth-child(n+4)::before { --esc: 1.2s; }
+@keyframes retoEscaneo { 0% { opacity: 1; background-position: 140% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: -40% 0; } }
+
+/* tarjetas con inclinación 3D y reflejo de luz que sigue al ratón */
+.reto .incl { transform: perspective(700px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .6s var(--ease-gta, cubic-bezier(.32, .72, 0, 1)); }
+.reto .incl:hover { transition-duration: .12s; }
+.reto .incl::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .35s ease;
+  background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), rgba(210, 218, 255, .16), rgba(82, 102, 235, .06) 45%, rgba(0, 0, 0, 0) 70%); }
+.reto .incl:hover::after { opacity: 1; }
+.reto .rc-lectura, .reto .rc-aviso { position: relative; }
+@media (prefers-reduced-motion: reduce) { .reto .incl { transform: none; } .reto-frase p { transition-duration: .01s; } }

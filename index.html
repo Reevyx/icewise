@@ -10,13 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,300..600&family=Inter:wght@300..600&family=Inter+Tight:wght@500..700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20261119a">
-  <link rel="stylesheet" href="css/sim.css?v=20261119a">
+  <link rel="stylesheet" href="css/styles.css?v=20261121d">
+  <link rel="stylesheet" href="css/sim.css?v=20261121d">
   <link rel="stylesheet" href="chatbot/astra-launcher.css?v=20261115a">
   <link rel="preload" as="image" href="assets/img/luna/luna-color-2k.jpg" crossorigin="anonymous">
   <style>html.i18n-wait body{visibility:hidden}</style>
-  <script src="js/i18n.js?v=20261119a"></script>
-  <script src="js/i18n-en.js?v=20261119a"></script>
+  <script src="js/i18n.js?v=20261121d"></script>
+  <script src="js/i18n-en.js?v=20261121d"></script>
 </head>
 <body>
 <div class="onda" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -107,23 +107,112 @@
   </div>
 </section>
 
-<!-- 2 · EL RETO -->
-<section class="section" id="reto" data-title="El reto">
-  <div class="container">
-    <div class="split reveal">
-      <div>
-        <h2>Hay hielo en la Luna. Nadie sabe todavía cuánto, ni cómo sacarlo.</h2>
-        <p class="lead" style="margin-top:20px">Cerca del polo sur, el fondo de muchos cráteres nunca recibe luz solar. A unos −233 °C, el hielo de agua se ha conservado durante miles de millones de años.</p>
-        <div class="grid grid-3" style="margin-top:40px;gap:16px">
-          <div class="card card--tight"><h3 class="t-card">Oscuridad</h3><p class="small muted" style="margin:8px 0 0">Sin Sol no hay energía solar ni luz para las cámaras.</p></div>
-          <div class="card card--tight"><h3 class="t-card">Incertidumbre</h3><p class="small muted" style="margin:8px 0 0">El hielo está repartido en manchas, bajo una capa de polvo seco.</p></div>
-          <div class="card card--tight"><h3 class="t-card">Energía</h3><p class="small muted" style="margin:8px 0 0">Con poco hielo, casi toda la energía se gasta en calentar roca.</p></div>
-        </div>
+<!-- 2 · EL RETO: descenso al polo sur (js/reto.js) -->
+<section class="reto" id="reto" data-title="El reto">
+  <div class="reto-pista">
+    <div class="reto-escena">
+      <img class="reto-respaldo" src="assets/img/lro-south-pole.jpg" alt="" loading="lazy" width="1280" height="1280">
+      <div class="reto-lienzo" tabindex="-1" role="img" aria-label="Descenso desde la órbita lunar hasta el interior del cráter Shackleton, con su relieve real"></div>
+      <div class="reto-vineta" aria-hidden="true"></div>
+
+      <div class="reto-hud" aria-hidden="true">
+        <div class="rh-izq"><span class="rh-t">ICEWISE · Descenso</span><span class="rh-s" data-hud="fase">Órbita lunar</span></div>
+        <div class="rh-der"><span><i>ALT</i><b data-hud="alt">—</b></span><span><i>LAT</i><b data-hud="lat">—</b></span></div>
       </div>
-      <figure class="media">
-        <img src="assets/img/lro-south-pole.jpg" alt="Mosaico del polo sur lunar tomado por la sonda LRO, con amplias zonas en sombra." loading="lazy" width="1280" height="1280">
-        <figcaption>Polo sur lunar visto por la sonda LRO de la NASA. Las zonas negras nunca reciben luz solar.</figcaption>
-      </figure>
+
+      <nav class="reto-rail" aria-label="Capítulos de El reto">
+        <button type="button" data-ir="0"><span class="rr-n">00</span><span class="rr-t">El reto</span></button>
+        <button type="button" data-ir="1"><span class="rr-n">01</span><span class="rr-t">La Luna</span></button>
+        <button type="button" data-ir="2"><span class="rr-n">02</span><span class="rr-t">El polo sur</span></button>
+        <button type="button" data-ir="3"><span class="rr-n">03</span><span class="rr-t">Shackleton</span></button>
+        <button type="button" data-ir="4"><span class="rr-n">04</span><span class="rr-t">Exploración</span></button>
+      </nav>
+
+      <div class="reto-marcas" aria-label="Puntos de interés del cráter"></div>
+      <span class="reto-lat" data-lat="1" aria-hidden="true">89,5° S</span>
+      <span class="reto-lat" data-lat="2" aria-hidden="true">89,75° S</span>
+      <span class="reto-lat reto-mapa" data-mapa="85" aria-hidden="true">85° S</span>
+      <span class="reto-lat reto-mapa" data-mapa="sh" aria-hidden="true">Shackleton</span>
+      <aside class="reto-ficha" hidden aria-live="polite"><button type="button" class="rf-cerrar" aria-label="Cerrar">×</button><h4 class="rf-t"></h4><p class="rf-x"></p></aside>
+      <div class="reto-reticula" aria-hidden="true"><span class="rt-c"></span><span class="rt-l"></span></div>
+
+      <div class="reto-capas">
+        <article class="reto-cap" data-cap="0">
+          <p class="rc-k">El reto</p>
+          <h2 class="rc-h">Hay hielo en la Luna. Nadie sabe todavía cuánto, ni cómo sacarlo.</h2>
+          <p class="rc-p">Antes de diseñar el rover respondimos tres preguntas: por qué la Luna, por qué su polo sur y por qué el cráter Shackleton.</p>
+          <p class="rc-baja"><span class="rc-baja-i" aria-hidden="true"></span>Se reproduce solo · 75 s en bucle</p>
+        </article>
+
+        <article class="reto-cap" data-cap="1">
+          <p class="rc-k"><span class="rc-n">01</span>¿Por qué la Luna?</p>
+          <h3 class="rc-h">La próxima frontera de la exploración.</h3>
+          <p class="rc-p">Es el mejor lugar cercano para aprender a explorar otro mundo con máquinas autónomas y a usar sus recursos.</p>
+          <dl class="rc-datos">
+            <div><dt><span class="reto-num" data-v="1.3" data-d="1">1,3</span> s</dt><dd>tarda la señal desde la Tierra (2,6 s ida y vuelta): el rover tiene que decidir solo.</dd></div>
+            <div><dt>1/6</dt><dd>de la gravedad terrestre (1,62 m/s²): moverse y perforar no es como en la Tierra.</dd></div>
+            <div><dt>ISRU</dt><dd>usar los recursos del lugar en vez de traerlo todo desde la Tierra.</dd></div>
+          </dl>
+          <p class="rc-nota">Pero antes de extraer nada hay que entender el terreno.</p>
+        </article>
+
+        <article class="reto-cap" data-cap="2">
+          <p class="rc-k"><span class="rc-n">02</span>¿Por qué el polo sur?</p>
+          <h3 class="rc-h">Donde la luz del Sol se encuentra con la oscuridad permanente.</h3>
+          <p class="rc-p">El eje de la Luna está inclinado solo 1,54°. En los polos el Sol se arrastra por el horizonte: algunas cimas reciben luz casi siempre y el fondo de muchos cráteres no la recibe nunca.</p>
+          <dl class="rc-datos">
+            <div><dt><span class="reto-num" data-v="1.54" data-d="2">1,54</span>°</dt><dd>inclinación del eje lunar respecto a la eclíptica.</dd></div>
+            <div><dt>&lt; <span class="reto-num" data-v="40" data-d="0">40</span> K</dt><dd>en las sombras permanentes más frías (−233 °C), medido por el radiómetro Diviner.</dd></div>
+            <div><dt>PSR</dt><dd>regiones en sombra permanente: trampas frías donde el hielo de agua puede conservarse.</dd></div>
+          </dl>
+          <p class="rc-aviso">Que una zona esté en sombra permanente no significa que tenga hielo: hay que ir a medirlo.</p>
+          <ul class="rc-leyenda">
+            <li><i class="lg-luz"></i>Iluminado en el mosaico</li>
+            <li><i class="lg-sombra"></i>En sombra</li>
+            <li><i class="lg-borde"></i>Límite luz y sombra</li>
+          </ul>
+          <p class="rc-fuente">Mosaico del polo sur: NASA/GSFC/Arizona State University (LROC). Temperatura: Paige et al., 2010.</p>
+        </article>
+
+        <article class="reto-cap" data-cap="3">
+          <p class="rc-k"><span class="rc-n">03</span>¿Por qué Shackleton?</p>
+          <h3 class="rc-h">Un cráter. Una oportunidad extraordinaria.</h3>
+          <p class="rc-p">El polo sur geográfico está en su borde. Partes de ese borde reciben luz solar gran parte del año y su interior está en sombra permanente: energía arriba, posible hielo abajo.</p>
+          <dl class="rc-datos rc-datos--3">
+            <div><dt><span class="reto-num" data-v="20.8" data-d="1">20,8</span> km</dt><dd>de diámetro</dd></div>
+            <div><dt><span class="reto-num" data-v="4.0" data-d="1">4,0</span> km</dt><dd>de profundidad</dd></div>
+            <div><dt>&gt; <span class="reto-num" data-v="80" data-d="0">80</span> %</dt><dd>del tiempo con luz en algunos puntos del borde</dd></div>
+          </dl>
+          <div class="rc-dos">
+            <div class="rc-si"><h4>Medido</h4><p>El relieve (altímetro LOLA), qué zonas están en sombra permanente y qué partes del borde reciben más luz.</p></div>
+            <div class="rc-no"><h4>Sin confirmar</h4><p>Si hay hielo en el fondo, cuánto y dónde. LOLA midió un fondo algo más brillante, compatible con un poco de escarcha; la cámara de Kaguya no vio hielo expuesto.</p></div>
+          </div>
+          <p class="rc-fuente">Relieve: LOLA (NASA LRO, PDS), 40 m/px, reducido por ICEWISE a 112 m/px y sin exagerar. Diámetro y profundidad medidos sobre ese relieve. Sombra permanente calculada por ICEWISE. Mazarico et al., 2011; Zuber et al., 2012; Haruyama et al., 2008.</p>
+        </article>
+
+        <article class="reto-cap" data-cap="4">
+          <p class="rc-k"><span class="rc-n">04</span>Explora la oscuridad</p>
+          <h3 class="rc-h">Lo que esconde la sombra.</h3>
+          <p class="rc-p">Mueve el cursor sobre la zona en sombra, o tócala en el móvil, para iluminarla con los faros del rover. Con el teclado, usa las flechas.</p>
+          <dl class="rc-lectura">
+            <div><dt>Latitud</dt><dd data-lee="lat">—</dd></div>
+            <div><dt>Longitud</dt><dd data-lee="lon">—</dd></div>
+            <div><dt>Altura sobre el fondo</dt><dd data-lee="alt">—</dd></div>
+            <div><dt>Pendiente</dt><dd data-lee="pend">—</dd></div>
+            <div class="rc-lectura-ancho"><dt>Luz solar</dt><dd data-lee="luz">—</dd></div>
+          </dl>
+          <p class="rc-nota">El relieve es real; el foco es una simulación. Si aquí hay hielo, lo tendría que medir el rover.</p>
+        </article>
+
+        <article class="reto-cap" data-cap="5">
+          <h3 class="rc-h">Para encontrar el hielo hay que entrar donde no llega la luz.</h3>
+          <p class="rc-p">Por eso ICEWISE necesita un rover que vea en la oscuridad, mida el suelo y decida solo dónde perforar.</p>
+          <div class="rc-cta">
+            <a class="btn btn--primary" href="#rover">Conocer el rover<svg class="btn-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+            <a class="btn" href="simulacion.html">Probar la simulación 3D</a>
+          </div>
+        </article>
+      </div>
     </div>
   </div>
 </section>
@@ -371,12 +460,10 @@
       <p class="lead">Aunque ocurre en la Luna, las ideas de ICEWISE también sirven en la Tierra.</p>
     </div>
     <div class="ods-grid reveal">
-      <article class="ods-card"><img src="assets/img/ods/sdg-04.png" alt="ODS 4: Quality education" width="160" height="160" loading="lazy"><div><h3>Educación de calidad</h3><p>Es un proyecto escolar STEAM: la web, la simulación y KILLA permiten aprender ciencia lunar de forma práctica.</p></div></article>
       <article class="ods-card"><img src="assets/img/ods/sdg-06.png" alt="ODS 6: Clean water and sanitation" width="160" height="160" loading="lazy"><div><h3>Agua limpia y saneamiento</h3><p>Purificar agua con un biofiltro de microorganismos y filtros: la misma idea sirve para tratar agua donde falta en la Tierra.</p></div></article>
       <article class="ods-card"><img src="assets/img/ods/sdg-07.png" alt="ODS 7: Affordable and clean energy" width="160" height="160" loading="lazy"><div><h3>Energía asequible y no contaminante</h3><p>Toda la misión funciona con energía solar del borde de Shackleton, y el modelo mide cuánta energía cuesta cada litro.</p></div></article>
       <article class="ods-card"><img src="assets/img/ods/sdg-09.png" alt="ODS 9: Industry, innovation and infrastructure" width="160" height="160" loading="lazy"><div><h3>Industria, innovación e infraestructura</h3><p>Usar los recursos del lugar en vez de transportarlos, con un rover autónomo que decide por sí mismo dónde trabajar.</p></div></article>
       <article class="ods-card"><img src="assets/img/ods/sdg-12.png" alt="ODS 12: Responsible consumption and production" width="160" height="160" loading="lazy"><div><h3>Producción y consumo responsables</h3><p>El rover solo perfora donde hay hielo suficiente, para no gastar energía ni remover el terreno sin necesidad.</p></div></article>
-      <article class="ods-card"><img src="assets/img/ods/sdg-17.png" alt="ODS 17: Partnerships for the goals" width="160" height="160" loading="lazy"><div><h3>Alianzas para lograr los objetivos</h3><p>Se basa en datos abiertos de la NASA y la ESA (LRO, LCROSS, LUWEX) y en la cooperación internacional del programa Artemis.</p></div></article>
     </div>
     <p class="ods-nota">Iconos oficiales de las ODS de las Naciones Unidas (versión en inglés). El contenido de esta web no ha sido aprobado por las Naciones Unidas y no refleja las opiniones de la ONU, sus funcionarios ni sus Estados miembros.</p>
   </div>
@@ -403,16 +490,17 @@
 <script>(function(){var o=document.querySelector(".onda");if(!o)return;requestAnimationFrame(function(){requestAnimationFrame(function(){o.classList.add("go")})});setTimeout(function(){o.remove()},3600)})();</script>
 <script src="assets/vendor/three-r170.js"></script>
 <script src="assets/sky/estrellas.js"></script>
-<script>if (location.protocol === 'file:') document.write('<script src="assets/img/luna/luna-local.js"><\/script>');</script>
-<script src="js/hero-moon.js?v=20261119a"></script>
-<script src="js/hero-rover.js?v=20261119a"></script>
-<script src="js/core.js?v=20261119a"></script>
-<script src="js/data.js?v=20261119a"></script>
-<script src="js/model.js?v=20261119a"></script>
-<script src="js/viability.js?v=20261119a"></script>
-<script src="js/report.js?v=20261119a"></script>
-<script src="js/main.js?v=20261119a"></script>
-<script src="js/inmersion.js?v=20261119a"></script>
-<script src="chatbot/astra-launcher.js?v=20261119a"></script>
+<script>if (location.protocol === 'file:') document.write('<script src="assets/img/luna/luna-local.js"><\/script><script src="assets/data/reto-local.js"><\/script>');</script>
+<script src="js/hero-moon.js?v=20261121d"></script>
+<script src="js/hero-rover.js?v=20261121d"></script>
+<script src="js/reto.js?v=20261121d"></script>
+<script src="js/core.js?v=20261121d"></script>
+<script src="js/data.js?v=20261121d"></script>
+<script src="js/model.js?v=20261121d"></script>
+<script src="js/viability.js?v=20261121d"></script>
+<script src="js/report.js?v=20261121d"></script>
+<script src="js/main.js?v=20261121d"></script>
+<script src="js/inmersion.js?v=20261121d"></script>
+<script src="chatbot/astra-launcher.js?v=20261121d"></script>
 </body>
 </html>

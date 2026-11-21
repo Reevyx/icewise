@@ -1,0 +1,47 @@
+{
+ "source": "NASA LRO LOLA \u00b7 PDS ldem_85s_40m (40 m/px) \u00b7 ventana de 36 km reducida por ICEWISE",
+ "N": 320,
+ "sizeKm": 36.0,
+ "hScale": 0.25,
+ "hMin": -2861.2,
+ "grid": {
+  "sample0": 3547,
+  "line0": 3500,
+  "px40PerCell": 2.8213166144200628,
+  "off": 3791.5,
+  "mPerPx": 40.0
+ },
+ "crater": {
+  "lat": -89.657,
+  "lon": 127.65,
+  "rimRadiusM": 10400,
+  "diameterKm": 20.8,
+  "depthM": 4042,
+  "rimH": 1193.3,
+  "floorH": -2848.5
+ },
+ "psrFrac": 0.208,
+ "sun": {
+  "azDeg": 195,
+  "elDeg": 1.2
+ },
+ "pois": {
+  "pole": [
+   86.66166666666666,
+   103.32055555555556
+  ],
+  "site": [
+   63.703712598225735,
+   198.9473163585793
+  ],
+  "center": [
+   159.67384946922803,
+   159.65688391090688
+  ],
+  "rimLit": [
+   62.736666666666665,
+   156.31
+  ],
+  "rimLitFrac": 0.98
+ }
+}
