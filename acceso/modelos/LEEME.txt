@@ -1,0 +1,4 @@
+Modelos de la pantalla de acceso
+- face_landmarker.task: MediaPipe Face Landmarker (Google), licencia Apache 2.0.
+- arcface-mbf.onnx: InsightFace «buffalo_s» w600k_mbf (MobileFaceNet entrenado con ArcFace sobre WebFace600K).
+  InsightFace publica estos modelos solo para investigación no comercial; aquí se usan en un proyecto escolar sin fines comerciales.
